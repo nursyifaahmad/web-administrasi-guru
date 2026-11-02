@@ -25,14 +25,8 @@ class AppServiceProvider extends ServiceProvider
         // (baik via IP Tailscale :4010, LAN lokal :4010, maupun HTTPS Cloudflare Tunnel).
         Vite::createAssetPathsUsing(fn (string $path) => '/'.ltrim($path, '/'));
 
-        $appUrl = (string) config('app.url');
-        $configuredHttpsHost = str_starts_with($appUrl, 'https://')
-            ? parse_url($appUrl, PHP_URL_HOST)
-            : null;
-
         $isHttpsProxy = request()->header('X-Forwarded-Proto') === 'https'
-            || str_contains((string) request()->header('CF-Visitor'), '"https"')
-            || ($configuredHttpsHost && request()->getHost() === $configuredHttpsHost);
+            || str_contains((string) request()->header('CF-Visitor'), '"https"');
 
         if ($isHttpsProxy) {
             URL::forceScheme('https');
