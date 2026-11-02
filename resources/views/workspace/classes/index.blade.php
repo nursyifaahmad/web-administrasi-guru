@@ -218,7 +218,10 @@
                         <label class="block font-bold text-slate-700 mb-1">Mata Pelajaran *</label>
                         <select name="subject_id" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold">
                             @foreach($subjects as $sub)
-                                <option value="{{ $sub->id }}">{{ $sub->name }} ({{ $sub->code }})</option>
+                                @php
+                                    $hasCode = str_contains(strtoupper($sub->name), '(' . strtoupper($sub->code) . ')');
+                                @endphp
+                                <option value="{{ $sub->id }}">{{ $hasCode ? $sub->name : "{$sub->name} ({$sub->code})" }}</option>
                             @endforeach
                         </select>
                     </div>
