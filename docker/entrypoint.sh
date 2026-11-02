@@ -6,6 +6,7 @@ cd /var/www/html
 echo "==> [1/6] Menyiapkan direktori storage & cache..."
 mkdir -p \
     storage/app/public \
+    storage/app/backups \
     storage/framework/cache/data \
     storage/framework/sessions \
     storage/framework/views \

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\DatabaseBackupController;
 use App\Http\Controllers\Admin\KktpSubjectController;
 use App\Http\Controllers\Admin\SchoolAndYearController;
 use App\Http\Controllers\Admin\SchoolClassController;
@@ -82,6 +83,13 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::get('/kalender', [SchoolEventController::class, 'index'])->name('events.index');
         Route::post('/kalender', [SchoolEventController::class, 'store'])->name('events.store');
         Route::delete('/kalender/{schoolEvent}', [SchoolEventController::class, 'destroy'])->name('events.destroy');
+
+        // Backup & Restore Database
+        Route::get('/backup', [DatabaseBackupController::class, 'index'])->name('backup.index');
+        Route::post('/backup', [DatabaseBackupController::class, 'store'])->name('backup.store');
+        Route::get('/backup/{filename}/download', [DatabaseBackupController::class, 'download'])->name('backup.download');
+        Route::post('/backup/restore', [DatabaseBackupController::class, 'restore'])->name('backup.restore');
+        Route::delete('/backup/{filename}', [DatabaseBackupController::class, 'destroy'])->name('backup.destroy');
     });
 
     // Ruang Kerja Kelas Administrasi (Guru 1..15+ Kelas & Kontrol Admin)
