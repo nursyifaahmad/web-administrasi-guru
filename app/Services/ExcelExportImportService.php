@@ -154,20 +154,37 @@ class ExcelExportImportService
             $sheet->getRowDimension($row)->setRowHeight(23);
             $row++;
 
-            $sheet->mergeCells($this->range(1, $row, $totalCols, $row));
-            $addrParts = array_filter([
-                $school->npsn ? 'NPSN: ' . $school->npsn : null,
-                $school->address ?: null,
-                $school->phone ? 'Telp: ' . $school->phone : null,
-                $school->email ? 'Email: ' . $school->email : null,
-            ]);
-            $sheet->setCellValue($this->cell(1, $row), implode(' | ', $addrParts));
-            $sheet->getStyle($this->range(1, $row, $totalCols, $row))->applyFromArray([
-                'font' => ['size' => 9, 'italic' => true],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-                'borders' => ['bottom' => ['borderStyle' => Border::BORDER_DOUBLE, 'color' => ['rgb' => '0F172A']]],
-            ]);
-            $sheet->getRowDimension($row)->setRowHeight(24);
+            $addressLine = $school->singleLineAddress();
+            $contactLine = $school->contactAndIdentityLine();
+
+            if ($addressLine !== '') {
+                $sheet->mergeCells($this->range(1, $row, $totalCols, $row));
+                $sheet->setCellValue($this->cell(1, $row), $addressLine);
+                $sheet->getStyle($this->range(1, $row, $totalCols, $row))->applyFromArray([
+                    'font' => ['size' => 9],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+                ]);
+                if ($contactLine === '') {
+                    $sheet->getStyle($this->range(1, $row, $totalCols, $row))->applyFromArray([
+                        'borders' => ['bottom' => ['borderStyle' => Border::BORDER_DOUBLE, 'color' => ['rgb' => '0F172A']]],
+                    ]);
+                }
+                $sheet->getRowDimension($row)->setRowHeight(16);
+            }
+
+            if ($contactLine !== '') {
+                if ($addressLine !== '') {
+                    $row++;
+                }
+                $sheet->mergeCells($this->range(1, $row, $totalCols, $row));
+                $sheet->setCellValue($this->cell(1, $row), $contactLine);
+                $sheet->getStyle($this->range(1, $row, $totalCols, $row))->applyFromArray([
+                    'font' => ['size' => 9],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+                    'borders' => ['bottom' => ['borderStyle' => Border::BORDER_DOUBLE, 'color' => ['rgb' => '0F172A']]],
+                ]);
+                $sheet->getRowDimension($row)->setRowHeight(18);
+            }
 
             $leftLogoTmp = $this->createTempImageFromBase64($school->logo_left_data);
             if ($leftLogoTmp) {

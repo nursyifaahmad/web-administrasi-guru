@@ -3,6 +3,15 @@
     $leftLogo = $school->resolvedLogoBox('left');
     $rightLogo = $school->resolvedLogoBox('right');
     $sideCellWidth = max($leftLogo['cell_width'], $rightLogo['cell_width']);
+    $addressLine = $school->singleLineAddress();
+    $contactLine = $school->contactAndIdentityLine();
+    $isPortrait = ($options['orientation'] ?? 'landscape') === 'portrait';
+    $addrLen = mb_strlen($addressLine);
+    if ($isPortrait) {
+        $addrFontPt = $addrLen <= 75 ? '8.2pt' : ($addrLen <= 92 ? '7.3pt' : ($addrLen <= 110 ? '6.7pt' : '6.2pt'));
+    } else {
+        $addrFontPt = $addrLen <= 115 ? '8.5pt' : '7.6pt';
+    }
 @endphp
 <table class="kop-table">
     <tr>
@@ -15,7 +24,7 @@
                      alt="Logo Kiri">
             @endif
         </td>
-        <td style="text-align: center; padding: 0 8px;">
+        <td style="text-align: center; padding: 0 4px;">
             @if(!empty($school->gov_header))
                 <div class="kop-gov">{{ $school->gov_header }}</div>
             @endif
@@ -24,13 +33,11 @@
             @endif
             <div class="kop-school">{{ $school->school_name }}</div>
             <div class="kop-address">
-                NPSN: {{ $school->npsn }}
-                @if(!empty($school->nss)) | NSS: {{ $school->nss }} @endif
-                @if(!empty($school->address)) <br>{{ $school->address }} @endif
-                @if(!empty($school->phone) || !empty($school->email))
-                    <br>
-                    @if(!empty($school->phone)) Telp: {{ $school->phone }} @endif
-                    @if(!empty($school->email)) | Email: {{ $school->email }} @endif
+                @if($addressLine !== '')
+                    <div style="white-space: nowrap; font-size: {{ $addrFontPt }};">{{ $addressLine }}</div>
+                @endif
+                @if($contactLine !== '')
+                    <div style="white-space: nowrap;">{{ $contactLine }}</div>
                 @endif
             </div>
         </td>

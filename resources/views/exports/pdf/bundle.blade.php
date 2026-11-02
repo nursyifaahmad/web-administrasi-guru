@@ -11,7 +11,14 @@
         <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase;">{{ $school->gov_header }}</div>
         <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase;">{{ $school->department_header }}</div>
         <div style="font-size: 16pt; font-weight: bold; text-transform: uppercase; margin-top: 4px;">{{ $school->school_name }}</div>
-        <div style="font-size: 9pt; color: #475569; margin-bottom: 24px;">NPSN: {{ $school->npsn }} | {{ $school->address }}</div>
+        <div style="font-size: 8.5pt; color: #475569; margin-bottom: 24px; line-height: 1.45;">
+            @if($school->singleLineAddress() !== '')
+                <div style="white-space: nowrap;">{{ $school->singleLineAddress() }}</div>
+            @endif
+            @if($school->contactAndIdentityLine() !== '')
+                <div style="white-space: nowrap;">{{ $school->contactAndIdentityLine() }}</div>
+            @endif
+        </div>
 
         <hr style="border: none; border-top: 2px solid #0f172a; margin-bottom: 28px;">
 

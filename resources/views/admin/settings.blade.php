@@ -145,15 +145,16 @@
                                 <img :src="leftPreview" :style="'height:' + leftSize + 'px; width: auto; max-width:' + Math.round(leftSize * 1.35) + 'px;'" class="object-contain" alt="Preview Logo Kiri">
                             </template>
                         </div>
-                        <div class="text-center flex-1 leading-snug">
+                        <div class="text-center flex-1 min-w-0 leading-snug">
                             <div class="text-xs sm:text-sm font-bold uppercase text-slate-900">{{ $school->gov_header ?: 'PEMERINTAH KABUPATEN / KOTA' }}</div>
                             <div class="text-xs sm:text-sm font-bold uppercase text-slate-900">{{ $school->department_header ?: 'DINAS PENDIDIKAN' }}</div>
                             <div class="text-base sm:text-lg font-extrabold uppercase text-slate-950">{{ $school->school_name }}</div>
-                            <div class="text-[11px] text-slate-600">
-                                NPSN: {{ $school->npsn ?: '-' }}
-                                @if(!empty($school->address)) <br>{{ $school->address }} @endif
-                                @if(!empty($school->phone) || !empty($school->email))
-                                    <br>{{ $school->phone ? 'Telp: '.$school->phone : '' }} {{ (!empty($school->phone) && !empty($school->email)) ? '|' : '' }} {{ $school->email ? 'Email: '.$school->email : '' }}
+                            <div class="text-[11px] text-slate-600 space-y-0.5">
+                                @if($school->singleLineAddress() !== '')
+                                    <div class="whitespace-nowrap overflow-hidden text-ellipsis">{{ $school->singleLineAddress() }}</div>
+                                @endif
+                                @if($school->contactAndIdentityLine() !== '')
+                                    <div class="whitespace-nowrap overflow-hidden text-ellipsis">{{ $school->contactAndIdentityLine() }}</div>
                                 @endif
                             </div>
                         </div>

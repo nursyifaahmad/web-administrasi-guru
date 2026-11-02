@@ -100,7 +100,31 @@ class SchoolSetting extends Model
         return [
             'width' => $width,
             'height' => $height,
-            'cell_width' => max(110, $width + 18),
+            'cell_width' => max(84, $width + 8),
         ];
+    }
+
+    /**
+     * Format alamat sekolah menjadi tepat 1 baris bersih tanpa jeda baris (newline).
+     */
+    public function singleLineAddress(): string
+    {
+        return trim((string) preg_replace('/\s+/', ' ', (string) $this->address));
+    }
+
+    /**
+     * Gabungkan NPSN (serta NSS bila ada) dalam satu baris bersama Telepon, Email, dan Website.
+     */
+    public function contactAndIdentityLine(): string
+    {
+        $parts = array_filter([
+            ! empty($this->npsn) ? 'NPSN: ' . trim((string) $this->npsn) : null,
+            ! empty($this->nss) ? 'NSS: ' . trim((string) $this->nss) : null,
+            ! empty($this->phone) ? 'Telp: ' . trim((string) $this->phone) : null,
+            ! empty($this->email) ? 'Email: ' . trim((string) $this->email) : null,
+            ! empty($this->website) ? 'Web: ' . trim((string) $this->website) : null,
+        ]);
+
+        return implode(' | ', $parts);
     }
 }
