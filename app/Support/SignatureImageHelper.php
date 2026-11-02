@@ -12,6 +12,177 @@ class SignatureImageHelper
     protected static array $normalizedCache = [];
 
     /**
+     * Cache hasil pemotongan margin kosong luar logo Kop Surat.
+     *
+     * @var array<string, array{data_uri: string, width: int, height: int}|null>
+     */
+    protected static array $trimmedLogoCache = [];
+
+    /**
+     * Potong ruang kosong (transparan atau margin putih luar) di sekeliling lambang/logo Kop Surat
+     * TANPA mengubah warna interior lambang, sehingga tinggi visual logo kiri & kanan 100% presisi sama besar.
+     *
+     * @return array{data_uri: string, width: int, height: int}|null
+     */
+    public static function trimOuterPadding(?string $dataUri): ?array
+    {
+        if (empty($dataUri) || ! str_starts_with($dataUri, 'data:image/')) {
+            return null;
+        }
+
+        $cacheKey = md5($dataUri);
+        if (array_key_exists($cacheKey, self::$trimmedLogoCache)) {
+            return self::$trimmedLogoCache[$cacheKey];
+        }
+
+        if (! function_exists('imagecreatefromstring')) {
+            return self::$trimmedLogoCache[$cacheKey] = null;
+        }
+
+        $parts = explode(',', $dataUri, 2);
+        if (count($parts) !== 2) {
+            return self::$trimmedLogoCache[$cacheKey] = null;
+        }
+
+        $binary = base64_decode($parts[1], true);
+        if ($binary === false || $binary === '') {
+            return self::$trimmedLogoCache[$cacheKey] = null;
+        }
+
+        $src = @imagecreatefromstring($binary);
+        if (! $src) {
+            return self::$trimmedLogoCache[$cacheKey] = null;
+        }
+
+        $srcW = imagesx($src);
+        $srcH = imagesy($src);
+        if ($srcW <= 0 || $srcH <= 0) {
+            imagedestroy($src);
+
+            return self::$trimmedLogoCache[$cacheKey] = null;
+        }
+
+        $maxDim = 600;
+        if ($srcW > $maxDim || $srcH > $maxDim) {
+            $scale = min($maxDim / $srcW, $maxDim / $srcH);
+            $workW = max(1, (int) round($srcW * $scale));
+            $workH = max(1, (int) round($srcH * $scale));
+            $work = imagecreatetruecolor($workW, $workH);
+            imagealphablending($work, false);
+            imagesavealpha($work, true);
+            $transparent = imagecolorallocatealpha($work, 255, 255, 255, 127);
+            imagefilledrectangle($work, 0, 0, $workW, $workH, $transparent);
+            imagecopyresampled($work, $src, 0, 0, 0, 0, $workW, $workH, $srcW, $srcH);
+            imagedestroy($src);
+        } else {
+            $workW = $srcW;
+            $workH = $srcH;
+            $work = imagecreatetruecolor($workW, $workH);
+            imagealphablending($work, false);
+            imagesavealpha($work, true);
+            $transparent = imagecolorallocatealpha($work, 255, 255, 255, 127);
+            imagefilledrectangle($work, 0, 0, $workW, $workH, $transparent);
+            imagecopy($work, $src, 0, 0, 0, 0, $workW, $workH);
+            imagedestroy($src);
+        }
+
+        // Cek apakah keempat sudut merupakan latar putih pekat (misal logo dari file JPG/PNG berlatar putih)
+        $corners = [[0, 0], [$workW - 1, 0], [0, $workH - 1], [$workW - 1, $workH - 1]];
+        $hasOpaqueWhiteCorners = true;
+        foreach ($corners as [$cx, $cy]) {
+            $c = imagecolorat($work, $cx, $cy);
+            $a = ($c >> 24) & 0x7F;
+            $r = ($c >> 16) & 0xFF;
+            $g = ($c >> 8) & 0xFF;
+            $b = $c & 0xFF;
+            if (! ($a < 15 && $r >= 246 && $g >= 246 && $b >= 246)) {
+                $hasOpaqueWhiteCorners = false;
+                break;
+            }
+        }
+
+        $minX = $workW;
+        $minY = $workH;
+        $maxX = -1;
+        $maxY = -1;
+
+        for ($y = 0; $y < $workH; $y++) {
+            for ($x = 0; $x < $workW; $x++) {
+                $rgba = imagecolorat($work, $x, $y);
+                $gdAlpha = ($rgba >> 24) & 0x7F;
+                if ($gdAlpha >= 120) {
+                    continue;
+                }
+
+                if ($hasOpaqueWhiteCorners) {
+                    $r = ($rgba >> 16) & 0xFF;
+                    $g = ($rgba >> 8) & 0xFF;
+                    $b = $rgba & 0xFF;
+                    if ($r >= 247 && $g >= 247 && $b >= 247) {
+                        continue;
+                    }
+                }
+
+                if ($x < $minX) {
+                    $minX = $x;
+                }
+                if ($x > $maxX) {
+                    $maxX = $x;
+                }
+                if ($y < $minY) {
+                    $minY = $y;
+                }
+                if ($y > $maxY) {
+                    $maxY = $y;
+                }
+            }
+        }
+
+        if ($maxX < $minX || $maxY < $minY) {
+            imagedestroy($work);
+
+            return self::$trimmedLogoCache[$cacheKey] = [
+                'data_uri' => $dataUri,
+                'width' => $workW,
+                'height' => $workH,
+            ];
+        }
+
+        $pad = 1;
+        $cropX = max(0, $minX - $pad);
+        $cropY = max(0, $minY - $pad);
+        $cropW = min($workW - $cropX, ($maxX - $minX + 1) + ($pad * 2));
+        $cropH = min($workH - $cropY, ($maxY - $minY + 1) + ($pad * 2));
+
+        $cropped = imagecreatetruecolor($cropW, $cropH);
+        imagealphablending($cropped, false);
+        imagesavealpha($cropped, true);
+        $transparentCrop = imagecolorallocatealpha($cropped, 255, 255, 255, 127);
+        imagefilledrectangle($cropped, 0, 0, $cropW, $cropH, $transparentCrop);
+        imagecopy($cropped, $work, 0, 0, $cropX, $cropY, $cropW, $cropH);
+        imagedestroy($work);
+
+        ob_start();
+        imagepng($cropped, null, 6);
+        $pngData = ob_get_clean();
+        imagedestroy($cropped);
+
+        if (! $pngData) {
+            return self::$trimmedLogoCache[$cacheKey] = [
+                'data_uri' => $dataUri,
+                'width' => $cropW,
+                'height' => $cropH,
+            ];
+        }
+
+        return self::$trimmedLogoCache[$cacheKey] = [
+            'data_uri' => 'data:image/png;base64,' . base64_encode($pngData),
+            'width' => $cropW,
+            'height' => $cropH,
+        ];
+    }
+
+    /**
      * Hapus latar putih/terang menjadi transparan & potong ruang kosong (auto-crop) di sekeliling tinta tanda tangan.
      *
      * @return array{data_uri: string, width: int, height: int}|null

@@ -133,7 +133,7 @@ class ExcelExportImportService
                 'font' => ['bold' => true, 'size' => 11],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ]);
-            $sheet->getRowDimension($row)->setRowHeight(19);
+            $sheet->getRowDimension($row)->setRowHeight(16);
             $row++;
 
             $sheet->mergeCells($this->range(1, $row, $totalCols, $row));
@@ -142,7 +142,7 @@ class ExcelExportImportService
                 'font' => ['bold' => true, 'size' => 11],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ]);
-            $sheet->getRowDimension($row)->setRowHeight(19);
+            $sheet->getRowDimension($row)->setRowHeight(15);
             $row++;
 
             $sheet->mergeCells($this->range(1, $row, $totalCols, $row));
@@ -151,7 +151,7 @@ class ExcelExportImportService
                 'font' => ['bold' => true, 'size' => 15],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ]);
-            $sheet->getRowDimension($row)->setRowHeight(23);
+            $sheet->getRowDimension($row)->setRowHeight(19);
             $row++;
 
             $addressLine = $school->singleLineAddress();
@@ -186,28 +186,28 @@ class ExcelExportImportService
                 $sheet->getRowDimension($row)->setRowHeight(18);
             }
 
-            $leftLogoTmp = $this->createTempImageFromBase64($school->logo_left_data);
+            $leftBox = $school->resolvedLogoBox('left');
+            $leftLogoTmp = $this->createTempImageFromBase64($leftBox['data_uri'] ?? null);
             if ($leftLogoTmp) {
-                $leftBox = $school->resolvedLogoBox('left');
                 $drawingLeft = new Drawing();
                 $drawingLeft->setName('Logo Kiri');
                 $drawingLeft->setPath($leftLogoTmp);
                 $drawingLeft->setCoordinates($this->cell(1, $kopStartRow));
                 $drawingLeft->setOffsetX(8);
-                $drawingLeft->setOffsetY(4);
+                $drawingLeft->setOffsetY(2);
                 $drawingLeft->setHeight($leftBox['height']);
                 $drawingLeft->setWorksheet($sheet);
             }
 
-            $rightLogoTmp = $this->createTempImageFromBase64($school->logo_right_data);
+            $rightBox = $school->resolvedLogoBox('right');
+            $rightLogoTmp = $this->createTempImageFromBase64($rightBox['data_uri'] ?? null);
             if ($rightLogoTmp) {
-                $rightBox = $school->resolvedLogoBox('right');
                 $drawingRight = new Drawing();
                 $drawingRight->setName('Logo Kanan');
                 $drawingRight->setPath($rightLogoTmp);
                 $drawingRight->setCoordinates($this->cell(max(1, $totalCols - 1), $kopStartRow));
                 $drawingRight->setOffsetX(4);
-                $drawingRight->setOffsetY(4);
+                $drawingRight->setOffsetY(2);
                 $drawingRight->setHeight($rightBox['height']);
                 $drawingRight->setWorksheet($sheet);
             }

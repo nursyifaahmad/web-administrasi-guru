@@ -29,21 +29,28 @@
         font-weight: bold;
         text-transform: uppercase;
         letter-spacing: 0.4px;
+        line-height: 1.15;
+        margin: 0;
     }
     .kop-dept {
         font-size: 11.5pt;
         font-weight: bold;
         text-transform: uppercase;
+        line-height: 1.08;
+        margin: 0;
     }
     .kop-school {
         font-size: 15pt;
         font-weight: bold;
         text-transform: uppercase;
-        margin: 2px 0;
+        line-height: 1.05;
+        margin: -2px 0 1px 0;
     }
     .kop-address {
         font-size: 8.5pt;
         color: #374151;
+        line-height: 1.25;
+        margin-top: 1px;
     }
     .doc-title {
         text-align: center;

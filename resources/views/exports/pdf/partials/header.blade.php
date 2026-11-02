@@ -16,8 +16,8 @@
 <table class="kop-table">
     <tr>
         <td style="width: {{ $sideCellWidth }}px; text-align: center;">
-            @if(!empty($school->logo_left_data))
-                <img src="{{ $school->logo_left_data }}"
+            @if(!empty($leftLogo['data_uri']))
+                <img src="{{ $leftLogo['data_uri'] }}"
                      width="{{ $leftLogo['width'] }}"
                      height="{{ $leftLogo['height'] }}"
                      style="width: {{ $leftLogo['width'] }}px; height: {{ $leftLogo['height'] }}px;"
@@ -42,8 +42,8 @@
             </div>
         </td>
         <td style="width: {{ $sideCellWidth }}px; text-align: center;">
-            @if(!empty($school->logo_right_data))
-                <img src="{{ $school->logo_right_data }}"
+            @if(!empty($rightLogo['data_uri']))
+                <img src="{{ $rightLogo['data_uri'] }}"
                      width="{{ $rightLogo['width'] }}"
                      height="{{ $rightLogo['height'] }}"
                      style="width: {{ $rightLogo['width'] }}px; height: {{ $rightLogo['height'] }}px;"

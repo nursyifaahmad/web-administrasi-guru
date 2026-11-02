@@ -65,39 +65,53 @@ class SchoolSetting extends Model
     }
 
     /**
-     * Hitung dimensi proporsional logo (width, height, cell_width) dalam satuan px
-     * agar DomPDF maupun pratinjau merender ukuran logo secara presisi tanpa gepeng.
+     * Hitung dimensi proporsional logo (data_uri terpotong presisi, width, height, cell_width) dalam satuan px
+     * agar DomPDF, Excel, maupun pratinjau merender tinggi visual logo kiri & kanan 100% sama besar tanpa margin kosong.
      *
-     * @return array{width: int, height: int, cell_width: int}
+     * @return array{data_uri: ?string, width: int, height: int, cell_width: int}
      */
     public function resolvedLogoBox(string $side): array
     {
         $dataUri = $side === 'right' ? $this->logo_right_data : $this->logo_left_data;
         $targetHeight = (int) (($side === 'right' ? $this->logo_right_size : $this->logo_left_size) ?: 92);
         $targetHeight = max(40, min(160, $targetHeight));
-        $maxWidth = (int) round($targetHeight * 1.35);
+        $maxWidth = (int) round($targetHeight * 1.45);
 
         $width = $targetHeight;
         $height = $targetHeight;
+        $resolvedUri = $dataUri;
 
-        if (! empty($dataUri) && str_contains($dataUri, ',')) {
-            [, $b64] = explode(',', $dataUri, 2);
-            $raw = base64_decode($b64, true);
-            if ($raw !== false) {
-                $info = @getimagesizefromstring($raw);
-                if (is_array($info) && $info[0] > 0 && $info[1] > 0) {
-                    $ratio = $info[0] / $info[1];
-                    $height = $targetHeight;
-                    $width = (int) max(1, round($height * $ratio));
-                    if ($width > $maxWidth) {
-                        $width = $maxWidth;
-                        $height = (int) max(1, round($width / $ratio));
+        if (! empty($dataUri)) {
+            $trimmed = \App\Support\SignatureImageHelper::trimOuterPadding($dataUri);
+            if ($trimmed && $trimmed['width'] > 0 && $trimmed['height'] > 0) {
+                $resolvedUri = $trimmed['data_uri'];
+                $ratio = $trimmed['width'] / $trimmed['height'];
+                $height = $targetHeight;
+                $width = (int) max(1, round($height * $ratio));
+                if ($width > $maxWidth) {
+                    $width = $maxWidth;
+                    $height = (int) max(1, round($width / $ratio));
+                }
+            } elseif (str_contains($dataUri, ',')) {
+                [, $b64] = explode(',', $dataUri, 2);
+                $raw = base64_decode($b64, true);
+                if ($raw !== false) {
+                    $info = @getimagesizefromstring($raw);
+                    if (is_array($info) && $info[0] > 0 && $info[1] > 0) {
+                        $ratio = $info[0] / $info[1];
+                        $height = $targetHeight;
+                        $width = (int) max(1, round($height * $ratio));
+                        if ($width > $maxWidth) {
+                            $width = $maxWidth;
+                            $height = (int) max(1, round($width / $ratio));
+                        }
                     }
                 }
             }
         }
 
         return [
+            'data_uri' => $resolvedUri,
             'width' => $width,
             'height' => $height,
             'cell_width' => max(84, $width + 8),

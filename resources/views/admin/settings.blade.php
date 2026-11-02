@@ -15,10 +15,21 @@
                 pad: null,
                 leftSize: {{ (int) old('logo_left_size', $school->logo_left_size ?: 92) }},
                 rightSize: {{ (int) old('logo_right_size', $school->logo_right_size ?: 92) }},
-                leftPreview: @js($school->logo_left_data ?? ''),
-                rightPreview: @js($school->logo_right_data ?? ''),
+                syncEqualLogoSize: {{ (int) old('logo_left_size', $school->logo_left_size ?: 92) === (int) old('logo_right_size', $school->logo_right_size ?: 92) ? 'true' : 'false' }},
+                leftPreview: @js($school->resolvedLogoBox('left')['data_uri'] ?? ''),
+                rightPreview: @js($school->resolvedLogoBox('right')['data_uri'] ?? ''),
                 clearLeft: false,
                 clearRight: false,
+                onLeftSizeInput() {
+                    if (this.syncEqualLogoSize) {
+                        this.rightSize = this.leftSize;
+                    }
+                },
+                onRightSizeInput() {
+                    if (this.syncEqualLogoSize) {
+                        this.leftSize = this.rightSize;
+                    }
+                },
                 previewFile(event, side) {
                     const file = event.target.files[0];
                     if (!file) return;
@@ -85,12 +96,20 @@
 
             {{-- Upload & Ukuran Logo Kiri & Kanan --}}
             <div class="pt-3 border-t border-slate-100 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-emerald-50/70 border border-emerald-200 rounded-xl px-3.5 py-2">
+                    <label class="flex items-center gap-2 font-bold text-emerald-950 cursor-pointer">
+                        <input type="checkbox" x-model="syncEqualLogoSize" @change="if(syncEqualLogoSize) rightSize = leftSize" class="rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500">
+                        <span>Kunci Ukuran Presisi Sama Besar (Logo Kiri = Logo Kanan)</span>
+                    </label>
+                    <span class="text-[11px] text-emerald-800">Margin kosong gambar otomatis dipotong agar tinggi kedua lambang 100% sejajar</span>
+                </div>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
                         <label class="block font-bold text-slate-700">Logo Kop Kiri (Pemda / Yayasan)</label>
                         @if(!empty($school->logo_left_data))
                             <div class="flex items-center gap-3">
-                                <img src="{{ $school->logo_left_data }}" class="h-14 w-14 object-contain bg-white border rounded p-1" alt="Logo Kiri">
+                                <img src="{{ $school->resolvedLogoBox('left')['data_uri'] }}" class="h-14 w-14 object-contain bg-white border rounded p-1" alt="Logo Kiri">
                                 <label class="flex items-center gap-1.5 text-rose-600 font-semibold cursor-pointer">
                                     <input type="checkbox" name="clear_logo_left" value="1" x-model="clearLeft"> Hapus Logo Kiri
                                 </label>
@@ -103,8 +122,8 @@
                                 <span class="font-extrabold text-emerald-700" x-text="leftSize + ' px'"></span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <input type="range" name="logo_left_size" min="40" max="160" step="2" x-model.number="leftSize" class="w-full accent-emerald-600">
-                                <input type="number" min="40" max="160" x-model.number="leftSize" class="w-16 rounded-lg border border-slate-300 px-2 py-1 text-center font-bold">
+                                <input type="range" name="logo_left_size" min="40" max="160" step="2" x-model.number="leftSize" @input="onLeftSizeInput()" class="w-full accent-emerald-600">
+                                <input type="number" min="40" max="160" x-model.number="leftSize" @input="onLeftSizeInput()" class="w-16 rounded-lg border border-slate-300 px-2 py-1 text-center font-bold">
                             </div>
                         </div>
                     </div>
@@ -113,7 +132,7 @@
                         <label class="block font-bold text-slate-700">Logo Kop Kanan (Logo Sekolah)</label>
                         @if(!empty($school->logo_right_data))
                             <div class="flex items-center gap-3">
-                                <img src="{{ $school->logo_right_data }}" class="h-14 w-14 object-contain bg-white border rounded p-1" alt="Logo Kanan">
+                                <img src="{{ $school->resolvedLogoBox('right')['data_uri'] }}" class="h-14 w-14 object-contain bg-white border rounded p-1" alt="Logo Kanan">
                                 <label class="flex items-center gap-1.5 text-rose-600 font-semibold cursor-pointer">
                                     <input type="checkbox" name="clear_logo_right" value="1" x-model="clearRight"> Hapus Logo Kanan
                                 </label>
@@ -126,8 +145,8 @@
                                 <span class="font-extrabold text-emerald-700" x-text="rightSize + ' px'"></span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <input type="range" name="logo_right_size" min="40" max="160" step="2" x-model.number="rightSize" class="w-full accent-emerald-600">
-                                <input type="number" min="40" max="160" x-model.number="rightSize" class="w-16 rounded-lg border border-slate-300 px-2 py-1 text-center font-bold">
+                                <input type="range" name="logo_right_size" min="40" max="160" step="2" x-model.number="rightSize" @input="onRightSizeInput()" class="w-full accent-emerald-600">
+                                <input type="number" min="40" max="160" x-model.number="rightSize" @input="onRightSizeInput()" class="w-16 rounded-lg border border-slate-300 px-2 py-1 text-center font-bold">
                             </div>
                         </div>
                     </div>
@@ -145,11 +164,11 @@
                                 <img :src="leftPreview" :style="'height:' + leftSize + 'px; width: auto; max-width:' + Math.round(leftSize * 1.35) + 'px;'" class="object-contain" alt="Preview Logo Kiri">
                             </template>
                         </div>
-                        <div class="text-center flex-1 min-w-0 leading-snug">
-                            <div class="text-xs sm:text-sm font-bold uppercase text-slate-900">{{ $school->gov_header ?: 'PEMERINTAH KABUPATEN / KOTA' }}</div>
-                            <div class="text-xs sm:text-sm font-bold uppercase text-slate-900">{{ $school->department_header ?: 'DINAS PENDIDIKAN' }}</div>
-                            <div class="text-base sm:text-lg font-extrabold uppercase text-slate-950">{{ $school->school_name }}</div>
-                            <div class="text-[11px] text-slate-600 space-y-0.5">
+                        <div class="text-center flex-1 min-w-0">
+                            <div class="text-xs sm:text-sm font-bold uppercase text-slate-900 leading-tight">{{ $school->gov_header ?: 'PEMERINTAH KABUPATEN / KOTA' }}</div>
+                            <div class="text-xs sm:text-sm font-bold uppercase text-slate-900 leading-none mt-0.5">{{ $school->department_header ?: 'DINAS PENDIDIKAN' }}</div>
+                            <div class="text-base sm:text-lg font-extrabold uppercase text-slate-950 leading-none mt-0.5 mb-0.5">{{ $school->school_name }}</div>
+                            <div class="text-[11px] text-slate-600 leading-snug">
                                 @if($school->singleLineAddress() !== '')
                                     <div class="whitespace-nowrap overflow-hidden text-ellipsis">{{ $school->singleLineAddress() }}</div>
                                 @endif

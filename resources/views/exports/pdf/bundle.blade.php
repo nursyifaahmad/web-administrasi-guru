@@ -8,9 +8,9 @@
 <body>
     {{-- HALAMAN 1: SAMPUL BUNDEL ADMINISTRASI GURU --}}
     <div style="border: 3px double #1e293b; padding: 28px 34px; text-align: center;">
-        <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase;">{{ $school->gov_header }}</div>
-        <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase;">{{ $school->department_header }}</div>
-        <div style="font-size: 16pt; font-weight: bold; text-transform: uppercase; margin-top: 4px;">{{ $school->school_name }}</div>
+        <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase; line-height: 1.15;">{{ $school->gov_header }}</div>
+        <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase; line-height: 1.08;">{{ $school->department_header }}</div>
+        <div style="font-size: 16pt; font-weight: bold; text-transform: uppercase; line-height: 1.05; margin-top: -1px; margin-bottom: 2px;">{{ $school->school_name }}</div>
         <div style="font-size: 8.5pt; color: #475569; margin-bottom: 24px; line-height: 1.45;">
             @if($school->singleLineAddress() !== '')
                 <div style="white-space: nowrap;">{{ $school->singleLineAddress() }}</div>
