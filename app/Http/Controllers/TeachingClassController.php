@@ -1,0 +1,382 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Attendance;
+use App\Models\ClassStudent;
+use App\Models\SchoolSetting;
+use App\Models\Subject;
+use App\Models\TeachingClass;
+use App\Models\User;
+use App\Services\ExcelExportImportService;
+use App\Services\GradeCalculationService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+
+class TeachingClassController extends Controller
+{
+    public function index(Request $request): View
+    {
+        $user = $request->user();
+        $academicYear = $this->resolveAcademicYear($request);
+        $school = SchoolSetting::current();
+
+        $search = $request->string('q')->trim()->toString();
+        $gradeFilter = $request->string('grade_level')->trim()->toString() ?: null;
+
+        $query = TeachingClass::query()
+            ->with(['subject.kktps', 'teacher', 'academicYear', 'studentGrades'])
+            ->withCount([
+                'activeStudents as students_count',
+                'dailyJournals as journals_count',
+            ])
+            ->where('academic_year_id', $academicYear->id);
+
+        if (! $user->isAdmin()) {
+            $query->where('teacher_id', $user->id);
+        } elseif ($request->filled('teacher_id')) {
+            $query->where('teacher_id', $request->integer('teacher_id'));
+        }
+
+        if ($gradeFilter) {
+            $query->where('grade_level', $gradeFilter);
+        }
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('class_name', 'like', "%{$search}%")
+                    ->orWhere('homeroom_teacher_name', 'like', "%{$search}%")
+                    ->orWhereHas('subject', fn ($sq) => $sq->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        $classes = $query->orderBy('grade_level')->orderBy('class_name')->get();
+
+        $attendanceDaysByClass = Attendance::query()
+            ->whereIn('teaching_class_id', $classes->pluck('id'))
+            ->selectRaw('teaching_class_id, COUNT(DISTINCT attendance_date) as days_count')
+            ->groupBy('teaching_class_id')
+            ->pluck('days_count', 'teaching_class_id');
+
+        // Daftar kelas lain milik guru (termasuk semester sebelumnya) untuk fitur salin daftar murid cepat
+        $copyableClassesQuery = TeachingClass::query()
+            ->with(['academicYear', 'subject'])
+            ->withCount('activeStudents as students_count')
+            ->orderByDesc('academic_year_id')
+            ->orderBy('class_name');
+
+        if (! $user->isAdmin()) {
+            $copyableClassesQuery->where('teacher_id', $user->id);
+        }
+
+        return view('workspace.classes.index', [
+            'classes' => $classes,
+            'attendanceDaysByClass' => $attendanceDaysByClass,
+            'subjects' => Subject::query()->where('is_active', true)->with('kktps')->orderBy('name')->get(),
+            'gradeLevels' => $school->gradeLevels(),
+            'teachers' => $user->isAdmin() ? User::query()->where('role', 'guru')->where('is_active', true)->orderBy('name')->get() : collect(),
+            'copyableClasses' => $copyableClassesQuery->get(),
+            'filters' => [
+                'q' => $search,
+                'grade_level' => $gradeFilter,
+                'teacher_id' => $request->integer('teacher_id') ?: null,
+            ],
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $academicYear = $this->resolveAcademicYear($request);
+
+        $validated = $request->validate([
+            'teacher_id' => ['nullable', 'exists:users,id'],
+            'subject_id' => ['required', 'exists:subjects,id'],
+            'grade_level' => ['required', 'string', 'max:20'],
+            'class_name' => ['required', 'string', 'max:60'],
+            'schedule_info' => ['nullable', 'string', 'max:180'],
+            'homeroom_teacher_name' => ['required', 'string', 'max:180'],
+            'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
+            'copy_students_from_class_id' => ['nullable', 'exists:teaching_classes,id'],
+        ]);
+
+        $ownerId = ($user->isAdmin() && ! empty($validated['teacher_id']))
+            ? (int) $validated['teacher_id']
+            : $user->id;
+
+        $createdClass = DB::transaction(function () use ($validated, $ownerId, $academicYear, $user) {
+            $cls = TeachingClass::query()->create([
+                'teacher_id' => $ownerId,
+                'academic_year_id' => $academicYear->id,
+                'subject_id' => (int) $validated['subject_id'],
+                'grade_level' => strtoupper(trim($validated['grade_level'])),
+                'class_name' => trim($validated['class_name']),
+                'schedule_info' => $validated['schedule_info'] ?? null,
+                'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
+                'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
+            ]);
+
+            $cls->ensureDefaultsInitialized();
+
+            if (! empty($validated['copy_students_from_class_id'])) {
+                $source = TeachingClass::query()->find($validated['copy_students_from_class_id']);
+                if ($source && ($user->isAdmin() || (int) $source->teacher_id === (int) $user->id)) {
+                    foreach ($source->activeStudents()->get() as $idx => $st) {
+                        $cls->students()->create([
+                            'order_number' => $idx + 1,
+                            'nis_nisn' => $st->nis_nisn,
+                            'full_name' => $st->full_name,
+                            'nickname' => $st->nickname,
+                            'gender' => $st->gender,
+                            'is_active' => true,
+                        ]);
+                    }
+                }
+            }
+
+            return $cls;
+        });
+
+        return redirect()
+            ->route('classes.students', $createdClass)
+            ->with('success', "Kelas Administrasi {$createdClass->class_name} berhasil dibuat! Silakan kelola/impor daftar murid.");
+    }
+
+    public function update(Request $request, TeachingClass $teachingClass): RedirectResponse
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        $validated = $request->validate([
+            'subject_id' => ['required', 'exists:subjects,id'],
+            'grade_level' => ['required', 'string', 'max:20'],
+            'class_name' => ['required', 'string', 'max:60'],
+            'schedule_info' => ['nullable', 'string', 'max:180'],
+            'homeroom_teacher_name' => ['required', 'string', 'max:180'],
+            'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
+            'homeroom_teacher_signature_data' => ['nullable', 'string'],
+            'homeroom_teacher_signature_file' => ['nullable', 'image', 'max:2048'],
+            'clear_homeroom_signature' => ['nullable', 'boolean'],
+        ]);
+
+        $wkSig = $teachingClass->homeroom_teacher_signature;
+        if ($request->boolean('clear_homeroom_signature')) {
+            $wkSig = null;
+        } elseif ($request->hasFile('homeroom_teacher_signature_file')) {
+            $wkSig = $this->uploadedImageToDataUri($request->file('homeroom_teacher_signature_file'));
+        } elseif (! empty($validated['homeroom_teacher_signature_data']) && str_starts_with($validated['homeroom_teacher_signature_data'], 'data:image/')) {
+            $wkSig = $validated['homeroom_teacher_signature_data'];
+        }
+
+        $teachingClass->update([
+            'subject_id' => (int) $validated['subject_id'],
+            'grade_level' => strtoupper(trim($validated['grade_level'])),
+            'class_name' => trim($validated['class_name']),
+            'schedule_info' => $validated['schedule_info'] ?? null,
+            'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
+            'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
+            'homeroom_teacher_signature' => $wkSig,
+        ]);
+
+        return back()->with('success', "Identitas Kelas {$teachingClass->class_name} & Wali Kelas berhasil diperbarui.");
+    }
+
+    public function destroy(Request $request, TeachingClass $teachingClass): RedirectResponse
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+        $name = $teachingClass->class_name;
+        $teachingClass->delete();
+
+        return redirect()->route('classes.index')->with('success', "Kelas Administrasi {$name} berhasil dihapus.");
+    }
+
+    public function students(Request $request, TeachingClass $teachingClass): View
+    {
+        $user = $request->user();
+        $this->authorizeClassAccess($user, $teachingClass);
+
+        $teachingClass->load(['subject.kktps', 'teacher', 'academicYear']);
+        $students = $teachingClass->activeStudents()->get();
+        $school = SchoolSetting::current();
+
+        $otherClassesQuery = TeachingClass::query()
+            ->with(['academicYear', 'subject'])
+            ->withCount('activeStudents as students_count')
+            ->where('id', '!=', $teachingClass->id)
+            ->orderByDesc('academic_year_id')
+            ->orderBy('class_name');
+
+        if (! $user->isAdmin()) {
+            $otherClassesQuery->where('teacher_id', $user->id);
+        }
+
+        return view('workspace.classes.students', [
+            'teachingClass' => $teachingClass,
+            'students' => $students,
+            'subjects' => Subject::query()->where('is_active', true)->orderBy('name')->get(),
+            'gradeLevels' => $school->gradeLevels(),
+            'otherClasses' => $otherClassesQuery->get(),
+        ]);
+    }
+
+    public function storeStudent(Request $request, TeachingClass $teachingClass): RedirectResponse
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        $validated = $request->validate([
+            'order_number' => ['nullable', 'integer', 'min:1'],
+            'nis_nisn' => ['nullable', 'string', 'max:40'],
+            'full_name' => ['required', 'string', 'max:180'],
+            'nickname' => ['nullable', 'string', 'max:80'],
+            'gender' => ['required', Rule::in(['L', 'P'])],
+        ]);
+
+        $nextOrder = $validated['order_number'] ?? (((int) $teachingClass->students()->max('order_number')) + 1);
+
+        $teachingClass->students()->create([
+            'order_number' => $nextOrder,
+            'nis_nisn' => $validated['nis_nisn'] ?? null,
+            'full_name' => trim($validated['full_name']),
+            'nickname' => ! empty($validated['nickname']) ? trim($validated['nickname']) : null,
+            'gender' => $validated['gender'],
+            'is_active' => true,
+        ]);
+
+        return back()->with('success', "Murid {$validated['full_name']} berhasil ditambahkan.");
+    }
+
+    public function updateStudent(Request $request, TeachingClass $teachingClass, ClassStudent $student): RedirectResponse
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+        abort_unless((int) $student->teaching_class_id === (int) $teachingClass->id, 404);
+
+        $validated = $request->validate([
+            'order_number' => ['required', 'integer', 'min:1'],
+            'nis_nisn' => ['nullable', 'string', 'max:40'],
+            'full_name' => ['required', 'string', 'max:180'],
+            'nickname' => ['nullable', 'string', 'max:80'],
+            'gender' => ['required', Rule::in(['L', 'P'])],
+        ]);
+
+        $student->update([
+            'order_number' => (int) $validated['order_number'],
+            'nis_nisn' => $validated['nis_nisn'] ?? null,
+            'full_name' => trim($validated['full_name']),
+            'nickname' => ! empty($validated['nickname']) ? trim($validated['nickname']) : null,
+            'gender' => $validated['gender'],
+        ]);
+
+        return back()->with('success', "Data murid {$student->full_name} berhasil diperbarui.");
+    }
+
+    public function destroyStudent(Request $request, TeachingClass $teachingClass, ClassStudent $student): RedirectResponse
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+        abort_unless((int) $student->teaching_class_id === (int) $teachingClass->id, 404);
+
+        $name = $student->full_name;
+        $student->delete();
+
+        return back()->with('success', "Murid {$name} dihapus dari kelas ini.");
+    }
+
+    public function sortStudentsAlphabetically(Request $request, TeachingClass $teachingClass): RedirectResponse
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        $students = $teachingClass->activeStudents()->get()->sortBy(fn ($s) => mb_strtolower($s->full_name))->values();
+        DB::transaction(function () use ($students) {
+            foreach ($students as $idx => $student) {
+                $student->update(['order_number' => $idx + 1]);
+            }
+        });
+
+        return back()->with('success', 'Nomor urut peserta didik berhasil diurutkan sesuai abjad (A - Z).');
+    }
+
+    public function copyStudentsFromClass(Request $request, TeachingClass $teachingClass): RedirectResponse
+    {
+        $user = $request->user();
+        $this->authorizeClassAccess($user, $teachingClass);
+
+        $validated = $request->validate([
+            'source_class_id' => ['required', 'exists:teaching_classes,id'],
+            'copy_homeroom' => ['nullable', 'boolean'],
+        ]);
+
+        $source = TeachingClass::query()->findOrFail($validated['source_class_id']);
+        $this->authorizeClassAccess($user, $source);
+
+        $sourceStudents = $source->activeStudents()->get();
+        if ($sourceStudents->isEmpty()) {
+            return back()->withErrors(['source_class_id' => 'Kelas sumber belum memiliki daftar murid.']);
+        }
+
+        $added = 0;
+        DB::transaction(function () use ($teachingClass, $source, $sourceStudents, $request, &$added) {
+            $maxOrder = (int) ($teachingClass->students()->max('order_number') ?? 0);
+            $existingNames = $teachingClass->activeStudents()
+                ->pluck('full_name')
+                ->map(fn ($n) => mb_strtolower(trim($n)))
+                ->flip();
+
+            foreach ($sourceStudents as $st) {
+                $key = mb_strtolower(trim($st->full_name));
+                if ($existingNames->has($key)) {
+                    continue;
+                }
+                $teachingClass->students()->create([
+                    'order_number' => ++$maxOrder,
+                    'nis_nisn' => $st->nis_nisn,
+                    'full_name' => $st->full_name,
+                    'nickname' => $st->nickname,
+                    'gender' => $st->gender,
+                    'is_active' => true,
+                ]);
+                $added++;
+            }
+
+            if ($request->boolean('copy_homeroom')) {
+                $teachingClass->update([
+                    'homeroom_teacher_name' => $source->homeroom_teacher_name,
+                    'homeroom_teacher_nip' => $source->homeroom_teacher_nip,
+                    'homeroom_teacher_signature' => $source->homeroom_teacher_signature,
+                ]);
+            }
+        });
+
+        return back()->with('success', "Berhasil menyalin {$added} murid dari kelas {$source->class_name}.");
+    }
+
+    public function downloadStudentTemplate(Request $request, TeachingClass $teachingClass, ExcelExportImportService $excelService)
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        return $excelService->downloadStudentTemplate($teachingClass);
+    }
+
+    public function importStudents(
+        Request $request,
+        TeachingClass $teachingClass,
+        ExcelExportImportService $excelService,
+        GradeCalculationService $gradeService
+    ): RedirectResponse {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        $request->validate([
+            'excel_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
+            'replace_existing' => ['nullable', 'boolean'],
+        ]);
+
+        $count = $excelService->importStudents(
+            $teachingClass,
+            $request->file('excel_file')->getRealPath(),
+            $request->boolean('replace_existing')
+        );
+
+        $gradeService->recalculateClass($teachingClass);
+
+        return back()->with('success', "Berhasil mengimpor {$count} data peserta didik dari file Excel.");
+    }
+}

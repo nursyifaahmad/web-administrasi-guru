@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    [x-cloak] {
+        display: none !important;
+    }
+}
+
+/* Custom thin scrollbars for wide spreadsheet tables */
+.spreadsheet-scroll::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+}
+.spreadsheet-scroll::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 6px;
+}
+.spreadsheet-scroll::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 6px;
+}
+.spreadsheet-scroll::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+/* Hide number input spinners inside compact grade cells */
+input.no-spinner::-webkit-outer-spin-button,
+input.no-spinner::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input.no-spinner[type=number] {
+    -moz-appearance: textfield;
+}
