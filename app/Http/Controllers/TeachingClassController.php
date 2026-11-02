@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use App\Models\ClassStudent;
+use App\Models\SchoolClass;
 use App\Models\SchoolSetting;
 use App\Models\Subject;
 use App\Models\TeachingClass;
@@ -54,6 +55,13 @@ class TeachingClassController extends Controller
 
         $classes = $query->orderBy('grade_level')->orderBy('class_name')->get();
 
+        $schoolClasses = SchoolClass::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->withCount('activeStudents')
+            ->orderBy('grade_level')
+            ->orderBy('name')
+            ->get();
+
         $attendanceDaysByClass = Attendance::query()
             ->whereIn('teaching_class_id', $classes->pluck('id'))
             ->selectRaw('teaching_class_id, COUNT(DISTINCT attendance_date) as days_count')
@@ -73,6 +81,7 @@ class TeachingClassController extends Controller
 
         return view('workspace.classes.index', [
             'classes' => $classes,
+            'schoolClasses' => $schoolClasses,
             'attendanceDaysByClass' => $attendanceDaysByClass,
             'subjects' => Subject::query()->where('is_active', true)->with('kktps')->orderBy('name')->get(),
             'gradeLevels' => $school->gradeLevels(),
@@ -93,11 +102,12 @@ class TeachingClassController extends Controller
 
         $validated = $request->validate([
             'teacher_id' => ['nullable', 'exists:users,id'],
+            'school_class_id' => ['nullable', 'exists:school_classes,id'],
             'subject_id' => ['required', 'exists:subjects,id'],
-            'grade_level' => ['required', 'string', 'max:20'],
-            'class_name' => ['required', 'string', 'max:60'],
+            'grade_level' => ['required_without:school_class_id', 'nullable', 'string', 'max:20'],
+            'class_name' => ['required_without:school_class_id', 'nullable', 'string', 'max:60'],
             'schedule_info' => ['nullable', 'string', 'max:180'],
-            'homeroom_teacher_name' => ['required', 'string', 'max:180'],
+            'homeroom_teacher_name' => ['required_without:school_class_id', 'nullable', 'string', 'max:180'],
             'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
             'copy_students_from_class_id' => ['nullable', 'exists:teaching_classes,id'],
         ]);
@@ -107,20 +117,46 @@ class TeachingClassController extends Controller
             : $user->id;
 
         $createdClass = DB::transaction(function () use ($validated, $ownerId, $academicYear, $user) {
+            $schoolClass = ! empty($validated['school_class_id'])
+                ? SchoolClass::query()->findOrFail($validated['school_class_id'])
+                : null;
+
+            $className = $schoolClass ? $schoolClass->name : trim($validated['class_name'] ?? '');
+            $gradeLevel = $schoolClass ? $schoolClass->grade_level : strtoupper(trim($validated['grade_level'] ?? 'VII'));
+            $wkName = $schoolClass ? $schoolClass->homeroom_teacher_name : trim($validated['homeroom_teacher_name'] ?? '-');
+            $wkNip = $schoolClass ? $schoolClass->homeroom_teacher_nip : ($validated['homeroom_teacher_nip'] ?? null);
+            $wkSig = $schoolClass ? $schoolClass->homeroom_teacher_signature : null;
+
+            if (! $schoolClass && $className !== '') {
+                $schoolClass = SchoolClass::query()->firstOrCreate(
+                    [
+                        'academic_year_id' => $academicYear->id,
+                        'name' => $className,
+                    ],
+                    [
+                        'grade_level' => $gradeLevel,
+                        'homeroom_teacher_name' => $wkName,
+                        'homeroom_teacher_nip' => $wkNip,
+                    ]
+                );
+            }
+
             $cls = TeachingClass::query()->create([
                 'teacher_id' => $ownerId,
                 'academic_year_id' => $academicYear->id,
+                'school_class_id' => $schoolClass?->id,
                 'subject_id' => (int) $validated['subject_id'],
-                'grade_level' => strtoupper(trim($validated['grade_level'])),
-                'class_name' => trim($validated['class_name']),
+                'grade_level' => $gradeLevel,
+                'class_name' => $className,
                 'schedule_info' => $validated['schedule_info'] ?? null,
-                'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
-                'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
+                'homeroom_teacher_name' => $wkName,
+                'homeroom_teacher_nip' => $wkNip,
+                'homeroom_teacher_signature' => $wkSig,
             ]);
 
             $cls->ensureDefaultsInitialized();
 
-            if (! empty($validated['copy_students_from_class_id'])) {
+            if (! empty($validated['copy_students_from_class_id']) && $cls->activeStudents()->count() === 0) {
                 $source = TeachingClass::query()->find($validated['copy_students_from_class_id']);
                 if ($source && ($user->isAdmin() || (int) $source->teacher_id === (int) $user->id)) {
                     foreach ($source->activeStudents()->get() as $idx => $st) {
@@ -140,8 +176,8 @@ class TeachingClassController extends Controller
         });
 
         return redirect()
-            ->route('classes.students', $createdClass)
-            ->with('success', "Kelas Administrasi {$createdClass->class_name} berhasil dibuat! Silakan kelola/impor daftar murid.");
+            ->route('classes.index')
+            ->with('success', "Buku Kelas Administrasi {$createdClass->class_name} ({$createdClass->subject->name}) berhasil dibuat!");
     }
 
     public function update(Request $request, TeachingClass $teachingClass): RedirectResponse
@@ -169,15 +205,39 @@ class TeachingClassController extends Controller
             $wkSig = $validated['homeroom_teacher_signature_data'];
         }
 
-        $teachingClass->update([
-            'subject_id' => (int) $validated['subject_id'],
-            'grade_level' => strtoupper(trim($validated['grade_level'])),
-            'class_name' => trim($validated['class_name']),
-            'schedule_info' => $validated['schedule_info'] ?? null,
-            'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
-            'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
-            'homeroom_teacher_signature' => $wkSig,
-        ]);
+        if (! $request->user()->isAdmin() && $teachingClass->schoolClass) {
+            $sc = $teachingClass->schoolClass;
+            $teachingClass->update([
+                'subject_id' => (int) $validated['subject_id'],
+                'schedule_info' => $validated['schedule_info'] ?? null,
+                'grade_level' => $sc->grade_level,
+                'class_name' => $sc->name,
+                'homeroom_teacher_name' => $sc->homeroom_teacher_name,
+                'homeroom_teacher_nip' => $sc->homeroom_teacher_nip,
+                'homeroom_teacher_signature' => $sc->homeroom_teacher_signature,
+            ]);
+        } else {
+            $teachingClass->update([
+                'subject_id' => (int) $validated['subject_id'],
+                'grade_level' => strtoupper(trim($validated['grade_level'])),
+                'class_name' => trim($validated['class_name']),
+                'schedule_info' => $validated['schedule_info'] ?? null,
+                'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
+                'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
+                'homeroom_teacher_signature' => $wkSig,
+            ]);
+
+            if ($request->user()->isAdmin() && $teachingClass->schoolClass) {
+                $teachingClass->schoolClass->update([
+                    'grade_level' => strtoupper(trim($validated['grade_level'])),
+                    'name' => trim($validated['class_name']),
+                    'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
+                    'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
+                    'homeroom_teacher_signature' => $wkSig,
+                ]);
+                $teachingClass->schoolClass->syncToTeachingClasses();
+            }
+        }
 
         return back()->with('success', "Identitas Kelas {$teachingClass->class_name} & Wali Kelas berhasil diperbarui.");
     }
@@ -220,9 +280,11 @@ class TeachingClassController extends Controller
         ]);
     }
 
-    public function storeStudent(Request $request, TeachingClass $teachingClass): RedirectResponse
+    public function storeStudent(Request $request, TeachingClass $teachingClass, GradeCalculationService $gradeService): RedirectResponse
     {
-        $this->authorizeClassAccess($request->user(), $teachingClass);
+        $user = $request->user();
+        $this->authorizeClassAccess($user, $teachingClass);
+        abort_unless($user->isAdmin(), 403, 'Akses ditolak. Pengelolaan data peserta didik dikontrol secara terpusat oleh Administrator Sekolah.');
 
         $validated = $request->validate([
             'order_number' => ['nullable', 'integer', 'min:1'],
@@ -234,7 +296,9 @@ class TeachingClassController extends Controller
 
         $nextOrder = $validated['order_number'] ?? (((int) $teachingClass->students()->max('order_number')) + 1);
 
-        $teachingClass->students()->create([
+        $student = $teachingClass->students()->create([
+            'school_class_id' => $teachingClass->school_class_id,
+            'teaching_class_id' => $teachingClass->id,
             'order_number' => $nextOrder,
             'nis_nisn' => $validated['nis_nisn'] ?? null,
             'full_name' => trim($validated['full_name']),
@@ -243,13 +307,26 @@ class TeachingClassController extends Controller
             'is_active' => true,
         ]);
 
-        return back()->with('success', "Murid {$validated['full_name']} berhasil ditambahkan.");
+        if ($teachingClass->school_class_id) {
+            foreach (TeachingClass::where('school_class_id', $teachingClass->school_class_id)->get() as $tc) {
+                $gradeService->recalculateClass($tc);
+            }
+        } else {
+            $gradeService->recalculateClass($teachingClass);
+        }
+
+        return back()->with('success', "Murid {$student->full_name} berhasil ditambahkan.");
     }
 
     public function updateStudent(Request $request, TeachingClass $teachingClass, ClassStudent $student): RedirectResponse
     {
-        $this->authorizeClassAccess($request->user(), $teachingClass);
-        abort_unless((int) $student->teaching_class_id === (int) $teachingClass->id, 404);
+        $user = $request->user();
+        $this->authorizeClassAccess($user, $teachingClass);
+        abort_unless($user->isAdmin(), 403, 'Akses ditolak. Pengelolaan data peserta didik dikontrol secara terpusat oleh Administrator Sekolah.');
+
+        $isMatch = ($teachingClass->school_class_id && (int) $student->school_class_id === (int) $teachingClass->school_class_id)
+            || ((int) $student->teaching_class_id === (int) $teachingClass->id);
+        abort_unless($isMatch, 404);
 
         $validated = $request->validate([
             'order_number' => ['required', 'integer', 'min:1'],
@@ -270,20 +347,35 @@ class TeachingClassController extends Controller
         return back()->with('success', "Data murid {$student->full_name} berhasil diperbarui.");
     }
 
-    public function destroyStudent(Request $request, TeachingClass $teachingClass, ClassStudent $student): RedirectResponse
+    public function destroyStudent(Request $request, TeachingClass $teachingClass, ClassStudent $student, GradeCalculationService $gradeService): RedirectResponse
     {
-        $this->authorizeClassAccess($request->user(), $teachingClass);
-        abort_unless((int) $student->teaching_class_id === (int) $teachingClass->id, 404);
+        $user = $request->user();
+        $this->authorizeClassAccess($user, $teachingClass);
+        abort_unless($user->isAdmin(), 403, 'Akses ditolak. Pengelolaan data peserta didik dikontrol secara terpusat oleh Administrator Sekolah.');
+
+        $isMatch = ($teachingClass->school_class_id && (int) $student->school_class_id === (int) $teachingClass->school_class_id)
+            || ((int) $student->teaching_class_id === (int) $teachingClass->id);
+        abort_unless($isMatch, 404);
 
         $name = $student->full_name;
         $student->delete();
+
+        if ($teachingClass->school_class_id) {
+            foreach (TeachingClass::where('school_class_id', $teachingClass->school_class_id)->get() as $tc) {
+                $gradeService->recalculateClass($tc);
+            }
+        } else {
+            $gradeService->recalculateClass($teachingClass);
+        }
 
         return back()->with('success', "Murid {$name} dihapus dari kelas ini.");
     }
 
     public function sortStudentsAlphabetically(Request $request, TeachingClass $teachingClass): RedirectResponse
     {
-        $this->authorizeClassAccess($request->user(), $teachingClass);
+        $user = $request->user();
+        $this->authorizeClassAccess($user, $teachingClass);
+        abort_unless($user->isAdmin(), 403, 'Akses ditolak. Pengelolaan data peserta didik dikontrol secara terpusat oleh Administrator Sekolah.');
 
         $students = $teachingClass->activeStudents()->get()->sortBy(fn ($s) => mb_strtolower($s->full_name))->values();
         DB::transaction(function () use ($students) {
@@ -299,6 +391,7 @@ class TeachingClassController extends Controller
     {
         $user = $request->user();
         $this->authorizeClassAccess($user, $teachingClass);
+        abort_unless($user->isAdmin(), 403, 'Akses ditolak. Pengelolaan data peserta didik dikontrol secara terpusat oleh Administrator Sekolah.');
 
         $validated = $request->validate([
             'source_class_id' => ['required', 'exists:teaching_classes,id'],
@@ -327,6 +420,8 @@ class TeachingClassController extends Controller
                     continue;
                 }
                 $teachingClass->students()->create([
+                    'school_class_id' => $teachingClass->school_class_id,
+                    'teaching_class_id' => $teachingClass->id,
                     'order_number' => ++$maxOrder,
                     'nis_nisn' => $st->nis_nisn,
                     'full_name' => $st->full_name,
@@ -343,6 +438,13 @@ class TeachingClassController extends Controller
                     'homeroom_teacher_nip' => $source->homeroom_teacher_nip,
                     'homeroom_teacher_signature' => $source->homeroom_teacher_signature,
                 ]);
+                if ($teachingClass->schoolClass) {
+                    $teachingClass->schoolClass->update([
+                        'homeroom_teacher_name' => $source->homeroom_teacher_name,
+                        'homeroom_teacher_nip' => $source->homeroom_teacher_nip,
+                        'homeroom_teacher_signature' => $source->homeroom_teacher_signature,
+                    ]);
+                }
             }
         });
 
@@ -362,7 +464,9 @@ class TeachingClassController extends Controller
         ExcelExportImportService $excelService,
         GradeCalculationService $gradeService
     ): RedirectResponse {
-        $this->authorizeClassAccess($request->user(), $teachingClass);
+        $user = $request->user();
+        $this->authorizeClassAccess($user, $teachingClass);
+        abort_unless($user->isAdmin(), 403, 'Akses ditolak. Pengelolaan data peserta didik dikontrol secara terpusat oleh Administrator Sekolah.');
 
         $request->validate([
             'excel_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
@@ -375,7 +479,13 @@ class TeachingClassController extends Controller
             $request->boolean('replace_existing')
         );
 
-        $gradeService->recalculateClass($teachingClass);
+        if ($teachingClass->school_class_id) {
+            foreach (TeachingClass::where('school_class_id', $teachingClass->school_class_id)->get() as $tc) {
+                $gradeService->recalculateClass($tc);
+            }
+        } else {
+            $gradeService->recalculateClass($teachingClass);
+        }
 
         return back()->with('success', "Berhasil mengimpor {$count} data peserta didik dari file Excel.");
     }

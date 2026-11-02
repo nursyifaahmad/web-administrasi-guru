@@ -12,6 +12,7 @@ class TeachingClass extends Model
     protected $fillable = [
         'teacher_id',
         'academic_year_id',
+        'school_class_id',
         'subject_id',
         'grade_level',
         'class_name',
@@ -22,11 +23,49 @@ class TeachingClass extends Model
         'is_archived',
     ];
 
+    protected static function booted(): void
+    {
+        static::saving(function (TeachingClass $model) {
+            // Pastikan school_class_id selalu terisi secara konsisten
+            if (empty($model->school_class_id) && ! empty($model->academic_year_id) && ! empty($model->class_name)) {
+                $cleanName = trim($model->class_name);
+                $sc = SchoolClass::query()->firstOrCreate(
+                    [
+                        'academic_year_id' => $model->academic_year_id,
+                        'name' => $cleanName,
+                    ],
+                    [
+                        'grade_level' => $model->grade_level ?: 'VII',
+                        'homeroom_teacher_name' => $model->homeroom_teacher_name ?: '-',
+                        'homeroom_teacher_nip' => $model->homeroom_teacher_nip,
+                        'homeroom_teacher_signature' => $model->homeroom_teacher_signature,
+                    ]
+                );
+                $model->school_class_id = $sc->id;
+            }
+
+            // Jika terhubung ke SchoolClass, sinkronkan data identitas dari SchoolClass
+            if ($model->school_class_id && $model->relationLoaded('schoolClass') && $model->schoolClass) {
+                $sc = $model->schoolClass;
+                $model->grade_level = $sc->grade_level;
+                $model->class_name = $sc->name;
+                $model->homeroom_teacher_name = $sc->homeroom_teacher_name;
+                $model->homeroom_teacher_nip = $sc->homeroom_teacher_nip;
+                $model->homeroom_teacher_signature = $sc->homeroom_teacher_signature;
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [
             'is_archived' => 'boolean',
         ];
+    }
+
+    public function schoolClass(): BelongsTo
+    {
+        return $this->belongsTo(SchoolClass::class, 'school_class_id');
     }
 
     public function teacher(): BelongsTo
@@ -46,12 +85,30 @@ class TeachingClass extends Model
 
     public function students(): HasMany
     {
-        return $this->hasMany(ClassStudent::class)->orderBy('order_number')->orderBy('full_name');
+        if ($this->school_class_id) {
+            return $this->hasMany(ClassStudent::class, 'school_class_id', 'school_class_id')
+                ->orderBy('order_number')
+                ->orderBy('full_name');
+        }
+
+        return $this->hasMany(ClassStudent::class, 'teaching_class_id')
+            ->orderBy('order_number')
+            ->orderBy('full_name');
     }
 
     public function activeStudents(): HasMany
     {
-        return $this->hasMany(ClassStudent::class)->where('is_active', true)->orderBy('order_number')->orderBy('full_name');
+        if ($this->school_class_id) {
+            return $this->hasMany(ClassStudent::class, 'school_class_id', 'school_class_id')
+                ->where('is_active', true)
+                ->orderBy('order_number')
+                ->orderBy('full_name');
+        }
+
+        return $this->hasMany(ClassStudent::class, 'teaching_class_id')
+            ->where('is_active', true)
+            ->orderBy('order_number')
+            ->orderBy('full_name');
     }
 
     public function dailyJournals(): HasMany

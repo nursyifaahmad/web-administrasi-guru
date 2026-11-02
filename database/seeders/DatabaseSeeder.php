@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Attendance;
 use App\Models\ClassStudent;
 use App\Models\DailyJournal;
+use App\Models\SchoolClass;
 use App\Models\SchoolSetting;
 use App\Models\StudentGrade;
 use App\Models\Subject;
@@ -147,7 +148,7 @@ class DatabaseSeeder extends Seeder
             ['nis' => '009812020', 'full' => 'Zahra Aulia Rahma', 'nick' => 'Zahra', 'g' => 'P'],
         ];
 
-        $guru1Classes = [
+        $schoolClassesList = [
             ['grade' => 'VII', 'name' => 'VII-A', 'schedule' => 'Senin (1-2) & Kamis (3-4)', 'wk_name' => 'Dra. Ratna Sari Dewi', 'wk_nip' => '19750618 200501 2 007'],
             ['grade' => 'VII', 'name' => 'VII-B', 'schedule' => 'Senin (3-4) & Kamis (5-6)', 'wk_name' => 'Agus Setiawan, S.Pd.', 'wk_nip' => '19840911 201101 1 003'],
             ['grade' => 'VIII', 'name' => 'VIII-A', 'schedule' => 'Selasa (1-2) & Jumat (1-2)', 'wk_name' => 'Rina Marlina, S.Pd.', 'wk_nip' => '19871203 201402 2 002'],
@@ -155,10 +156,47 @@ class DatabaseSeeder extends Seeder
             ['grade' => 'IX', 'name' => 'IX-A', 'schedule' => 'Rabu (1-3) & Sabtu (1-2)', 'wk_name' => 'Hj. Nenden Hasanah, M.Pd.', 'wk_nip' => '19731108 199903 2 004'],
         ];
 
+        // 1. Buat Master Rombel & Master Peserta Didik Terpusat oleh Admin
+        $schoolClassMap = [];
+        foreach ($schoolClassesList as $cIdx => $cfg) {
+            $sc = SchoolClass::query()->updateOrCreate(
+                [
+                    'academic_year_id' => $activeYear->id,
+                    'name' => $cfg['name'],
+                ],
+                [
+                    'grade_level' => $cfg['grade'],
+                    'homeroom_teacher_name' => $cfg['wk_name'],
+                    'homeroom_teacher_nip' => $cfg['wk_nip'],
+                ]
+            );
+
+            foreach ($sampleStudents as $sIdx => $st) {
+                ClassStudent::query()->updateOrCreate(
+                    [
+                        'school_class_id' => $sc->id,
+                        'order_number' => $sIdx + 1,
+                    ],
+                    [
+                        'nis_nisn' => substr($st['nis'], 0, 6) . sprintf('%d%02d', $cIdx + 1, $sIdx + 1),
+                        'full_name' => $st['full'],
+                        'nickname' => $st['nick'],
+                        'gender' => $st['g'],
+                        'is_active' => true,
+                    ]
+                );
+            }
+
+            $schoolClassMap[$cfg['name']] = $sc;
+        }
+
         $syncService = app(AttendanceJournalSyncService::class);
         $gradeService = app(GradeCalculationService::class);
 
-        foreach ($guru1Classes as $cIdx => $cfg) {
+        // 2. Buat Kelas Mengajar Guru 1 (Matematika) yang terhubung ke SchoolClass
+        foreach ($schoolClassesList as $cIdx => $cfg) {
+            $sc = $schoolClassMap[$cfg['name']];
+
             $tClass = TeachingClass::query()->updateOrCreate(
                 [
                     'teacher_id' => $guru1->id,
@@ -167,6 +205,7 @@ class DatabaseSeeder extends Seeder
                     'class_name' => $cfg['name'],
                 ],
                 [
+                    'school_class_id' => $sc->id,
                     'grade_level' => $cfg['grade'],
                     'schedule_info' => $cfg['schedule'],
                     'homeroom_teacher_name' => $cfg['wk_name'],
@@ -198,22 +237,7 @@ class DatabaseSeeder extends Seeder
                 ]
             );
 
-            $createdStudents = [];
-            foreach ($sampleStudents as $sIdx => $st) {
-                $createdStudents[] = ClassStudent::query()->updateOrCreate(
-                    [
-                        'teaching_class_id' => $tClass->id,
-                        'order_number' => $sIdx + 1,
-                    ],
-                    [
-                        'nis_nisn' => substr($st['nis'], 0, 6) . sprintf('%d%02d', $cIdx + 1, $sIdx + 1),
-                        'full_name' => $st['full'],
-                        'nickname' => $st['nick'],
-                        'gender' => $st['g'],
-                        'is_active' => true,
-                    ]
-                );
-            }
+            $sharedStudents = $sc->students()->get();
 
             if ($cIdx < 3) {
                 $meetingDates = [
@@ -224,7 +248,7 @@ class DatabaseSeeder extends Seeder
                 ];
 
                 foreach ($meetingDates as $mIdx => $m) {
-                    foreach ($createdStudents as $sIdx => $student) {
+                    foreach ($sharedStudents as $sIdx => $student) {
                         $status = '.';
                         if ($mIdx === 0 && $sIdx === 5) {
                             $status = 'd'; // Dispen (tetap dihitung hadir!)
@@ -266,7 +290,7 @@ class DatabaseSeeder extends Seeder
                     $syncService->syncJournalForDate($tClass, $m['date']);
                 }
 
-                foreach ($createdStudents as $sIdx => $student) {
+                foreach ($sharedStudents as $sIdx => $student) {
                     $base = 72 + (($sIdx * 7 + $cIdx * 3) % 24);
                     // Buat 2-3 siswa bernilai di bawah KKTP agar indikator remedial terlihat jelas
                     if (in_array($sIdx, [4, 16], true)) {
@@ -299,7 +323,8 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        // Kelas contoh untuk Guru 2 (Bahasa Indonesia)
+        // 3. Kelas contoh untuk Guru 2 (Bahasa Indonesia) pada rombel VII-A yang SAMA
+        $sc7A = $schoolClassMap['VII-A'];
         $g2Class = TeachingClass::query()->updateOrCreate(
             [
                 'teacher_id' => $guru2->id,
@@ -308,24 +333,13 @@ class DatabaseSeeder extends Seeder
                 'class_name' => 'VII-A',
             ],
             [
+                'school_class_id' => $sc7A->id,
                 'grade_level' => 'VII',
                 'schedule_info' => 'Selasa (1-3) & Kamis (1-3)',
-                'homeroom_teacher_name' => 'Dra. Ratna Sari Dewi',
-                'homeroom_teacher_nip' => '19750618 200501 2 007',
+                'homeroom_teacher_name' => $sc7A->homeroom_teacher_name,
+                'homeroom_teacher_nip' => $sc7A->homeroom_teacher_nip,
             ]
         );
         $g2Class->ensureDefaultsInitialized();
-        foreach (array_slice($sampleStudents, 0, 15) as $sIdx => $st) {
-            ClassStudent::query()->updateOrCreate(
-                ['teaching_class_id' => $g2Class->id, 'order_number' => $sIdx + 1],
-                [
-                    'nis_nisn' => '009912' . sprintf('%03d', $sIdx + 1),
-                    'full_name' => $st['full'],
-                    'nickname' => $st['nick'],
-                    'gender' => $st['g'],
-                    'is_active' => true,
-                ]
-            );
-        }
     }
 }

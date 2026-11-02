@@ -5,7 +5,22 @@
 @section('page_subtitle', 'Kelola hingga 15+ kelas ajar per semester secara mandiri — lengkap dengan Jurnal Harian, Absensi, dan Daftar Nilai.')
 
 @section('content')
-<div class="space-y-5" x-data="{ createClassModal: false }">
+<div class="space-y-5"
+     x-data="{
+        createClassModal: false,
+        selectedSchoolClassId: '{{ $schoolClasses->first()?->id ?? '' }}',
+        schoolClasses: @js($schoolClasses->map(fn($sc) => [
+            'id' => (string) $sc->id,
+            'name' => $sc->name,
+            'grade_level' => $sc->grade_level,
+            'homeroom_teacher_name' => $sc->homeroom_teacher_name ?: '-',
+            'homeroom_teacher_nip' => $sc->homeroom_teacher_nip ?: '-',
+            'active_students_count' => $sc->active_students_count,
+        ])),
+        get selectedRombel() {
+            return this.schoolClasses.find(c => String(c.id) === String(this.selectedSchoolClassId)) || null;
+        }
+     }">
     {{-- Toolbar Pencarian & Tambah Kelas --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <form method="GET" action="{{ route('classes.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
@@ -139,7 +154,7 @@
                 @if(auth()->user()->isAdmin())
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">Pemilik Kelas (Guru Pengampu) *</label>
-                        <select name="teacher_id" required class="w-full rounded-xl border border-slate-300 px-3 py-2">
+                        <select name="teacher_id" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold">
                             @foreach($teachers as $t)
                                 <option value="{{ $t->id }}">{{ $t->name }} (NIP. {{ $t->nip ?: '-' }})</option>
                             @endforeach
@@ -147,6 +162,57 @@
                     </div>
                 @endif
 
+                {{-- Pilihan Rombongan Belajar Terpusat --}}
+                @if($schoolClasses->isNotEmpty())
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">
+                            Pilih Rombongan Belajar (Rombel) @if(!auth()->user()->isAdmin()) * @endif
+                        </label>
+                        <select name="school_class_id"
+                                x-model="selectedSchoolClassId"
+                                @if(!auth()->user()->isAdmin()) required @endif
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-800 bg-white">
+                            @if(auth()->user()->isAdmin())
+                                <option value="">— Buat Rombel Bebas / Mandiri (Tanpa Rombel Terpusat) —</option>
+                            @else
+                                <option value="" disabled>— Pilih Rombel Resmi yang Dikelola Admin —</option>
+                            @endif
+                            @foreach($schoolClasses as $sc)
+                                <option value="{{ $sc->id }}">
+                                    Kelas {{ $sc->name }} (Tingkat {{ $sc->grade_level }} • {{ $sc->active_students_count }} Murid)
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    {{-- Card Info Rombel Terpilih --}}
+                    <template x-if="selectedRombel">
+                        <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-1">
+                            <div class="flex items-center justify-between font-bold">
+                                <span class="text-emerald-900" x-text="'Rombel: ' + selectedRombel.name + ' (Tingkat ' + selectedRombel.grade_level + ')'"></span>
+                                <span class="px-2 py-0.5 rounded-md bg-emerald-200 text-emerald-900 font-extrabold text-[10px]"
+                                      x-text="selectedRombel.active_students_count + ' Murid Terhubung'"></span>
+                            </div>
+                            <div class="text-[11px] text-emerald-800">
+                                <strong>Wali Kelas:</strong> <span x-text="selectedRombel.homeroom_teacher_name"></span>
+                                <span x-show="selectedRombel.homeroom_teacher_nip && selectedRombel.homeroom_teacher_nip !== '-'"
+                                      x-text="' (NIP. ' + selectedRombel.homeroom_teacher_nip + ')'"></span>
+                            </div>
+                            <div class="text-[10px] text-emerald-700 italic">
+                                Seluruh daftar murid & identitas wali kelas akan otomatis sinkron dengan guru lain di kelas ini.
+                            </div>
+                        </div>
+                    </template>
+                @elseif(!auth()->user()->isAdmin())
+                    <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1">
+                        <div class="font-bold text-xs">Belum Ada Rombel Tersedia</div>
+                        <div class="text-[11px] leading-relaxed">
+                            Administrator Sekolah belum membuat data Rombel untuk tahun ajaran ini. Silakan hubungi Administrator untuk menambahkan data Rombel dan murid terlebih dahulu.
+                        </div>
+                    </div>
+                @endif
+
+                {{-- Mata Pelajaran & Jadwal --}}
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="sm:col-span-2">
                         <label class="block font-bold text-slate-700 mb-1">Mata Pelajaran *</label>
@@ -157,61 +223,64 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block font-bold text-slate-700 mb-1">Tingkat Kelas *</label>
-                        <select name="grade_level" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
-                            @foreach($gradeLevels as $lvl)
-                                <option value="{{ $lvl }}">Kelas {{ $lvl }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">Nama Kelas / Rombel *</label>
-                        <input type="text" name="class_name" required placeholder="Contoh: VII-C atau 8E"
-                               class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
-                    </div>
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">Info Hari & Jam Mengajar</label>
-                        <input type="text" name="schedule_info" placeholder="Misal: Rabu (1-2) & Sabtu (3-4)"
+                        <label class="block font-bold text-slate-700 mb-1">Jadwal Mengajar</label>
+                        <input type="text" name="schedule_info" placeholder="Misal: Sen (1-2)"
                                class="w-full rounded-xl border border-slate-300 px-3 py-2">
                     </div>
                 </div>
 
-                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-                    <div class="font-bold text-slate-800">Data Wali Kelas (Wajib untuk Kolom Tanda Tangan Cetakan)</div>
+                {{-- Field Manual (Hanya Tampil Jika Rombel Belum Dipilih / Khusus Admin) --}}
+                <div x-show="!selectedRombel" class="space-y-3.5">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                            <label class="block font-semibold text-slate-700 mb-1">Nama Lengkap & Gelar Wali Kelas *</label>
-                            <input type="text" name="homeroom_teacher_name" required placeholder="Contoh: Dra. Ratna Sari"
-                                   class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2">
+                            <label class="block font-bold text-slate-700 mb-1">Tingkat Kelas *</label>
+                            <select name="grade_level" :required="!selectedRombel" class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
+                                @foreach($gradeLevels as $lvl)
+                                    <option value="{{ $lvl }}">Kelas {{ $lvl }}</option>
+                                @endforeach
+                            </select>
                         </div>
                         <div>
-                            <label class="block font-semibold text-slate-700 mb-1">NIP Wali Kelas</label>
-                            <input type="text" name="homeroom_teacher_nip" placeholder="19750618 200501 2 007"
-                                   class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2">
+                            <label class="block font-bold text-slate-700 mb-1">Nama Kelas / Rombel *</label>
+                            <input type="text" name="class_name" :required="!selectedRombel" placeholder="Contoh: VII-C atau 8E"
+                                   class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
                         </div>
                     </div>
-                </div>
 
-                @if($copyableClasses->isNotEmpty())
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">Salin Daftar Murid Otomatis dari Kelas Lain (Opsional)</label>
-                        <select name="copy_students_from_class_id" class="w-full rounded-xl border border-slate-300 px-3 py-2">
-                            <option value="">— Kosongkan (Input / Import Excel nanti) —</option>
-                            @foreach($copyableClasses as $cc)
-                                <option value="{{ $cc->id }}">
-                                    {{ $cc->class_name }} — {{ $cc->subject->name ?? '' }} ({{ $cc->academicYear->year_name ?? '' }} {{ $cc->academicYear->semester ?? '' }} • {{ $cc->students_count }} murid)
-                                </option>
-                            @endforeach
-                        </select>
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                        <div class="font-bold text-slate-800">Data Wali Kelas (Wajib untuk Kolom Cetakan)</div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">Nama Wali Kelas *</label>
+                                <input type="text" name="homeroom_teacher_name" :required="!selectedRombel" placeholder="Contoh: Dra. Ratna Sari"
+                                       class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">NIP Wali Kelas</label>
+                                <input type="text" name="homeroom_teacher_nip" placeholder="19750618 200501 2 007"
+                                       class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2">
+                            </div>
+                        </div>
                     </div>
-                @endif
+
+                    @if($copyableClasses->isNotEmpty())
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">Salin Murid Otomatis dari Kelas Lain (Opsional)</label>
+                            <select name="copy_students_from_class_id" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+                                <option value="">— Kosongkan —</option>
+                                @foreach($copyableClasses as $cc)
+                                    <option value="{{ $cc->id }}">
+                                        {{ $cc->class_name }} — {{ $cc->subject->name ?? '' }} ({{ $cc->academicYear->year_name ?? '' }} {{ $cc->academicYear->semester ?? '' }} • {{ $cc->students_count }} murid)
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endif
+                </div>
 
                 <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
                     <button type="button" @click="createClassModal = false" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>
-                    <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700">Buat Kelas Sekarang</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-2xs">Buat Kelas Sekarang</button>
                 </div>
             </form>
         </div>

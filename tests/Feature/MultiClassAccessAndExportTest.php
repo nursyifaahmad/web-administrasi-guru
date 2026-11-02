@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AcademicYear;
 use App\Models\ClassStudent;
 use App\Models\DailyJournal;
+use App\Models\SchoolClass;
 use App\Models\SchoolSetting;
 use App\Models\Subject;
 use App\Models\TeachingClass;
@@ -101,8 +102,9 @@ class MultiClassAccessAndExportTest extends TestCase
             ->assertSee('Ahmad Subarjo, S.Pd.');
         $this->actingAs($admin)->get(route('grades.index', $firstClass))->assertOk();
 
-        // Uji Import Daftar Murid via file Excel (.xlsx)
-        $tmpXlsx = tempnam(sys_get_temp_dir(), 'stu_') . '.xlsx';
+        // Guru A dilarang mengimpor data murid (403) karena pengelolaan data terpusat oleh Admin
+        $tmpDir = sys_get_temp_dir();
+        $tmpXlsx = $tmpDir . DIRECTORY_SEPARATOR . 'stu_' . uniqid() . '.xlsx';
         $sp = new Spreadsheet();
         $sh = $sp->getActiveSheet();
         $sh->fromArray([
@@ -120,12 +122,18 @@ class MultiClassAccessAndExportTest extends TestCase
             true
         );
 
+        // Guru A ditolak 403 saat mencoba import
         $this->actingAs($guruA)->post(route('classes.students.import', $firstClass), [
+            'excel_file' => $uploaded,
+        ])->assertStatus(403);
+
+        // Admin mengimpor murid ke rombel kelas tersebut (berhasil)
+        $this->actingAs($admin)->post(route('classes.students.import', $firstClass), [
             'excel_file' => $uploaded,
         ])->assertRedirect();
         @unlink($tmpXlsx);
 
-        $this->assertSame(2, ClassStudent::query()->where('teaching_class_id', $firstClass->id)->count());
+        $this->assertSame(2, $firstClass->activeStudents()->count());
 
         DailyJournal::query()->create([
             'teaching_class_id' => $firstClass->id,
@@ -173,7 +181,7 @@ class MultiClassAccessAndExportTest extends TestCase
             $xlsRes->sendContent();
             $binary = ob_get_clean();
 
-            $verifyFile = tempnam(sys_get_temp_dir(), 'ver_') . '.xlsx';
+            $verifyFile = $tmpDir . DIRECTORY_SEPARATOR . 'ver_' . uniqid() . '.xlsx';
             file_put_contents($verifyFile, $binary);
             $loaded = IOFactory::load($verifyFile);
             $flatText = json_encode($loaded->getActiveSheet()->toArray());
@@ -186,5 +194,141 @@ class MultiClassAccessAndExportTest extends TestCase
             $this->assertStringContainsString($guruA->nip, $flatText);
             $this->assertStringContainsString('Kepala Sekolah Uji, M.Pd.', $flatText);
         }
+    }
+
+    public function test_centralized_rombel_and_shared_students_between_teachers(): void
+    {
+        $admin = User::query()->create([
+            'name' => 'Admin Pusat',
+            'email' => 'admin.pusat@sekolah.sch.id',
+            'role' => 'admin',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $guruMtk = User::query()->create([
+            'name' => 'Guru Matematika',
+            'email' => 'guru.mtk@sekolah.sch.id',
+            'role' => 'guru',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $guruBin = User::query()->create([
+            'name' => 'Guru Bahasa Indonesia',
+            'email' => 'guru.bin@sekolah.sch.id',
+            'role' => 'guru',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subMtk = Subject::query()->create(['code' => 'MTK', 'name' => 'Matematika', 'default_kktp' => 75]);
+        $subBin = Subject::query()->create(['code' => 'BIN', 'name' => 'Bahasa Indonesia', 'default_kktp' => 76]);
+
+        // 1. Admin membuat Master Rombel VII-A
+        $schoolClass = SchoolClass::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level' => 'VII',
+            'name' => 'VII-A',
+            'homeroom_teacher_name' => 'Dra. Hj. Siti Romlah, M.Pd.',
+            'homeroom_teacher_nip' => '19750101 200001 2 001',
+        ]);
+
+        // 2. Admin menambahkan 3 murid ke Master Rombel VII-A
+        $this->actingAs($admin)->post(route('admin.classes.students.store', $schoolClass), [
+            'order_number' => 1,
+            'nis_nisn' => '1001',
+            'full_name' => 'Ahmad Faiz',
+            'nickname' => 'Faiz',
+            'gender' => 'L',
+        ])->assertRedirect();
+
+        $this->actingAs($admin)->post(route('admin.classes.students.store', $schoolClass), [
+            'order_number' => 2,
+            'nis_nisn' => '1002',
+            'full_name' => 'Bilqis Syakira',
+            'nickname' => 'Bilqis',
+            'gender' => 'P',
+        ])->assertRedirect();
+
+        $this->actingAs($admin)->post(route('admin.classes.students.store', $schoolClass), [
+            'order_number' => 3,
+            'nis_nisn' => '1003',
+            'full_name' => 'Chairul Anam',
+            'nickname' => 'Anam',
+            'gender' => 'L',
+        ])->assertRedirect();
+
+        $this->assertSame(3, $schoolClass->students()->count());
+
+        // 3. Guru MTK membuat kelas dengan memilih rombel VII-A
+        $this->actingAs($guruMtk)->post(route('classes.store'), [
+            'school_class_id' => $schoolClass->id,
+            'subject_id' => $subMtk->id,
+            'schedule_info' => 'Senin 1-2',
+        ])->assertRedirect();
+
+        // 4. Guru BIN membuat kelas dengan memilih rombel VII-A
+        $this->actingAs($guruBin)->post(route('classes.store'), [
+            'school_class_id' => $schoolClass->id,
+            'subject_id' => $subBin->id,
+            'schedule_info' => 'Selasa 3-4',
+        ])->assertRedirect();
+
+        $classMtk = TeachingClass::query()->where('teacher_id', $guruMtk->id)->where('subject_id', $subMtk->id)->firstOrFail();
+        $classBin = TeachingClass::query()->where('teacher_id', $guruBin->id)->where('subject_id', $subBin->id)->firstOrFail();
+
+        // Keduanya mewarisi nama rombel & wali kelas dari Master Rombel
+        $this->assertSame('VII-A', $classMtk->class_name);
+        $this->assertSame('VII-A', $classBin->class_name);
+        $this->assertSame('Dra. Hj. Siti Romlah, M.Pd.', $classMtk->homeroom_teacher_name);
+        $this->assertSame('Dra. Hj. Siti Romlah, M.Pd.', $classBin->homeroom_teacher_name);
+
+        // Keduanya melihat 3 murid yang SAMA PERSIS
+        $mtkStudents = $classMtk->activeStudents()->get();
+        $binStudents = $classBin->activeStudents()->get();
+        $this->assertCount(3, $mtkStudents);
+        $this->assertCount(3, $binStudents);
+        $this->assertEquals($mtkStudents->pluck('id')->all(), $binStudents->pluck('id')->all());
+
+        // Guru dilarang menambah, mengedit, atau menghapus murid (403 Forbidden)
+        $firstStudent = $mtkStudents->first();
+        $this->actingAs($guruMtk)->post(route('classes.students.store', $classMtk), [
+            'full_name' => 'Murid Ilegal',
+            'gender' => 'L',
+        ])->assertStatus(403);
+
+        $this->actingAs($guruMtk)->put(route('classes.students.update', [$classMtk, $firstStudent]), [
+            'order_number' => 1,
+            'full_name' => 'Nama Diubah Guru',
+            'gender' => 'L',
+        ])->assertStatus(403);
+
+        $this->actingAs($guruMtk)->delete(route('classes.students.destroy', [$classMtk, $firstStudent]))
+            ->assertStatus(403);
+
+        $this->actingAs($guruBin)->delete(route('classes.students.destroy', [$classBin, $firstStudent]))
+            ->assertStatus(403);
+
+        // 5. Admin menambahkan murid ke-4 ke Master Rombel
+        $this->actingAs($admin)->post(route('admin.classes.students.store', $schoolClass), [
+            'order_number' => 4,
+            'nis_nisn' => '1004',
+            'full_name' => 'Dinda Kirana',
+            'nickname' => 'Dinda',
+            'gender' => 'P',
+        ])->assertRedirect();
+
+        // Murid ke-4 otomatis langsung muncul di kelas Guru MTK dan Guru BIN secara real-time
+        $this->assertSame(4, $classMtk->activeStudents()->count());
+        $this->assertSame(4, $classBin->activeStudents()->count());
+        $this->assertTrue($classMtk->activeStudents()->where('full_name', 'Dinda Kirana')->exists());
+        $this->assertTrue($classBin->activeStudents()->where('full_name', 'Dinda Kirana')->exists());
     }
 }

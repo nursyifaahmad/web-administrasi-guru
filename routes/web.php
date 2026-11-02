@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\KktpSubjectController;
 use App\Http\Controllers\Admin\SchoolAndYearController;
+use App\Http\Controllers\Admin\SchoolClassController;
 use App\Http\Controllers\Admin\TeacherAccountController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AuthController;
@@ -48,6 +49,19 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::put('/guru/{teacher}', [TeacherAccountController::class, 'update'])->name('teachers.update');
         Route::patch('/guru/{teacher}/toggle', [TeacherAccountController::class, 'toggleStatus'])->name('teachers.toggle');
         Route::delete('/guru/{teacher}', [TeacherAccountController::class, 'destroy'])->name('teachers.destroy');
+
+        // Master Rombongan Belajar (Rombel) & Peserta Didik
+        Route::get('/rombel', [SchoolClassController::class, 'index'])->name('classes.index');
+        Route::post('/rombel', [SchoolClassController::class, 'store'])->name('classes.store');
+        Route::get('/rombel/{schoolClass}', [SchoolClassController::class, 'show'])->name('classes.show');
+        Route::put('/rombel/{schoolClass}', [SchoolClassController::class, 'update'])->name('classes.update');
+        Route::delete('/rombel/{schoolClass}', [SchoolClassController::class, 'destroy'])->name('classes.destroy');
+        Route::post('/rombel/{schoolClass}/murid', [SchoolClassController::class, 'storeStudent'])->name('classes.students.store');
+        Route::put('/rombel/{schoolClass}/murid/{student}', [SchoolClassController::class, 'updateStudent'])->name('classes.students.update');
+        Route::delete('/rombel/{schoolClass}/murid/{student}', [SchoolClassController::class, 'destroyStudent'])->name('classes.students.destroy');
+        Route::post('/rombel/{schoolClass}/murid/sort-az', [SchoolClassController::class, 'sortStudentsAlphabetically'])->name('classes.students.sort');
+        Route::get('/rombel/{schoolClass}/murid/template', [SchoolClassController::class, 'downloadStudentTemplate'])->name('classes.students.template');
+        Route::post('/rombel/{schoolClass}/murid/import', [SchoolClassController::class, 'importStudents'])->name('classes.students.import');
 
         // Master Mata Pelajaran & KKM / KKTP
         Route::get('/kktp', [KktpSubjectController::class, 'index'])->name('kktp.index');

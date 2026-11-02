@@ -1067,7 +1067,109 @@ class ExcelExportImportService
                 $gender = str_starts_with($rawGender, 'P') ? 'P' : 'L';
 
                 ClassStudent::query()->create([
+                    'school_class_id' => $teachingClass->school_class_id,
                     'teaching_class_id' => $teachingClass->id,
+                    'order_number' => $orderNo,
+                    'nis_nisn' => $nisNisn,
+                    'full_name' => $fullName,
+                    'nickname' => $nickname,
+                    'gender' => $gender,
+                    'is_active' => true,
+                ]);
+                $imported++;
+            }
+        });
+
+        return $imported;
+    }
+
+    /**
+     * Unduh Template Excel Daftar Murid untuk Master Rombel (Admin).
+     */
+    public function downloadStudentTemplateForSchoolClass(SchoolClass $schoolClass): StreamedResponse
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Template Murid ' . $schoolClass->name);
+
+        $headers = ['No', 'NIS / NISN', 'Nama Lengkap', 'Nama Panggilan', 'Jenis Kelamin (L/P)'];
+        foreach ($headers as $i => $h) {
+            $sheet->setCellValue($this->cell($i + 1, 1), $h);
+        }
+        $this->styleTableHeader($sheet, 'A1:E1');
+
+        $sheet->getColumnDimension('A')->setWidth(6);
+        $sheet->getColumnDimension('B')->setWidth(18);
+        $sheet->getColumnDimension('C')->setWidth(32);
+        $sheet->getColumnDimension('D')->setWidth(18);
+        $sheet->getColumnDimension('E')->setWidth(20);
+
+        $students = $schoolClass->activeStudents()->get();
+        if ($students->isNotEmpty()) {
+            foreach ($students as $idx => $st) {
+                $r = $idx + 2;
+                $sheet->setCellValue("A{$r}", $idx + 1);
+                $sheet->setCellValue("B{$r}", $st->nis_nisn);
+                $sheet->setCellValue("C{$r}", $st->full_name);
+                $sheet->setCellValue("D{$r}", $st->nickname);
+                $sheet->setCellValue("E{$r}", $st->gender);
+            }
+        } else {
+            $sheet->setCellValue('A2', 1);
+            $sheet->setCellValue('B2', '009812001');
+            $sheet->setCellValue('C2', 'Ahmad Fauzan Pratama');
+            $sheet->setCellValue('D2', 'Fauzan');
+            $sheet->setCellValue('E2', 'L');
+
+            $sheet->setCellValue('A3', 2);
+            $sheet->setCellValue('B3', '009812002');
+            $sheet->setCellValue('C3', 'Siti Aisyah Putri');
+            $sheet->setCellValue('D3', 'Aisyah');
+            $sheet->setCellValue('E3', 'P');
+        }
+
+        $safeClass = preg_replace('/[^A-Za-z0-9\-_]/', '_', $schoolClass->name);
+
+        return $this->streamSpreadsheet($spreadsheet, "Template_Murid_Rombel_{$safeClass}.xlsx");
+    }
+
+    /**
+     * Import Daftar Murid dari file Excel (.xlsx / .xls / .csv) untuk Master Rombel (Admin).
+     */
+    public function importStudentsForSchoolClass(SchoolClass $schoolClass, string $filePath, bool $replaceExisting = false): int
+    {
+        $spreadsheet = IOFactory::load($filePath);
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+
+        $imported = 0;
+
+        DB::transaction(function () use ($schoolClass, $rows, $replaceExisting, &$imported) {
+            if ($replaceExisting) {
+                $schoolClass->students()->delete();
+            }
+
+            $nextOrder = (int) ($schoolClass->students()->max('order_number') ?? 0);
+            $firstTcId = $schoolClass->teachingClasses()->value('id');
+
+            foreach ($rows as $idx => $row) {
+                if ($idx === 0) {
+                    continue; // Header baris 1
+                }
+
+                $fullName = trim((string) ($row[2] ?? ''));
+                if ($fullName === '' || strtolower($fullName) === 'nama lengkap') {
+                    continue;
+                }
+
+                $orderNo = is_numeric($row[0] ?? null) ? (int) $row[0] : (++$nextOrder);
+                $nisNisn = trim((string) ($row[1] ?? '')) ?: null;
+                $nickname = trim((string) ($row[3] ?? '')) ?: null;
+                $rawGender = strtoupper(trim((string) ($row[4] ?? 'L')));
+                $gender = str_starts_with($rawGender, 'P') ? 'P' : 'L';
+
+                ClassStudent::query()->create([
+                    'school_class_id' => $schoolClass->id,
+                    'teaching_class_id' => $firstTcId,
                     'order_number' => $orderNo,
                     'nis_nisn' => $nisNisn,
                     'full_name' => $fullName,
