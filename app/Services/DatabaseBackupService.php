@@ -19,7 +19,16 @@ class DatabaseBackupService
     {
         $dir = storage_path('app/backups');
         if (! File::isDirectory($dir)) {
-            File::makeDirectory($dir, 0755, true, true);
+            File::makeDirectory($dir, 0777, true, true);
+        }
+
+        if (! is_writable($dir)) {
+            @chmod($dir, 0777);
+            @chmod(dirname($dir), 0777);
+        }
+
+        if (! is_writable($dir)) {
+            throw new RuntimeException("Direktori backup tidak memiliki izin tulis ({$dir}). Silakan jalankan di terminal Mini PC: docker compose exec app chmod -R 777 /var/www/html/storage/app/backups");
         }
 
         return $dir;

@@ -69,8 +69,10 @@ COPY --from=frontend /app/public/build /var/www/html/public/build
 
 # Discover Laravel packages & ensure storage permissions
 RUN php artisan package:discover --ansi \
-    && mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
-    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+    && mkdir -p storage/app/public storage/app/backups storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
+    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache \
+    && chmod -R 777 /var/www/html/storage/app/backups
 
 # Configure Nginx, PHP-FPM, Supervisor & Entrypoint
 RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-available/default

@@ -13,6 +13,10 @@ mkdir -p \
     storage/logs \
     bootstrap/cache
 
+chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+chmod -R 777 storage/app/backups 2>/dev/null || true
+
 if [ ! -f .env ]; then
     echo "==> File .env belum ada, menyalin dari .env.docker.example..."
     cp .env.docker.example .env
@@ -95,9 +99,9 @@ php artisan config:cache --ansi
 php artisan route:cache --ansi
 php artisan view:cache --ansi
 
-chown -R www-data:www-data /var/www/html/storage/framework /var/www/html/bootstrap/cache
-chown -R www-data:www-data /var/www/html/storage/app/public /var/www/html/storage/logs 2>/dev/null || true
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
 chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
+chmod -R 777 /var/www/html/storage/app/backups 2>/dev/null || true
 
 echo "==> Sistem Administrasi Guru siap melayani request!"
 exec "$@"
