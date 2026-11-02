@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
-@section('title', 'Daftar Nilai — ' . $teachingClass->class_name)
-@section('page_title', 'Menu 3: Daftar Nilai & Rumus NA — Kelas ' . $teachingClass->class_name)
+@section('title', 'Nilai — ' . $teachingClass->class_name)
+@section('page_title', 'Menu 3: Nilai — Kelas ' . $teachingClass->class_name)
 @section('page_subtitle', 'Kolom PH & NT dinamis, Nilai Kehadiran manual atau otomatis bertoleransi S/I, rumus kontrak belajar fleksibel, & indikator KKTP Admin.')
 
 @section('content')

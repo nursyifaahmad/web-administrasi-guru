@@ -87,7 +87,7 @@
         <a href="{{ route('grades.index', $teachingClass) }}"
            class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition {{ request()->routeIs('grades.*') ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200' }}">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-            <span>3. Daftar Nilai & Rumus NA</span>
+            <span>3. Nilai</span>
         </a>
         <a href="{{ route('classes.settings', $teachingClass) }}"
            class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition {{ (request()->routeIs('classes.students*') || request()->routeIs('classes.settings*')) ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200' }}">
