@@ -131,7 +131,14 @@
             </tr>
             <tr>
                 @for($d = 1; $d <= $matrix['days_in_month']; $d++)
-                    <th style="width: 14px;">{{ $d }}</th>
+                    @php
+                        $meta = $matrix['days_meta'][$d] ?? [];
+                        $isHol = $meta['is_holiday'] ?? false;
+                    @endphp
+                    <th style="width: 14px; padding: 1px 0; {{ $isHol ? 'background-color: #fee2e2; color: #dc2626;' : '' }}">
+                        <div style="font-size: 5pt; line-height: 1;">{{ $meta['day_name'] ?? '' }}</div>
+                        <div style="font-size: 6.5pt; font-weight: bold;">{{ $d }}</div>
+                    </th>
                 @endfor
                 <th>S</th>
                 <th>I</th>
@@ -148,7 +155,14 @@
                     @endif
                     <td class="text-center">{{ $row['student']->gender }}</td>
                     @for($d = 1; $d <= $matrix['days_in_month']; $d++)
-                        <td class="text-center">{{ $row['days'][$d] ?? '' }}</td>
+                        @php
+                            $st = $row['days'][$d] ?? '';
+                            $meta = $matrix['days_meta'][$d] ?? [];
+                            $isHol = $meta['is_holiday'] ?? false;
+                        @endphp
+                        <td class="text-center" style="{{ ($isHol && $st === '') ? 'background-color: #fef2f2; color: #cbd5e1;' : '' }}">
+                            {{ $st ?: ($isHol ? '-' : '') }}
+                        </td>
                     @endfor
                     <td class="text-center font-bold">{{ $row['present'] }}</td>
                     <td class="text-center">{{ $row['sakit'] }}</td>
@@ -159,6 +173,16 @@
                 <tr><td colspan="{{ (($options['show_nickname'] ?? true) ? 8 : 7) + $matrix['days_in_month'] }}" class="text-center">Belum ada peserta didik.</td></tr>
             @endforelse
         </tbody>
+    </table>
+
+    @if(!empty($matrix['events_in_month']) && $matrix['events_in_month']->isNotEmpty())
+        <div style="font-size: 7pt; color: #1e293b; margin-top: 3px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 3px 6px;">
+            <strong>Catatan Hari Libur &amp; Agenda Bulan Ini:</strong>
+            @foreach($matrix['events_in_month'] as $ev)
+                <span>&bull; Tgl {{ $ev->event_date->format('d') }}{{ $ev->event_end_date && $ev->event_end_date->ne($ev->event_date) ? ('–' . $ev->event_end_date->format('d')) : '' }}: <strong>{{ $ev->title }}</strong> ({{ $ev->type_label }}{{ $ev->is_holiday ? ', Libur KBM' : '' }})</span>&nbsp;&nbsp;
+            @endforeach
+        </div>
+    @endif
     </table>
     @include('exports.pdf.partials.signatures')
 

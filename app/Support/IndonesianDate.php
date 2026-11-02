@@ -32,6 +32,23 @@ class IndonesianDate
         6 => 'Sabtu',
     ];
 
+    public const DAYS_SHORT = [
+        0 => 'Min',
+        1 => 'Sen',
+        2 => 'Sel',
+        3 => 'Rab',
+        4 => 'Kam',
+        5 => 'Jum',
+        6 => 'Sab',
+    ];
+
+    public static function shortDayName(CarbonInterface|string $date): string
+    {
+        $c = $date instanceof CarbonInterface ? $date : Carbon::parse($date);
+
+        return self::DAYS_SHORT[$c->dayOfWeek] ?? '';
+    }
+
     public static function monthName(int $month): string
     {
         return self::MONTHS[$month] ?? 'Januari';

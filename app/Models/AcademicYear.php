@@ -29,6 +29,11 @@ class AcademicYear extends Model
         return $this->hasMany(TeachingClass::class);
     }
 
+    public function schoolEvents(): HasMany
+    {
+        return $this->hasMany(SchoolEvent::class)->orderBy('event_date');
+    }
+
     public function getFullLabelAttribute(): string
     {
         return "TA {$this->year_name} - Semester {$this->semester}";

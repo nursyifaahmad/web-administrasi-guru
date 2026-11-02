@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\DailyJournal;
+use App\Models\SchoolEvent;
 use App\Models\TeachingClass;
+use App\Support\IndonesianDate;
 use Carbon\Carbon;
 
 class AttendanceJournalSyncService
@@ -114,6 +116,33 @@ class AttendanceJournalSyncService
 
         $students = $teachingClass->activeStudents()->get();
 
+        $eventsInMonth = SchoolEvent::query()
+            ->where('academic_year_id', $teachingClass->academic_year_id)
+            ->inMonth($year, $month)
+            ->orderBy('event_date')
+            ->get();
+
+        $daysMeta = [];
+        for ($d = 1; $d <= $daysInMonth; $d++) {
+            $cDate = Carbon::createFromDate($year, $month, $d);
+            $dayOfWeek = (int) $cDate->dayOfWeek;
+            $isSunday = ($dayOfWeek === 0);
+
+            $matchedEvent = $eventsInMonth->first(fn ($ev) => $ev->coversDate($cDate));
+            $isHoliday = $isSunday || ($matchedEvent && $matchedEvent->is_holiday);
+
+            $daysMeta[$d] = [
+                'day' => $d,
+                'day_name' => IndonesianDate::DAYS_SHORT[$dayOfWeek] ?? '',
+                'day_of_week' => $dayOfWeek,
+                'is_sunday' => $isSunday,
+                'is_holiday' => $isHoliday,
+                'is_event' => ! empty($matchedEvent),
+                'event_title' => $matchedEvent?->title,
+                'event_type' => $matchedEvent?->type,
+            ];
+        }
+
         $attendances = Attendance::query()
             ->where('teaching_class_id', $teachingClass->id)
             ->whereBetween('attendance_date', [$startDate, $endDate])
@@ -203,6 +232,8 @@ class AttendanceJournalSyncService
             'year' => $year,
             'month' => $month,
             'days_in_month' => $daysInMonth,
+            'days_meta' => $daysMeta,
+            'events_in_month' => $eventsInMonth,
             'rows' => $rows,
             'daily_totals' => $dailyTotals,
             'grand_totals' => $grandTotals,

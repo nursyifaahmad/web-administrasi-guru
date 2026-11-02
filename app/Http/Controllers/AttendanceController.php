@@ -55,6 +55,7 @@ class AttendanceController extends Controller
             'recap' => $recap,
             'alpineStudents' => $alpineStudents,
             'alpineCells' => $alpineCells,
+            'alpineDaysMeta' => $matrix['days_meta'],
         ]);
     }
 

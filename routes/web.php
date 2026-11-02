@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\KktpSubjectController;
 use App\Http\Controllers\Admin\SchoolAndYearController;
 use App\Http\Controllers\Admin\SchoolClassController;
+use App\Http\Controllers\Admin\SchoolEventController;
 use App\Http\Controllers\Admin\TeacherAccountController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AuthController;
@@ -75,6 +76,11 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/pengaturan/tahun-ajaran', [SchoolAndYearController::class, 'storeAcademicYear'])->name('settings.years.store');
         Route::patch('/pengaturan/tahun-ajaran/{academicYear}/activate', [SchoolAndYearController::class, 'activateAcademicYear'])->name('settings.years.activate');
         Route::delete('/pengaturan/tahun-ajaran/{academicYear}', [SchoolAndYearController::class, 'destroyAcademicYear'])->name('settings.years.destroy');
+
+        // Kalender Akademik, Hari Libur & Agenda Sekolah
+        Route::get('/kalender', [SchoolEventController::class, 'index'])->name('events.index');
+        Route::post('/kalender', [SchoolEventController::class, 'store'])->name('events.store');
+        Route::delete('/kalender/{schoolEvent}', [SchoolEventController::class, 'destroy'])->name('events.destroy');
     });
 
     // Ruang Kerja Kelas Administrasi (Guru 1..15+ Kelas & Kontrol Admin)

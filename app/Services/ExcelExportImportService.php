@@ -563,8 +563,15 @@ class ExcelExportImportService
         $sheet->setCellValue($this->cell($dayStartCol, $h1), 'Bulan ' . $monthLabel . ' (Tanggal)');
         for ($d = 1; $d <= $daysInMonth; $d++) {
             $c = $fixedLeftCols + $d;
+            $meta = $matrix['days_meta'][$d] ?? [];
+            $isHol = $meta['is_holiday'] ?? false;
             $sheet->setCellValue($this->cell($c, $h2), $d);
-            $sheet->getColumnDimension($this->col($c))->setWidth(3.6);
+            $sheet->getColumnDimension($this->col($c))->setWidth(3.8);
+            if ($isHol) {
+                $sheet->getStyle($this->cell($c, $h2))->getFont()->getColor()->setRGB('DC2626');
+                $sheet->getStyle($this->cell($c, $h2))->getFill()
+                    ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FEE2E2');
+            }
         }
 
         $hadirCol = $dayEndCol + 1;
@@ -611,14 +618,20 @@ class ExcelExportImportService
 
             for ($d = 1; $d <= $daysInMonth; $d++) {
                 $st = $r['days'][$d] ?? '';
+                $meta = $matrix['days_meta'][$d] ?? [];
+                $isHol = $meta['is_holiday'] ?? false;
                 $c = $fixedLeftCols + $d;
-                $sheet->setCellValue($this->cell($c, $curr), $st);
+                $sheet->setCellValue($this->cell($c, $curr), $st ?: ($isHol ? '-' : ''));
                 if ($st === 'd') {
                     $sheet->getStyle($this->cell($c, $curr))->getFill()
                         ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E0F2FE');
                 } elseif ($st === 'a') {
                     $sheet->getStyle($this->cell($c, $curr))->getFill()
                         ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FEE2E2');
+                } elseif ($isHol && $st === '') {
+                    $sheet->getStyle($this->cell($c, $curr))->getFill()
+                        ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FEF2F2');
+                    $sheet->getStyle($this->cell($c, $curr))->getFont()->getColor()->setRGB('94A3B8');
                 }
             }
 
@@ -642,11 +655,27 @@ class ExcelExportImportService
         $sheet->mergeCells($this->range(1, $curr + 1, $totalCols, $curr + 1));
         $sheet->setCellValue(
             $this->cell(1, $curr + 1),
-            'Keterangan: "." = Hadir | "d" = Dispen (dihitung Hadir) | "s" = Sakit | "i" = Izin | "a" = Alfa'
+            'Keterangan: "." = Hadir | "d" = Dispen (dihitung Hadir) | "s" = Sakit | "i" = Izin | "a" = Alfa | Kolom Merah = Hari Minggu / Libur'
         );
         $sheet->getStyle($this->cell(1, $curr + 1))->getFont()->setItalic(true)->setSize(8.5);
 
-        $this->renderSignatureBlock($sheet, $school, $teachingClass, $curr + 1, $totalCols, $options);
+        $nextRow = $curr + 1;
+        if (! empty($matrix['events_in_month']) && $matrix['events_in_month']->isNotEmpty()) {
+            $nextRow++;
+            $eventNotes = [];
+            foreach ($matrix['events_in_month'] as $ev) {
+                $dLabel = 'Tgl ' . $ev->event_date->format('d');
+                if ($ev->event_end_date && $ev->event_end_date->ne($ev->event_date)) {
+                    $dLabel .= '–' . $ev->event_end_date->format('d');
+                }
+                $eventNotes[] = "{$dLabel}: {$ev->title} (" . ($ev->is_holiday ? 'Libur KBM' : 'Kegiatan') . ')';
+            }
+            $sheet->mergeCells($this->range(1, $nextRow, $totalCols, $nextRow));
+            $sheet->setCellValue($this->cell(1, $nextRow), 'Agenda Sekolah: ' . implode(' | ', $eventNotes));
+            $sheet->getStyle($this->cell(1, $nextRow))->getFont()->setItalic(true)->setSize(8.5)->getColor()->setRGB('475569');
+        }
+
+        $this->renderSignatureBlock($sheet, $school, $teachingClass, $nextRow + 1, $totalCols, $options);
     }
 
     public function populateAttendanceRecapSheet(Worksheet $sheet, TeachingClass $teachingClass, SchoolSetting $school, array $options): void

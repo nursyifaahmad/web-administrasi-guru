@@ -22,7 +22,8 @@
         monthLabel: @js($monthName . ' ' . $year),
         isMonthly: @js($tab === 'monthly'),
         saveUrl: @js(route('attendances.bulk-save', $teachingClass)),
-        csrf: @js(csrf_token())
+        csrf: @js(csrf_token()),
+        daysMeta: @js($alpineDaysMeta),
      })">
 
     {{-- Sub-tab Bulanan vs Rekap Semester + Pemilih Bulan & Ekspor --}}
@@ -157,15 +158,37 @@
                         </tr>
                         <tr class="bg-slate-50 text-slate-700 text-[10px] border-b border-slate-300">
                             <template x-for="d in daysArray" :key="'hdr-'+d">
-                                <th class="p-0 border-r border-slate-200 w-7 min-w-[28px] text-center">
+                                <th class="p-0 border-r border-slate-200 w-7 min-w-[28px] text-center"
+                                    :class="isHoliday(d) ? 'bg-rose-50/80 text-rose-700' : ''">
                                     <div class="relative" x-data="{ menu: false }">
                                         <button type="button" @click="menu = !menu"
-                                                class="w-full py-1.5 font-extrabold hover:bg-emerald-100 hover:text-emerald-900 transition"
-                                                :class="columnHasData(d) ? 'bg-emerald-50 text-emerald-800' : 'text-slate-600'"
-                                                x-text="d"></button>
+                                                class="w-full py-0.5 flex flex-col items-center justify-center transition leading-tight select-none"
+                                                :class="{
+                                                    'hover:bg-rose-100': isHoliday(d),
+                                                    'hover:bg-emerald-100 hover:text-emerald-900': !isHoliday(d),
+                                                    'bg-emerald-50 text-emerald-800': columnHasData(d) && !isHoliday(d),
+                                                    'bg-rose-100/70 font-bold': columnHasData(d) && isHoliday(d)
+                                                }"
+                                                :title="getEventTitle(d) ? (getDayName(d) + ' ' + d + ': ' + getEventTitle(d)) : (getDayName(d) + ' ' + d)">
+                                            <span class="text-[8.5px] uppercase tracking-tighter"
+                                                  :class="isSunday(d) ? 'text-rose-600 font-extrabold' : (isHoliday(d) ? 'text-rose-600 font-bold' : 'text-slate-400 font-medium')"
+                                                  x-text="getDayName(d)"></span>
+                                            <span class="text-[11px] font-extrabold"
+                                                  :class="isSunday(d) ? 'text-rose-600' : (isHoliday(d) ? 'text-rose-700' : 'text-slate-700')"
+                                                  x-text="d"></span>
+                                        </button>
                                         <div x-show="menu" x-cloak @click.away="menu = false"
-                                             class="absolute left-0 top-full mt-1 z-30 w-40 rounded-xl bg-white border border-slate-200 shadow-lg p-1.5 text-left font-normal normal-case space-y-1">
-                                            <div class="px-2 py-1 text-[10px] font-bold text-slate-500 border-b border-slate-100">Tanggal <span x-text="d"></span> {{ $monthName }}</div>
+                                             class="absolute left-0 top-full mt-1 z-30 w-44 rounded-xl bg-white border border-slate-200 shadow-lg p-1.5 text-left font-normal normal-case space-y-1">
+                                            <div class="px-2 py-1 text-[10px] font-bold border-b border-slate-100"
+                                                 :class="isHoliday(d) ? 'text-rose-700 bg-rose-50 rounded-t-lg' : 'text-slate-500'">
+                                                <span x-text="getDayName(d) + ', ' + d + ' ' + monthLabel"></span>
+                                                <template x-if="getEventTitle(d)">
+                                                    <div class="text-[10px] font-extrabold text-rose-600 mt-0.5" x-text="'📌 ' + getEventTitle(d)"></div>
+                                                </template>
+                                                <template x-if="isSunday(d) && !getEventTitle(d)">
+                                                    <div class="text-[10px] font-bold text-rose-600 mt-0.5">Hari Minggu (Libur)</div>
+                                                </template>
+                                            </div>
                                             <button type="button" @click="fillDay(d, '.'); menu = false"
                                                     class="w-full px-2 py-1.5 rounded-lg text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 text-left">
                                                 Set Semua Hadir (.)
@@ -201,7 +224,8 @@
                                 <td class="px-2 py-1.5 text-center font-semibold text-slate-700 border-r border-slate-200" x-text="st.gender"></td>
 
                                 <template x-for="d in daysArray" :key="st.id + '-' + d">
-                                    <td class="p-0 border-r border-slate-200 text-center">
+                                    <td class="p-0 border-r border-slate-200 text-center"
+                                        :class="isHoliday(d) && !getCell(st.id, d) ? 'bg-rose-50/40' : ''">
                                         <input type="text"
                                                maxlength="1"
                                                autocapitalize="none"
@@ -209,14 +233,15 @@
                                                autocorrect="off"
                                                spellcheck="false"
                                                :readonly="tapStamp !== null"
+                                               :placeholder="isHoliday(d) ? '-' : ''"
                                                :id="`att-${rIdx}-${d}`"
                                                :value="getCell(st.id, d)"
                                                @focus="if(tapStamp === null) $el.select()"
                                                @click="onCellTap(st.id, d)"
                                                @keydown="handleKey($event, st.id, rIdx, d)"
                                                @input="handleInput($event, st.id, d)"
-                                               class="w-7 h-8 sm:h-7 text-center text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:z-20 relative cursor-pointer"
-                                               :class="cellColorClass(getCell(st.id, d))">
+                                               class="w-7 h-8 sm:h-7 text-center text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:z-20 relative cursor-pointer placeholder:text-rose-300 placeholder:font-normal"
+                                               :class="cellColorClass(getCell(st.id, d), isHoliday(d))">
                                     </td>
                                 </template>
 
@@ -234,6 +259,36 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        {{-- Legenda & Catatan Tanggal Merah / Libur / Kegiatan Sekolah --}}
+        <div class="rounded-2xl bg-white border border-slate-200 p-3.5 shadow-2xs text-xs space-y-2.5">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-slate-700">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px]">
+                    <span class="font-bold text-slate-800">Petunjuk Kode:</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-emerald-100 text-emerald-800 font-extrabold text-[10px] flex items-center justify-center">.</span> Hadir</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-sky-100 text-sky-800 font-bold text-[10px] flex items-center justify-center">d</span> Dispen (Dihitung Hadir)</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-amber-100 text-amber-800 font-bold text-[10px] flex items-center justify-center">s</span> Sakit</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-purple-100 text-purple-800 font-bold text-[10px] flex items-center justify-center">i</span> Izin</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-rose-100 text-rose-800 font-bold text-[10px] flex items-center justify-center">a</span> Alfa</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="w-5 h-4 rounded bg-rose-50 border border-rose-200 text-rose-700 font-extrabold text-[9px] flex items-center justify-center">Min</span> Kolom Libur / Minggu</span>
+                </div>
+            </div>
+
+            @if(isset($matrix['events_in_month']) && $matrix['events_in_month']->isNotEmpty())
+                <div class="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span class="font-bold text-slate-800">📌 Agenda Sekolah Bulan Ini:</span>
+                    @foreach($matrix['events_in_month'] as $ev)
+                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border text-[11px] font-semibold {{ $ev->is_holiday ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-amber-50 border-amber-200 text-amber-800' }}">
+                            <strong>Tgl {{ $ev->event_date->format('d') }}{{ $ev->event_end_date && $ev->event_end_date->ne($ev->event_date) ? ('–' . $ev->event_end_date->format('d')) : '' }}:</strong>
+                            <span>{{ $ev->title }}</span>
+                            @if($ev->is_holiday)
+                                <span class="text-[9px] font-bold uppercase tracking-wider text-rose-600">(Libur KBM)</span>
+                            @endif
+                        </span>
+                    @endforeach
+                </div>
+            @endif
         </div>
 
         {{-- Kartu & Tombol Simpan Panjang di Bawah Tabel Absensi --}}
@@ -450,6 +505,7 @@ function attendanceSpreadsheet(cfg) {
         savedSnapshot: {},
         daysInMonth: cfg.daysInMonth,
         daysArray: Array.from({ length: cfg.daysInMonth }, (_, i) => i + 1),
+        daysMeta: cfg.daysMeta || {},
         monthLabel: cfg.monthLabel || '',
         isMonthly: Boolean(cfg.isMonthly),
         tapStamp: null,
@@ -545,7 +601,26 @@ function attendanceSpreadsheet(cfg) {
             this.savedMessage = '';
             this.recalculateDirty();
         },
+        isSunday(day) {
+            return Boolean(this.daysMeta[day]?.is_sunday);
+        },
+        isHoliday(day) {
+            return Boolean(this.daysMeta[day]?.is_holiday);
+        },
+        getDayName(day) {
+            return this.daysMeta[day]?.day_name || '';
+        },
+        getEventTitle(day) {
+            return this.daysMeta[day]?.event_title || '';
+        },
         fillDay(day, statusVal) {
+            if (statusVal === '.' && this.isHoliday(day)) {
+                const title = this.getEventTitle(day);
+                const reason = this.isSunday(day) ? 'Hari Minggu (Libur)' : ('Agenda Libur: ' + title);
+                if (!window.confirm(`Tanggal ${day} ${this.monthLabel} adalah ${reason}.\n\nApakah Anda yakin ingin mengisi Hadir (.) untuk seluruh siswa pada tanggal ini?`)) {
+                    return;
+                }
+            }
             this.students.forEach((st) => {
                 const key = String(st.id);
                 if (!this.cells[key]) this.cells[key] = {};
@@ -558,14 +633,14 @@ function attendanceSpreadsheet(cfg) {
         columnHasData(day) {
             return this.students.some((st) => this.getCell(st.id, day) !== '');
         },
-        cellColorClass(val) {
+        cellColorClass(val, isHoliday = false) {
             switch (val) {
                 case '.': return 'bg-emerald-50/70 text-emerald-900';
                 case 'd': return 'bg-sky-100 text-sky-900';
                 case 's': return 'bg-amber-100 text-amber-900';
                 case 'i': return 'bg-purple-100 text-purple-900';
                 case 'a': return 'bg-rose-100 text-rose-900';
-                default: return 'bg-white text-slate-700';
+                default: return isHoliday ? 'bg-rose-50/40 text-slate-700' : 'bg-white text-slate-700';
             }
         },
         rowStats(studentId) {
