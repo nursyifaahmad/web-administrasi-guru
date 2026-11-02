@@ -187,7 +187,10 @@ class TeachingClassController extends Controller
         $validated = $request->validate([
             'subject_id' => ['required', 'exists:subjects,id'],
             'schedule_info' => ['nullable', 'string', 'max:180'],
+            'teaching_days' => ['nullable', 'array'],
+            'teaching_days.*' => ['integer', 'min:0', 'max:6'],
             'show_nickname_column' => ['nullable', 'boolean'],
+            'only_teaching_days' => ['nullable', 'boolean'],
             'grade_level' => ['nullable', 'string', 'max:20'],
             'class_name' => ['nullable', 'string', 'max:60'],
             'homeroom_teacher_name' => ['nullable', 'string', 'max:180'],
@@ -207,6 +210,11 @@ class TeachingClassController extends Controller
         }
 
         $showNickname = $request->boolean('show_nickname_column');
+        $onlyTeachingDays = $request->boolean('only_teaching_days');
+        $teachingDays = $request->has('teaching_days')
+            ? array_values(array_unique(array_map('intval', (array) $request->input('teaching_days', []))))
+            : null;
+
         $sc = $teachingClass->schoolClass;
         $gradeLevel = ! empty($validated['grade_level']) ? strtoupper(trim($validated['grade_level'])) : ($sc ? $sc->grade_level : $teachingClass->grade_level);
         $className = ! empty($validated['class_name']) ? trim($validated['class_name']) : ($sc ? $sc->name : $teachingClass->class_name);
@@ -217,7 +225,9 @@ class TeachingClassController extends Controller
             $teachingClass->update([
                 'subject_id' => (int) $validated['subject_id'],
                 'schedule_info' => $validated['schedule_info'] ?? null,
+                'teaching_days' => $teachingDays,
                 'show_nickname_column' => $showNickname,
+                'only_teaching_days' => $onlyTeachingDays,
                 'grade_level' => $sc->grade_level,
                 'class_name' => $sc->name,
                 'homeroom_teacher_name' => $sc->homeroom_teacher_name,
@@ -230,7 +240,9 @@ class TeachingClassController extends Controller
                 'grade_level' => $gradeLevel,
                 'class_name' => $className,
                 'schedule_info' => $validated['schedule_info'] ?? null,
+                'teaching_days' => $teachingDays,
                 'show_nickname_column' => $showNickname,
+                'only_teaching_days' => $onlyTeachingDays,
                 'homeroom_teacher_name' => $wkName,
                 'homeroom_teacher_nip' => $wkNip,
                 'homeroom_teacher_signature' => $wkSig,

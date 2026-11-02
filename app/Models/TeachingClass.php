@@ -17,10 +17,12 @@ class TeachingClass extends Model
         'grade_level',
         'class_name',
         'schedule_info',
+        'teaching_days',
         'homeroom_teacher_name',
         'homeroom_teacher_nip',
         'homeroom_teacher_signature',
         'show_nickname_column',
+        'only_teaching_days',
         'is_archived',
     ];
 
@@ -60,9 +62,34 @@ class TeachingClass extends Model
     protected function casts(): array
     {
         return [
+            'teaching_days' => 'array',
             'show_nickname_column' => 'boolean',
+            'only_teaching_days' => 'boolean',
             'is_archived' => 'boolean',
         ];
+    }
+
+    public function isTeachingDay(int $dayOfWeek): bool
+    {
+        if (empty($this->teaching_days) || ! is_array($this->teaching_days)) {
+            return true;
+        }
+
+        return in_array($dayOfWeek, array_map('intval', $this->teaching_days), true);
+    }
+
+    public function getTeachingDaysLabelAttribute(): string
+    {
+        if (empty($this->teaching_days) || ! is_array($this->teaching_days)) {
+            return 'Semua Hari (Senin–Sabtu)';
+        }
+
+        $names = [];
+        foreach ($this->teaching_days as $d) {
+            $names[] = \App\Support\IndonesianDate::DAYS[(int) $d] ?? '';
+        }
+
+        return implode(' & ', array_filter($names));
     }
 
     public function schoolClass(): BelongsTo

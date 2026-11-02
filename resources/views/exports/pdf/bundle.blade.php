@@ -112,34 +112,63 @@
     <div class="page-break"></div>
 
     {{-- BAGIAN 3: ABSENSI BULANAN --}}
+    @php
+        $onlyTeachingDays = !empty($options['only_teaching_days']) && !empty($matrix['has_teaching_days']);
+        $activeDays = [];
+        for ($d = 1; $d <= $matrix['days_in_month']; $d++) {
+            $meta = $matrix['days_meta'][$d] ?? [];
+            $hasData = false;
+            if ($onlyTeachingDays) {
+                foreach ($matrix['rows'] as $row) {
+                    if (!empty($row['days'][$d])) {
+                        $hasData = true;
+                        break;
+                    }
+                }
+            }
+            if (!$onlyTeachingDays || !empty($meta['is_teaching_day']) || $hasData) {
+                $activeDays[] = $d;
+            }
+        }
+        if (empty($activeDays)) {
+            $activeDays = range(1, $matrix['days_in_month']);
+        }
+        $totalActiveDays = count($activeDays);
+        $showNickname = $options['show_nickname'] ?? true;
+        $dayWidth = $totalActiveDays <= 14 ? '25px' : ($totalActiveDays <= 20 ? '20px' : '14px');
+        $nameWidth = $totalActiveDays <= 14 
+            ? ($showNickname ? '195px' : '270px') 
+            : ($showNickname ? '145px' : '205px');
+    @endphp
+
     @include('exports.pdf.partials.header', [
         'documentTitle' => 'BAGIAN II: DAFTAR HADIR (ABSENSI) PESERTA DIDIK',
-        'documentSubtitle' => 'Bulan: ' . $monthLabel,
+        'documentSubtitle' => 'Bulan: ' . $monthLabel . ($onlyTeachingDays ? ' (Pertemuan KBM Efektif)' : ''),
     ])
     <table class="data-table compact-matrix">
         <thead>
             <tr>
                 <th rowspan="2" style="width: 22px;">No</th>
-                <th rowspan="2" style="width: {{ ($options['show_nickname'] ?? true) ? '145px' : '205px' }};">Nama Lengkap</th>
-                @if($options['show_nickname'] ?? true)
-                    <th rowspan="2" style="width: 60px;">Panggilan</th>
+                <th rowspan="2" style="width: {{ $nameWidth }};">Nama Lengkap</th>
+                @if($showNickname)
+                    <th rowspan="2" style="width: {{ $totalActiveDays <= 14 ? '75px' : '60px' }};">Panggilan</th>
                 @endif
                 <th rowspan="2" style="width: 24px;">L/P</th>
-                <th colspan="{{ $matrix['days_in_month'] }}">Tanggal ({{ $monthLabel }})</th>
+                <th colspan="{{ $totalActiveDays }}">Tanggal ({{ $monthLabel }})</th>
                 <th rowspan="2" style="width: 34px;">Hadir</th>
                 <th colspan="3">Ketidakhadiran</th>
             </tr>
             <tr>
-                @for($d = 1; $d <= $matrix['days_in_month']; $d++)
+                @foreach($activeDays as $d)
                     @php
                         $meta = $matrix['days_meta'][$d] ?? [];
                         $isHol = $meta['is_holiday'] ?? false;
                     @endphp
-                    <th style="width: 14px; padding: 1px 0; {{ $isHol ? 'background-color: #fee2e2; color: #dc2626;' : '' }}">
-                        <div style="font-size: 5pt; line-height: 1;">{{ $meta['day_name'] ?? '' }}</div>
-                        <div style="font-size: 6.5pt; font-weight: bold;">{{ $d }}</div>
+                    <th style="width: {{ $dayWidth }}; padding: 1px 0; {{ $isHol ? 'background-color: #fee2e2; color: #dc2626;' : '' }}">
+                        <div style="font-size: {{ $totalActiveDays <= 14 ? '5.5pt' : '5pt' }}; line-height: 1;">{{ $meta['day_name'] ?? '' }}</div>
+                        <div style="font-size: {{ $totalActiveDays <= 14 ? '7pt' : '6.5pt' }}; font-weight: bold;">{{ $d }}</div>
                     </th>
-                @endfor
+                @endforeach
                 <th>S</th>
                 <th>I</th>
                 <th>A</th>
@@ -150,11 +179,11 @@
                 <tr>
                     <td class="text-center">{{ $row['no'] }}</td>
                     <td>{{ $row['student']->full_name }}</td>
-                    @if($options['show_nickname'] ?? true)
+                    @if($showNickname)
                         <td class="text-center">{{ $row['student']->nickname ?: '-' }}</td>
                     @endif
                     <td class="text-center">{{ $row['student']->gender }}</td>
-                    @for($d = 1; $d <= $matrix['days_in_month']; $d++)
+                    @foreach($activeDays as $d)
                         @php
                             $st = $row['days'][$d] ?? '';
                             $meta = $matrix['days_meta'][$d] ?? [];
@@ -163,14 +192,14 @@
                         <td class="text-center" style="{{ ($isHol && $st === '') ? 'background-color: #fef2f2; color: #cbd5e1;' : '' }}">
                             {{ $st ?: ($isHol ? '-' : '') }}
                         </td>
-                    @endfor
+                    @endforeach
                     <td class="text-center font-bold">{{ $row['present'] }}</td>
                     <td class="text-center">{{ $row['sakit'] }}</td>
                     <td class="text-center">{{ $row['izin'] }}</td>
                     <td class="text-center">{{ $row['alfa'] }}</td>
                 </tr>
             @empty
-                <tr><td colspan="{{ (($options['show_nickname'] ?? true) ? 8 : 7) + $matrix['days_in_month'] }}" class="text-center">Belum ada peserta didik.</td></tr>
+                <tr><td colspan="{{ ($showNickname ? 8 : 7) + $totalActiveDays }}" class="text-center">Belum ada peserta didik.</td></tr>
             @endforelse
         </tbody>
     </table>

@@ -531,16 +531,42 @@ class ExcelExportImportService
 
         $matrix = $this->attendanceService->buildMonthlyMatrix($teachingClass, $year, $month);
         $daysInMonth = $matrix['days_in_month'];
+        $onlyTeachingDaysOption = array_key_exists('only_teaching_days', $options)
+            ? (bool) $options['only_teaching_days']
+            : (bool) ($teachingClass->only_teaching_days ?? true);
+        $filterDays = $onlyTeachingDaysOption && ! empty($matrix['has_teaching_days']);
+
+        $activeDays = [];
+        for ($d = 1; $d <= $daysInMonth; $d++) {
+            $meta = $matrix['days_meta'][$d] ?? [];
+            $hasData = false;
+            if ($filterDays) {
+                foreach ($matrix['rows'] as $row) {
+                    if (! empty($row['days'][$d])) {
+                        $hasData = true;
+                        break;
+                    }
+                }
+            }
+            if (! $filterDays || ! empty($meta['is_teaching_day']) || $hasData) {
+                $activeDays[] = $d;
+            }
+        }
+        if (empty($activeDays)) {
+            $activeDays = range(1, $daysInMonth);
+        }
+        $totalRenderedDays = count($activeDays);
+
         $showNickname = $options['show_nickname'] ?? ($teachingClass->show_nickname_column ?? true);
         $fixedLeftCols = $showNickname ? 4 : 3;
-        $totalCols = $fixedLeftCols + $daysInMonth + 4; // No, Nama Lengkap, [Panggilan], L/P, 1..N, Jml Hadir, S, I, A
+        $totalCols = $fixedLeftCols + $totalRenderedDays + 4; // No, Nama Lengkap, [Panggilan], L/P, Active Days, Jml Hadir, S, I, A
 
         $row = $this->renderOfficialHeader(
             $sheet,
             $school,
             $teachingClass,
             'DAFTAR HADIR (ABSENSI) PESERTA DIDIK',
-            'Bulan: ' . $monthLabel,
+            'Bulan: ' . $monthLabel . ($filterDays ? ' (Pertemuan KBM Efektif)' : ''),
             $totalCols,
             $options
         );
@@ -558,15 +584,15 @@ class ExcelExportImportService
         }
 
         $dayStartCol = $fixedLeftCols + 1;
-        $dayEndCol = $fixedLeftCols + $daysInMonth;
+        $dayEndCol = $fixedLeftCols + $totalRenderedDays;
         $sheet->mergeCells($this->range($dayStartCol, $h1, $dayEndCol, $h1));
-        $sheet->setCellValue($this->cell($dayStartCol, $h1), 'Bulan ' . $monthLabel . ' (Tanggal)');
-        for ($d = 1; $d <= $daysInMonth; $d++) {
-            $c = $fixedLeftCols + $d;
+        $sheet->setCellValue($this->cell($dayStartCol, $h1), 'Bulan ' . $monthLabel . ($filterDays ? ' (Tanggal Pertemuan)' : ' (Tanggal)'));
+        foreach ($activeDays as $idx => $d) {
+            $c = $fixedLeftCols + 1 + $idx;
             $meta = $matrix['days_meta'][$d] ?? [];
             $isHol = $meta['is_holiday'] ?? false;
             $sheet->setCellValue($this->cell($c, $h2), $d);
-            $sheet->getColumnDimension($this->col($c))->setWidth(3.8);
+            $sheet->getColumnDimension($this->col($c))->setWidth($totalRenderedDays <= 14 ? 5.2 : 3.8);
             if ($isHol) {
                 $sheet->getStyle($this->cell($c, $h2))->getFont()->getColor()->setRGB('DC2626');
                 $sheet->getStyle($this->cell($c, $h2))->getFill()
@@ -591,7 +617,7 @@ class ExcelExportImportService
         $this->styleTableHeader($sheet, $this->range(1, $h1, $totalCols, $h2));
 
         $sheet->getColumnDimension('A')->setWidth(5);
-        $sheet->getColumnDimension('B')->setWidth($showNickname ? 28 : 34);
+        $sheet->getColumnDimension('B')->setWidth($showNickname ? ($totalRenderedDays <= 14 ? 32 : 28) : ($totalRenderedDays <= 14 ? 38 : 34));
         if ($showNickname) {
             $sheet->getColumnDimension('C')->setWidth(14);
             $sheet->getColumnDimension('D')->setWidth(10);
@@ -616,11 +642,11 @@ class ExcelExportImportService
                 $sheet->setCellValue($this->cell(3, $curr), $r['student']->gender);
             }
 
-            for ($d = 1; $d <= $daysInMonth; $d++) {
+            foreach ($activeDays as $idx => $d) {
                 $st = $r['days'][$d] ?? '';
                 $meta = $matrix['days_meta'][$d] ?? [];
                 $isHol = $meta['is_holiday'] ?? false;
-                $c = $fixedLeftCols + $d;
+                $c = $fixedLeftCols + 1 + $idx;
                 $sheet->setCellValue($this->cell($c, $curr), $st ?: ($isHol ? '-' : ''));
                 if ($st === 'd') {
                     $sheet->getStyle($this->cell($c, $curr))->getFill()
@@ -653,10 +679,9 @@ class ExcelExportImportService
         }
 
         $sheet->mergeCells($this->range(1, $curr + 1, $totalCols, $curr + 1));
-        $sheet->setCellValue(
-            $this->cell(1, $curr + 1),
-            'Keterangan: "." = Hadir | "d" = Dispen (dihitung Hadir) | "s" = Sakit | "i" = Izin | "a" = Alfa | Kolom Merah = Hari Minggu / Libur'
-        );
+        $noteMsg = 'Keterangan: "." = Hadir | "d" = Dispen (dihitung Hadir) | "s" = Sakit | "i" = Izin | "a" = Alfa'
+            . ($filterDays ? ' | Mode Tanggal KBM: Kolom di luar jadwal mengajar otomatis disembunyikan.' : ' | Kolom Merah = Hari Minggu / Libur');
+        $sheet->setCellValue($this->cell(1, $curr + 1), $noteMsg);
         $sheet->getStyle($this->cell(1, $curr + 1))->getFont()->setItalic(true)->setSize(8.5);
 
         $nextRow = $curr + 1;

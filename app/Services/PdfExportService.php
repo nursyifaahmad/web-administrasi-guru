@@ -34,6 +34,7 @@ class PdfExportService
             : 'landscape';
 
         $showNicknameDefault = $teachingClass ? (bool) $teachingClass->show_nickname_column : true;
+        $onlyTeachingDaysDefault = $teachingClass ? (bool) ($teachingClass->only_teaching_days ?? true) : true;
 
         return [
             'city' => $city,
@@ -46,6 +47,7 @@ class PdfExportService
             'show_digital_signature' => $this->boolOption($input, 'show_digital_signature', true),
             'show_journal_paraf' => $this->boolOption($input, 'show_journal_paraf', true),
             'show_nickname' => $this->boolOption($input, 'show_nickname', $showNicknameDefault),
+            'only_teaching_days' => $this->boolOption($input, 'only_teaching_days', $onlyTeachingDaysDefault),
         ];
     }
 

@@ -21,6 +21,8 @@
         month: @js($month),
         monthLabel: @js($monthName . ' ' . $year),
         isMonthly: @js($tab === 'monthly'),
+        hasTeachingDays: @js(! empty($teachingClass->teaching_days)),
+        filterTeachingDays: @js((bool) ($teachingClass->only_teaching_days ?? true)),
         saveUrl: @js(route('attendances.bulk-save', $teachingClass)),
         csrf: @js(csrf_token()),
         daysMeta: @js($alpineDaysMeta),
@@ -49,6 +51,22 @@
                     <input type="number" name="year" value="{{ $year }}" data-prev-value="{{ $year }}" min="2020" max="2099" onchange="window.handleGuardedSelectNavigate(this, 'submit')"
                            class="w-24 rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-800">
                 </form>
+
+                <template x-if="hasTeachingDays">
+                    <button type="button" @click="filterTeachingDays = !filterTeachingDays"
+                            class="px-3 py-2 rounded-xl font-bold transition flex items-center gap-1.5 border shadow-2xs cursor-pointer select-none"
+                            :class="filterTeachingDays ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'"
+                            :title="filterTeachingDays ? 'Sedang menyembunyikan hari di luar jadwal. Klik untuk menampilkan semua tanggal (1–' + daysInMonth + ')' : 'Sedang menampilkan semua hari. Klik untuk hanya menampilkan tanggal mengajar'">
+                        <span x-text="filterTeachingDays ? '🗓️ Tanggal KBM Saja (' + displayedDays.length + ' Hari)' : '🗓️ Semua Tanggal (' + daysInMonth + ' Hari)'"></span>
+                    </button>
+                </template>
+                <template x-if="!hasTeachingDays">
+                    <a href="{{ route('classes.students', $teachingClass) }}"
+                       class="px-3 py-2 rounded-xl text-slate-500 bg-slate-50 border border-slate-200 hover:bg-slate-100 font-semibold text-xs flex items-center gap-1"
+                       title="Atur hari mengajar di Pengaturan Kelas agar tanggal non-KBM otomatis disembunyikan">
+                        <span>🗓️ Atur Hari Mengajar</span>
+                    </a>
+                </template>
             @endif
         </div>
 
@@ -146,7 +164,7 @@
                                 <th rowspan="2" class="px-2.5 py-2.5 text-center border-r border-slate-300 min-w-[90px]">Nama Panggilan</th>
                             @endif
                             <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 w-10">L/P</th>
-                            <th :colspan="daysInMonth" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-slate-200/70 font-extrabold">
+                            <th :colspan="displayedDays.length" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-slate-200/70 font-extrabold">
                                 Bulan {{ $monthName }} {{ $year }} — Klik Angka Tanggal untuk Isi Cepat
                             </th>
                             <th rowspan="2" class="px-2.5 py-2.5 text-center border-r border-slate-300 bg-emerald-50 text-emerald-900 min-w-[60px]" title="Jumlah Hadir = Hadir (.) + Dispen (d)">
@@ -157,7 +175,7 @@
                             </th>
                         </tr>
                         <tr class="bg-slate-50 text-slate-700 text-[10px] border-b border-slate-300">
-                            <template x-for="d in daysArray" :key="'hdr-'+d">
+                            <template x-for="d in displayedDays" :key="'hdr-'+d">
                                 <th class="p-0 border-r border-slate-200 w-7 min-w-[28px] text-center"
                                     :class="isHoliday(d) ? 'bg-rose-50/80 text-rose-700' : ''">
                                     <div class="relative" x-data="{ menu: false }">
@@ -209,7 +227,7 @@
                     <tbody class="divide-y divide-slate-200">
                         <template x-if="students.length === 0">
                             <tr>
-                                <td :colspan="({{ $teachingClass->show_nickname_column ? 8 : 7 }}) + daysInMonth" class="px-5 py-10 text-center text-slate-500">
+                                <td :colspan="({{ $teachingClass->show_nickname_column ? 8 : 7 }}) + displayedDays.length" class="px-5 py-10 text-center text-slate-500">
                                     Belum ada peserta didik di kelas ini. Tambahkan murid pada tab <strong>Peserta Didik & Wali Kelas</strong> terlebih dahulu.
                                 </td>
                             </tr>
@@ -223,7 +241,7 @@
                                 @endif
                                 <td class="px-2 py-1.5 text-center font-semibold text-slate-700 border-r border-slate-200" x-text="st.gender"></td>
 
-                                <template x-for="d in daysArray" :key="st.id + '-' + d">
+                                <template x-for="d in displayedDays" :key="st.id + '-' + d">
                                     <td class="p-0 border-r border-slate-200 text-center"
                                         :class="isHoliday(d) && !getCell(st.id, d) ? 'bg-rose-50/40' : ''">
                                         <input type="text"
@@ -508,6 +526,8 @@ function attendanceSpreadsheet(cfg) {
         daysMeta: cfg.daysMeta || {},
         monthLabel: cfg.monthLabel || '',
         isMonthly: Boolean(cfg.isMonthly),
+        hasTeachingDays: Boolean(cfg.hasTeachingDays),
+        filterTeachingDays: Boolean(cfg.filterTeachingDays),
         tapStamp: null,
         isDirty: false,
         dirtyCount: 0,
@@ -518,6 +538,14 @@ function attendanceSpreadsheet(cfg) {
         importModal: false,
         exportModal: false,
         nicknameModal: false,
+
+        get displayedDays() {
+            if (!this.filterTeachingDays || !this.hasTeachingDays) {
+                return this.daysArray;
+            }
+            const filtered = this.daysArray.filter(d => this.isTeachingDay(d) || this.columnHasData(d));
+            return filtered.length > 0 ? filtered : this.daysArray;
+        },
 
         init() {
             this.savedSnapshot = this.cloneCells(this.cells);
@@ -607,6 +635,9 @@ function attendanceSpreadsheet(cfg) {
         isHoliday(day) {
             return Boolean(this.daysMeta[day]?.is_holiday);
         },
+        isTeachingDay(day) {
+            return Boolean(this.daysMeta[day]?.is_teaching_day);
+        },
         getDayName(day) {
             return this.daysMeta[day]?.day_name || '';
         },
@@ -679,10 +710,16 @@ function attendanceSpreadsheet(cfg) {
                 this.focusCell(rIdx - 1, day);
             } else if (k === 'ArrowRight') {
                 e.preventDefault();
-                this.focusCell(rIdx, day + 1);
+                const currIdx = this.displayedDays.indexOf(day);
+                if (currIdx !== -1 && currIdx < this.displayedDays.length - 1) {
+                    this.focusCell(rIdx, this.displayedDays[currIdx + 1]);
+                }
             } else if (k === 'ArrowLeft') {
                 e.preventDefault();
-                this.focusCell(rIdx, day - 1);
+                const currIdx = this.displayedDays.indexOf(day);
+                if (currIdx > 0) {
+                    this.focusCell(rIdx, this.displayedDays[currIdx - 1]);
+                }
             } else if (k === 'Backspace' || k === 'Delete') {
                 e.preventDefault();
                 this.setCell(studentId, day, '');

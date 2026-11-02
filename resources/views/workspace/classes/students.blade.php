@@ -36,14 +36,52 @@
                 </div>
 
                 <div>
-                    <label class="block font-bold text-slate-700 mb-1.5">Jadwal Mengajar</label>
+                    <label class="block font-bold text-slate-700 mb-1.5">Hari Mengajar Mingguan (KBM Kelas Ini)</label>
+                    <p class="text-[11px] text-slate-500 mb-2">Pilih hari apa saja Anda mengajar di kelas ini. Tanggal di luar hari yang dipilih otomatis disembunyikan pada menu Absensi.</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                        @php
+                            $currentDays = $teachingClass->teaching_days ?? [];
+                            $daysMap = [
+                                1 => 'Senin',
+                                2 => 'Selasa',
+                                3 => 'Rabu',
+                                4 => 'Kamis',
+                                5 => 'Jumat',
+                                6 => 'Sabtu',
+                            ];
+                        @endphp
+                        @foreach($daysMap as $dayNum => $dayName)
+                            <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer text-xs font-semibold select-none transition has-checked:bg-emerald-50 has-checked:border-emerald-300 has-checked:text-emerald-900">
+                                <input type="checkbox" name="teaching_days[]" value="{{ $dayNum }}"
+                                       @checked(in_array($dayNum, $currentDays, true))
+                                       class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                                <span>{{ $dayName }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">Keterangan Jam Pelajaran / Jadwal Rinci</label>
                     <input type="text" name="schedule_info" value="{{ $teachingClass->schedule_info }}"
-                           placeholder="Contoh: Senin (1-2) & Kamis (3-4)"
+                           placeholder="Contoh: Senin (jam 6-7) & Kamis (jam 2)"
                            class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 font-medium text-slate-800">
                     <p class="text-[11px] text-slate-400 mt-1">Keterangan hari & jam mengajar ini dicetak pada bagian kop/identitas Jurnal, Absensi, dan Nilai.</p>
                 </div>
 
-                <div class="pt-3 border-t border-slate-100">
+                <div class="pt-3 border-t border-slate-100 space-y-3">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" name="only_teaching_days" value="1"
+                               @checked($teachingClass->only_teaching_days ?? true)
+                               class="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                        <div>
+                            <span class="block font-bold text-slate-800 text-xs">Hanya Tampilkan Tanggal Mengajar pada Tabel Absensi (Sembunyikan Hari Non-KBM)</span>
+                            <span class="block text-[11px] text-slate-400 mt-0.5">
+                                Sangat direkomendasikan. Tabel absensi hanya memuat kolom tanggal pertemuan yang ada jam pelajarannya, sehingga kolom nama siswa jauh lebih lebar dan tabel sangat rapi.
+                            </span>
+                        </div>
+                    </label>
+
                     <label class="flex items-start gap-3 cursor-pointer">
                         <input type="checkbox" name="show_nickname_column" value="1"
                                @checked($teachingClass->show_nickname_column)
@@ -51,7 +89,7 @@
                         <div>
                             <span class="block font-bold text-slate-800 text-xs">Tampilkan Kolom Nama Panggilan di Menu Absensi</span>
                             <span class="block text-[11px] text-slate-400 mt-0.5">
-                                Bila dicentang, kolom Nama Panggilan akan tampil di tabel absensi bulanan dan cetakan. Bila tidak dicentang, tabel tanggal 1–31 menjadi lebih lebar dan leluasa.
+                                Bila dicentang, kolom Nama Panggilan akan tampil di tabel absensi bulanan dan cetakan. Bila tidak dicentang, tabel tanggal pertemuan menjadi lebih lebar dan leluasa.
                             </span>
                         </div>
                     </label>

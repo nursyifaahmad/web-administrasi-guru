@@ -130,6 +130,7 @@ class AttendanceJournalSyncService
 
             $matchedEvent = $eventsInMonth->first(fn ($ev) => $ev->coversDate($cDate));
             $isHoliday = $isSunday || ($matchedEvent && $matchedEvent->is_holiday);
+            $isTeachingDay = $teachingClass->isTeachingDay($dayOfWeek);
 
             $daysMeta[$d] = [
                 'day' => $d,
@@ -137,6 +138,7 @@ class AttendanceJournalSyncService
                 'day_of_week' => $dayOfWeek,
                 'is_sunday' => $isSunday,
                 'is_holiday' => $isHoliday,
+                'is_teaching_day' => $isTeachingDay,
                 'is_event' => ! empty($matchedEvent),
                 'event_title' => $matchedEvent?->title,
                 'event_type' => $matchedEvent?->type,
@@ -233,6 +235,8 @@ class AttendanceJournalSyncService
             'month' => $month,
             'days_in_month' => $daysInMonth,
             'days_meta' => $daysMeta,
+            'has_teaching_days' => ! empty($teachingClass->teaching_days),
+            'teaching_days' => $teachingClass->teaching_days ?? [],
             'events_in_month' => $eventsInMonth,
             'rows' => $rows,
             'daily_totals' => $dailyTotals,
