@@ -110,7 +110,7 @@
                         + Tambah Kolom NT ({{ $ntColumns->count() }})
                     </button>
                 </form>
-                <span class="text-[11px] text-slate-500">Klik judul kolom <strong>PH / NT</strong> pada tabel untuk mengubah nama/topik atau menghapus kolom.</span>
+                <span class="text-[11px] text-slate-500">Klik judul kolom <strong>PH / NT</strong> untuk ubah/hapus &bull; Tekan <strong>Enter</strong> / <strong>&darr;</strong> saat isi nilai untuk pindah ke murid berikutnya.</span>
             </div>
 
             <div class="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-600">
@@ -234,9 +234,12 @@
                             {{-- Input Dinamis PH --}}
                             <template x-for="colId in phColIds" :key="'ph-' + row.student_id + '-' + colId">
                                 <td class="p-0 border-r border-slate-200">
-                                    <input type="number" min="0" max="100" step="0.01"
+                                    <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                           :id="`grade-${rIdx}-ph-${colId}`"
                                            x-model="row.dynamic_scores[colId]"
                                            @input="markDirty()"
+                                           @focus="selectInput($event)"
+                                           @keydown="handleGradeKey($event, rIdx, `ph-${colId}`)"
                                            placeholder="0"
                                            class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500"
                                            :class="(row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '') ? 'bg-amber-50/35 text-slate-500' : 'bg-white text-slate-900'">
@@ -258,9 +261,12 @@
                                     </div>
                                 </template>
                                 <template x-if="!isAutoAttendance">
-                                    <input type="number" min="0" max="100" step="0.01"
+                                    <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                           :id="`grade-${rIdx}-att`"
                                            x-model="row.attendance_score"
                                            @input="markDirty()"
+                                           @focus="selectInput($event)"
+                                           @keydown="handleGradeKey($event, rIdx, 'att')"
                                            placeholder="0"
                                            class="no-spinner w-full h-8 px-1.5 text-center text-xs font-bold text-emerald-900 bg-emerald-50/25 focus:outline-none focus:ring-2 focus:ring-emerald-500">
                                 </template>
@@ -269,9 +275,12 @@
                             {{-- Input Dinamis NT --}}
                             <template x-for="colId in ntColIds" :key="'nt-' + row.student_id + '-' + colId">
                                 <td class="p-0 border-r border-slate-200">
-                                    <input type="number" min="0" max="100" step="0.01"
+                                    <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                           :id="`grade-${rIdx}-nt-${colId}`"
                                            x-model="row.dynamic_scores[colId]"
                                            @input="markDirty()"
+                                           @focus="selectInput($event)"
+                                           @keydown="handleGradeKey($event, rIdx, `nt-${colId}`)"
                                            placeholder="0"
                                            class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
                                            :class="(row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '') ? 'bg-amber-50/35 text-slate-500' : 'bg-white text-slate-900'">
@@ -280,16 +289,22 @@
 
                             {{-- Input STS & SAS --}}
                             <td class="p-0 border-r border-slate-200">
-                                <input type="number" min="0" max="100" step="0.01"
+                                <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                       :id="`grade-${rIdx}-sts`"
                                        x-model="row.sts_score"
                                        @input="markDirty()"
+                                       @focus="selectInput($event)"
+                                       @keydown="handleGradeKey($event, rIdx, 'sts')"
                                        placeholder="0"
                                        class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold bg-amber-50/15 focus:outline-none focus:ring-2 focus:ring-amber-500">
                             </td>
                             <td class="p-0 border-r border-slate-200">
-                                <input type="number" min="0" max="100" step="0.01"
+                                <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                       :id="`grade-${rIdx}-sas`"
                                        x-model="row.sas_score"
                                        @input="markDirty()"
+                                       @focus="selectInput($event)"
+                                       @keydown="handleGradeKey($event, rIdx, 'sas')"
                                        placeholder="0"
                                        class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold bg-amber-50/15 focus:outline-none focus:ring-2 focus:ring-amber-500">
                             </td>
@@ -557,6 +572,36 @@ function gradebookSpreadsheet(cfg) {
             this.isDirty = true;
             window.__gradeDirty = true;
             this.savedMessage = '';
+        },
+        selectInput(e) {
+            if (e && e.target && typeof e.target.select === 'function') {
+                try { e.target.select(); } catch (_) {}
+            }
+        },
+        focusGradeCell(rIdx, colKey) {
+            if (rIdx < 0 || rIdx >= this.rows.length) return;
+            const el = document.getElementById(`grade-${rIdx}-${colKey}`);
+            if (el) {
+                el.focus();
+                if (typeof el.select === 'function') {
+                    try { el.select(); } catch (_) {}
+                }
+                if (typeof el.scrollIntoView === 'function') {
+                    el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                }
+            }
+        },
+        handleGradeKey(e, rIdx, colKey) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.focusGradeCell(e.shiftKey ? rIdx - 1 : rIdx + 1, colKey);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                this.focusGradeCell(rIdx + 1, colKey);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                this.focusGradeCell(rIdx - 1, colKey);
+            }
         },
         attendanceTooltip(row) {
             const ref = row.attendance_ref || {};
