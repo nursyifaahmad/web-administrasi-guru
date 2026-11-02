@@ -278,4 +278,80 @@ class AttendanceJournalSyncService
             'rows' => $rows,
         ];
     }
+
+    /**
+     * Hitung Nilai Kehadiran dengan kuota toleransi gabungan Sakit + Izin (S + I).
+     * - Hadir ('.') dan Dispen ('d') dihitung hadir penuh tanpa memotong kuota toleransi.
+     * - Sakit ('s') + Izin ('i') ditoleransi hingga batas $tolerance per semester.
+     * - Alfa ('a') tidak mendapat toleransi (0 toleransi).
+     */
+    public function calculateToleranceScore(
+        int $present,
+        int $sakit,
+        int $izin,
+        int $alfa,
+        int $tolerance
+    ): array {
+        $safeTolerance = max(0, $tolerance);
+        $sickLeaveTotal = max(0, $sakit) + max(0, $izin);
+        $toleratedSickLeave = min($sickLeaveTotal, $safeTolerance);
+        $excessSickLeave = max(0, $sickLeaveTotal - $safeTolerance);
+        $effectivePresent = max(0, $present) + $toleratedSickLeave;
+        $totalMeetings = max(0, $present) + $sickLeaveTotal + max(0, $alfa);
+        $score = $totalMeetings > 0
+            ? round(($effectivePresent / $totalMeetings) * 100, 2)
+            : null;
+
+        return [
+            'present' => $present,
+            'sakit' => $sakit,
+            'izin' => $izin,
+            'alfa' => $alfa,
+            'tolerance' => $safeTolerance,
+            'sick_leave_total' => $sickLeaveTotal,
+            'tolerated_sick_leave' => $toleratedSickLeave,
+            'excess_sick_leave' => $excessSickLeave,
+            'effective_present' => $effectivePresent,
+            'total_meetings' => $totalMeetings,
+            'score' => $score,
+        ];
+    }
+
+    /**
+     * Bangun peta rincian absensi semester beserta skor kehadiran bertoleransi per murid (key: class_student_id).
+     */
+    public function buildToleranceMapForClass(TeachingClass $teachingClass, int $tolerance): array
+    {
+        $recap = $this->buildSemesterRecap($teachingClass);
+        $map = [];
+
+        foreach ($recap['rows'] as $r) {
+            $tol = $this->calculateToleranceScore(
+                $r['present'],
+                $r['sakit'],
+                $r['izin'],
+                $r['alfa'],
+                $tolerance
+            );
+
+            $map[$r['student']->id] = [
+                'dot' => $r['dot'],
+                'dispen' => $r['dispen'],
+                'present' => $r['present'],
+                'sakit' => $r['sakit'],
+                'izin' => $r['izin'],
+                'alfa' => $r['alfa'],
+                'total' => $r['total_meetings'],
+                'percentage' => $r['percentage'],
+                'tolerance' => $tol['tolerance'],
+                'sick_leave_total' => $tol['sick_leave_total'],
+                'tolerated_si' => $tol['tolerated_sick_leave'],
+                'excess_si' => $tol['excess_sick_leave'],
+                'effective_present' => $tol['effective_present'],
+                'auto_score' => $tol['score'],
+            ];
+        }
+
+        return $map;
+    }
 }

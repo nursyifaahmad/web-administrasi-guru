@@ -180,4 +180,168 @@ class DynamicGradebookAndKktpTest extends TestCase
         $classA->unsetRelation('subject');
         $this->assertSame(85, $classA->fresh(['subject.kktps'])->effective_kktp);
     }
+
+    public function test_auto_attendance_score_with_sick_and_leave_tolerance_syncs_from_attendance(): void
+    {
+        SchoolSetting::current();
+
+        $guru = User::query()->create([
+            'name' => 'Guru Bahasa Indonesia',
+            'email' => 'guru.bindo@test.sch.id',
+            'role' => 'guru',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'BIN',
+            'name' => 'Bahasa Indonesia',
+            'default_kktp' => 75,
+        ]);
+
+        $classA = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-A',
+            'homeroom_teacher_name' => 'Wali VII-A',
+        ]);
+        $classA->ensureDefaultsInitialized();
+
+        $classB = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-B',
+            'homeroom_teacher_name' => 'Wali VII-B',
+        ]);
+        $classB->ensureDefaultsInitialized();
+
+        // Murid 1: 12 Hadir ('.') + 1 Dispen ('d') + 2 Sakit ('s') + 1 Izin ('i') + 0 Alfa => S+I = 3 (<=3) => Skor 100
+        $studentWithinTol = ClassStudent::query()->create([
+            'teaching_class_id' => $classA->id,
+            'order_number' => 1,
+            'full_name' => 'Alya Putri',
+            'gender' => 'P',
+        ]);
+
+        // Murid 2: 12 Hadir ('.') + 2 Sakit ('s') + 2 Izin ('i') + 0 Alfa => S+I = 4 (>3) => Efektif 15/16 = 93.75
+        $studentExceedTol = ClassStudent::query()->create([
+            'teaching_class_id' => $classA->id,
+            'order_number' => 2,
+            'full_name' => 'Bagas Saputra',
+            'gender' => 'L',
+        ]);
+
+        // Murid 3: 13 Hadir ('.') + 1 Sakit ('s') + 1 Izin ('i') + 1 Alfa ('a') => S+I = 2 (<=3), tapi Alfa 1 => Efektif 15/16 = 93.75
+        $studentWithAlfa = ClassStudent::query()->create([
+            'teaching_class_id' => $classA->id,
+            'order_number' => 3,
+            'full_name' => 'Citra Lestari',
+            'gender' => 'P',
+        ]);
+
+        // Aktifkan mode kehadiran otomatis dengan toleransi S+I = 3x dan bobot Kehadiran 20%, PH 20%, NT 20%, STS 20%, SAS 20%
+        $this->actingAs($guru)->put(route('grades.weights.update', $classA), [
+            'weight_ph' => 20,
+            'weight_attendance' => 20,
+            'weight_nt' => 20,
+            'weight_sts' => 20,
+            'weight_sas' => 20,
+            'rounding_precision' => 2,
+            'attendance_mode' => 'auto',
+            'sick_leave_tolerance' => 3,
+            'agreement_note' => 'Toleransi Sakit/Izin maks 3 kali',
+            'copy_to_class_ids' => [$classB->id],
+        ])->assertSessionHasNoErrors();
+
+        $weightB = $classB->gradeWeight()->firstOrFail();
+        $this->assertSame('auto', $weightB->attendance_mode);
+        $this->assertSame(3, $weightB->sick_leave_tolerance);
+
+        // Isi nilai komponen lain 100 semua untuk memudahkan verifikasi pengaruh Nilai Kehadiran terhadap NA
+        $phCols = $classA->phColumns()->get()->values();
+        $ntCols = $classA->ntColumns()->get()->values();
+        $fullDynamic = [
+            (string) $phCols[0]->id => 100,
+            (string) $phCols[1]->id => 100,
+            (string) $ntCols[0]->id => 100,
+            (string) $ntCols[1]->id => 100,
+        ];
+
+        $this->actingAs($guru)->postJson(route('grades.bulk-save', $classA), [
+            'rows' => [
+                ['student_id' => $studentWithinTol->id, 'dynamic_scores' => $fullDynamic, 'attendance_score' => 50, 'sts_score' => 100, 'sas_score' => 100],
+                ['student_id' => $studentExceedTol->id, 'dynamic_scores' => $fullDynamic, 'attendance_score' => 50, 'sts_score' => 100, 'sas_score' => 100],
+                ['student_id' => $studentWithAlfa->id, 'dynamic_scores' => $fullDynamic, 'attendance_score' => 50, 'sts_score' => 100, 'sas_score' => 100],
+            ],
+        ])->assertOk();
+
+        // Simpan 16 pertemuan di Menu Absensi -> harus otomatis menyinkronkan attendance_score & final_score!
+        $cellsWithin = [];
+        for ($d = 1; $d <= 12; $d++) {
+            $cellsWithin[$d] = '.';
+        }
+        $cellsWithin[13] = 'd'; // Dispen tetap hadir penuh, tidak makan kuota S+I
+        $cellsWithin[14] = 's';
+        $cellsWithin[15] = 's';
+        $cellsWithin[16] = 'i';
+
+        $cellsExceed = [];
+        for ($d = 1; $d <= 12; $d++) {
+            $cellsExceed[$d] = '.';
+        }
+        $cellsExceed[13] = 's';
+        $cellsExceed[14] = 's';
+        $cellsExceed[15] = 'i';
+        $cellsExceed[16] = 'i'; // Total S+I = 4x (> 3x)
+
+        $cellsAlfa = [];
+        for ($d = 1; $d <= 13; $d++) {
+            $cellsAlfa[$d] = '.';
+        }
+        $cellsAlfa[14] = 's';
+        $cellsAlfa[15] = 'i';
+        $cellsAlfa[16] = 'a'; // 1 Alfa tidak dapat toleransi
+
+        $this->actingAs($guru)->postJson(route('attendances.bulk-save', $classA), [
+            'year' => 2026,
+            'month' => 11,
+            'cells' => [
+                $studentWithinTol->id => $cellsWithin,
+                $studentExceedTol->id => $cellsExceed,
+                $studentWithAlfa->id => $cellsAlfa,
+            ],
+        ])->assertOk();
+
+        $grade1 = StudentGrade::query()->where('class_student_id', $studentWithinTol->id)->firstOrFail();
+        $grade2 = StudentGrade::query()->where('class_student_id', $studentExceedTol->id)->firstOrFail();
+        $grade3 = StudentGrade::query()->where('class_student_id', $studentWithAlfa->id)->firstOrFail();
+
+        // Murid 1: Kehadiran = 100.00 -> NA = (100*0.8) + (100*0.2) = 100.00
+        $this->assertEquals(100.0, $grade1->attendance_score);
+        $this->assertEquals(100.0, $grade1->final_score);
+
+        // Murid 2: Kehadiran = 15/16 * 100 = 93.75 -> NA = 80 + (93.75 * 0.2) = 80 + 18.75 = 98.75
+        $this->assertEquals(93.75, $grade2->attendance_score);
+        $this->assertEquals(98.75, $grade2->final_score);
+
+        // Murid 3: Kehadiran = 15/16 * 100 = 93.75 -> NA = 98.75
+        $this->assertEquals(93.75, $grade3->attendance_score);
+        $this->assertEquals(98.75, $grade3->final_score);
+
+        // Pastikan halaman Daftar Nilai merender badge mode otomatis & toleransi
+        $this->actingAs($guru)
+            ->get(route('grades.index', $classA))
+            ->assertOk()
+            ->assertSee('Toleransi S+I: 3x');
+    }
 }

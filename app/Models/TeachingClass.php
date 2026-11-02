@@ -108,6 +108,8 @@ class TeachingClass extends Model
                 'weight_sts' => 20,
                 'weight_sas' => 25,
                 'rounding_precision' => 2,
+                'attendance_mode' => GradeWeight::MODE_MANUAL,
+                'sick_leave_tolerance' => 3,
                 'agreement_note' => 'Kontrak Belajar Standar',
             ]);
         }

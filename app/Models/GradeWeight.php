@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GradeWeight extends Model
 {
+    public const MODE_MANUAL = 'manual';
+    public const MODE_AUTO = 'auto';
+
     protected $fillable = [
         'teaching_class_id',
         'weight_ph',
@@ -15,6 +18,8 @@ class GradeWeight extends Model
         'weight_sts',
         'weight_sas',
         'rounding_precision',
+        'attendance_mode',
+        'sick_leave_tolerance',
         'agreement_note',
     ];
 
@@ -27,7 +32,13 @@ class GradeWeight extends Model
             'weight_sts' => 'float',
             'weight_sas' => 'float',
             'rounding_precision' => 'integer',
+            'sick_leave_tolerance' => 'integer',
         ];
+    }
+
+    public function isAutoAttendance(): bool
+    {
+        return ($this->attendance_mode ?? self::MODE_MANUAL) === self::MODE_AUTO;
     }
 
     public function teachingClass(): BelongsTo

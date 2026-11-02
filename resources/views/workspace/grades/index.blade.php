@@ -2,7 +2,7 @@
 
 @section('title', 'Daftar Nilai — ' . $teachingClass->class_name)
 @section('page_title', 'Menu 3: Daftar Nilai & Rumus NA — Kelas ' . $teachingClass->class_name)
-@section('page_subtitle', 'Kolom PH & NT dinamis, Nilai Kehadiran manual, rumus persentase kontrak belajar fleksibel, & indikator KKTP Admin.')
+@section('page_subtitle', 'Kolom PH & NT dinamis, Nilai Kehadiran manual atau otomatis bertoleransi S/I, rumus kontrak belajar fleksibel, & indikator KKTP Admin.')
 
 @section('content')
 @include('partials.class-workspace-tabs')
@@ -12,6 +12,8 @@
     $phColumns = $gradebook['ph_columns'];
     $ntColumns = $gradebook['nt_columns'];
     $kktp = $gradebook['kktp'];
+    $isAutoAtt = $w->isAutoAttendance();
+    $tolValue = (int) ($w->sick_leave_tolerance ?? 3);
 @endphp
 
 <div class="space-y-4"
@@ -27,6 +29,8 @@
             'sas' => (float) $w->weight_sas,
             'precision' => (int) $w->rounding_precision,
         ]),
+        isAutoAttendance: @js($isAutoAtt),
+        sickLeaveTolerance: @js($tolValue),
         kktp: @js($kktp),
         saveUrl: @js(route('grades.bulk-save', $teachingClass)),
         csrf: @js(csrf_token())
@@ -47,6 +51,19 @@
                     <strong>STS {{ rtrim(rtrim(number_format($w->weight_sts, 2), '0'), '.') }}%</strong> +
                     <strong>SAS {{ rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.') }}%</strong> = 100%
                 </div>
+                @if($isAutoAtt)
+                    <button type="button" @click="weightsModal = true"
+                            class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold hover:bg-emerald-100 transition"
+                            title="Klik untuk mengubah mode atau batas toleransi Sakit/Izin">
+                        Kehadiran: Otomatis Absensi (Toleransi S+I: {{ $tolValue }}x)
+                    </button>
+                @else
+                    <button type="button" @click="weightsModal = true"
+                            class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-bold hover:bg-amber-100 transition"
+                            title="Klik untuk mengaktifkan Nilai Kehadiran otomatis dengan toleransi Sakit/Izin">
+                        Kehadiran: Input Manual
+                    </button>
+                @endif
             </div>
 
             <div class="flex flex-wrap items-center gap-2 text-xs">
@@ -122,9 +139,14 @@
                             </th>
                         @endif
 
-                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 w-24">
+                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 w-28">
                             Nilai Kehadiran<br>
                             <span class="text-[10px] font-normal text-emerald-700">({{ rtrim(rtrim(number_format($w->weight_attendance, 2), '0'), '.') }}%)</span>
+                            @if($isAutoAtt)
+                                <div class="mt-0.5 text-[9px] font-extrabold text-emerald-800 bg-emerald-100/90 rounded px-1 py-0.25 inline-block normal-case">
+                                    Auto &bull; Tol. {{ $tolValue }}x
+                                </div>
+                            @endif
                         </th>
 
                         @if($ntColumns->count() > 0)
@@ -221,14 +243,27 @@
                                 </td>
                             </template>
 
-                            {{-- Input Manual Nilai Kehadiran + Info Rekap Absen --}}
-                            <td class="p-0 border-r border-slate-200 relative group">
-                                <input type="number" min="0" max="100" step="0.01"
-                                       x-model="row.attendance_score"
-                                       @input="markDirty()"
-                                       :title="row.attendance_ref.total > 0 ? `Referensi Menu Absensi: Hadir ${row.attendance_ref.present}/${row.attendance_ref.total} (${row.attendance_ref.percentage}%)` : 'Input manual Nilai Kehadiran (0-100)'"
-                                       placeholder="0"
-                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-bold text-emerald-900 bg-emerald-50/25 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            {{-- Nilai Kehadiran (Mode Otomatis Bertoleransi atau Input Manual) --}}
+                            <td class="p-0 border-r border-slate-200 relative group" :title="attendanceTooltip(row)">
+                                <template x-if="isAutoAttendance">
+                                    <div class="w-full min-h-8 px-1.5 py-1 flex flex-col items-center justify-center bg-emerald-50/60 select-none">
+                                        <span class="text-xs font-extrabold"
+                                              :class="row.attendance_score === null ? 'text-slate-400' : (Number(row.attendance_score) >= 100 ? 'text-emerald-800' : 'text-amber-900')"
+                                              x-text="row.attendance_score !== null && row.attendance_score !== '' ? row.attendance_score : '-'"></span>
+                                        <template x-if="row.attendance_ref && row.attendance_ref.total > 0">
+                                            <span class="text-[9px] leading-tight font-semibold"
+                                                  :class="(row.attendance_ref.excess_si > 0 || row.attendance_ref.alfa > 0) ? 'text-rose-700' : 'text-emerald-700'"
+                                                  x-text="`H:${row.attendance_ref.present} S/I:${row.attendance_ref.sick_leave_total} A:${row.attendance_ref.alfa}`"></span>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="!isAutoAttendance">
+                                    <input type="number" min="0" max="100" step="0.01"
+                                           x-model="row.attendance_score"
+                                           @input="markDirty()"
+                                           placeholder="0"
+                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-bold text-emerald-900 bg-emerald-50/25 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                </template>
                             </td>
 
                             {{-- Input Dinamis NT --}}
@@ -321,13 +356,15 @@
     {{-- Modal Pengaturan Rumus Persentase Nilai Akhir (Kontrak Belajar) --}}
     <div x-show="weightsModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
         <div @click.away="weightsModal = false"
-             class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden max-h-[92vh] flex flex-col"
+             class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden max-h-[92vh] flex flex-col"
              x-data="{
                 wPh: {{ (float) $w->weight_ph }},
                 wAtt: {{ (float) $w->weight_attendance }},
                 wNt: {{ (float) $w->weight_nt }},
                 wSts: {{ (float) $w->weight_sts }},
                 wSas: {{ (float) $w->weight_sas }},
+                attMode: @js($w->attendance_mode ?? 'manual'),
+                tolSI: {{ $tolValue }},
                 totalW() {
                     return Math.round((Number(this.wPh||0) + Number(this.wAtt||0) + Number(this.wNt||0) + Number(this.wSts||0) + Number(this.wSas||0)) * 100) / 100;
                 }
@@ -383,6 +420,48 @@
                      :class="Math.abs(totalW() - 100) < 0.01 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'">
                     <span>Total Persentase Rumus Saat Ini:</span>
                     <span class="text-sm" x-text="totalW() + '% (Wajib 100%)'"></span>
+                </div>
+
+                {{-- Pengaturan Mode & Toleransi Sakit/Izin Nilai Kehadiran --}}
+                <div class="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <div class="font-extrabold text-emerald-950">Sumber &amp; Toleransi Nilai Kehadiran</div>
+                            <div class="text-[11px] text-emerald-800">Atur apakah Nilai Kehadiran dihitung otomatis dari Menu Absensi beserta toleransi Sakit/Izin.</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <label class="flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition"
+                               :class="attMode === 'auto' ? 'bg-white border-emerald-500 ring-1 ring-emerald-500' : 'bg-white/70 border-slate-200 hover:bg-white'">
+                            <input type="radio" name="attendance_mode" value="auto" x-model="attMode" class="mt-0.5 text-emerald-600 focus:ring-emerald-500">
+                            <div>
+                                <div class="font-extrabold text-slate-900">Otomatis dari Absensi</div>
+                                <div class="text-[10px] text-slate-600">Sinkron otomatis dari Menu Absensi dengan kuota toleransi Sakit + Izin.</div>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition"
+                               :class="attMode === 'manual' ? 'bg-white border-emerald-500 ring-1 ring-emerald-500' : 'bg-white/70 border-slate-200 hover:bg-white'">
+                            <input type="radio" name="attendance_mode" value="manual" x-model="attMode" class="mt-0.5 text-emerald-600 focus:ring-emerald-500">
+                            <div>
+                                <div class="font-extrabold text-slate-900">Input Angka Manual</div>
+                                <div class="text-[10px] text-slate-600">Guru mengetik bebas angka Nilai Kehadiran (0 - 100) di tabel nilai.</div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
+                        <div class="flex-1">
+                            <label class="block font-bold text-slate-800">Batas Toleransi Sakit + Izin (kali / semester)</label>
+                            <p class="text-[10px] text-slate-600">
+                                Hadir (<code>.</code>) &amp; Dispen (<code>d</code>) dihitung 100%. Selama total <strong>S + I &le; <span x-text="tolSI || 0"></span>x</strong> dan <strong>Alfa = 0</strong>, Nilai Kehadiran tetap <strong>100</strong>. Kelebihan S/I &amp; Alfa mengurangi nilai secara proporsional.
+                            </p>
+                        </div>
+                        <div class="w-full sm:w-28 shrink-0">
+                            <input type="number" name="sick_leave_tolerance" min="0" max="100" step="1" x-model="tolSI" required
+                                   class="w-full rounded-xl border border-emerald-300 bg-white px-3 py-2 text-center font-extrabold text-emerald-950 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                    </div>
                 </div>
 
                 <div>
@@ -463,6 +542,8 @@ function gradebookSpreadsheet(cfg) {
         phColIds: cfg.phColIds,
         ntColIds: cfg.ntColIds,
         weights: cfg.weights,
+        isAutoAttendance: Boolean(cfg.isAutoAttendance),
+        sickLeaveTolerance: Number(cfg.sickLeaveTolerance || 0),
         kktp: cfg.kktp,
         isDirty: false,
         saving: false,
@@ -476,6 +557,17 @@ function gradebookSpreadsheet(cfg) {
             this.isDirty = true;
             window.__gradeDirty = true;
             this.savedMessage = '';
+        },
+        attendanceTooltip(row) {
+            const ref = row.attendance_ref || {};
+            if (!ref.total || ref.total <= 0) {
+                return this.isAutoAttendance
+                    ? 'Mode Otomatis aktif: Belum ada pertemuan tercatat pada Menu Absensi kelas ini.'
+                    : 'Input manual Nilai Kehadiran (0-100). Belum ada rekap dari Menu Absensi.';
+            }
+            const excessInfo = ref.excess_si > 0 ? `, Melebihi: ${ref.excess_si}x` : '';
+            const prefix = this.isAutoAttendance ? 'Hitung Otomatis Absensi' : 'Referensi Menu Absensi';
+            return `${prefix}: Hadir ${ref.present}/${ref.total} (Dispen: ${ref.dispen || 0}) | Sakit: ${ref.sakit || 0}, Izin: ${ref.izin || 0} (Toleransi S+I: ${ref.tolerance}x, Ditoleransi: ${ref.tolerated_si}x${excessInfo}) | Alfa: ${ref.alfa || 0} => Nilai Bertoleransi: ${ref.auto_score}`;
         },
         numVal(v) {
             if (v === null || v === '' || v === undefined) return 0;
@@ -543,6 +635,14 @@ function gradebookSpreadsheet(cfg) {
                 if (!res.ok) {
                     alert(data.message || 'Gagal menyimpan nilai. Pastikan seluruh angka berada pada rentang 0 - 100.');
                 } else {
+                    if (this.isAutoAttendance && data.attendance_scores) {
+                        this.rows.forEach((r) => {
+                            const key = String(r.student_id);
+                            if (Object.prototype.hasOwnProperty.call(data.attendance_scores, key)) {
+                                r.attendance_score = data.attendance_scores[key];
+                            }
+                        });
+                    }
                     this.isDirty = false;
                     window.__gradeDirty = false;
                     this.savedMessage = `Nilai tersimpan (${data.saved_at})`;

@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\TeachingClass;
 use App\Services\AttendanceJournalSyncService;
 use App\Services\ExcelExportImportService;
+use App\Services\GradeCalculationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -60,7 +61,8 @@ class AttendanceController extends Controller
     public function bulkSave(
         Request $request,
         TeachingClass $teachingClass,
-        AttendanceJournalSyncService $syncService
+        AttendanceJournalSyncService $syncService,
+        GradeCalculationService $gradeService
     ): JsonResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
@@ -141,9 +143,19 @@ class AttendanceController extends Controller
             $syncService->syncJournalForDate($teachingClass, $dateStr);
         }
 
+        // Jika kelas menggunakan Nilai Kehadiran Otomatis, sinkronkan Nilai Kehadiran & NA!
+        $weight = $teachingClass->gradeWeight()->first();
+        $autoSyncedGrades = false;
+        if ($weight && $weight->isAutoAttendance()) {
+            $gradeService->recalculateClass($teachingClass, $syncService);
+            $autoSyncedGrades = true;
+        }
+
         return response()->json([
             'status' => 'ok',
-            'message' => 'Data Absensi berhasil disimpan & disinkronkan otomatis ke Jurnal Harian.',
+            'message' => $autoSyncedGrades
+                ? 'Data Absensi berhasil disimpan & disinkronkan otomatis ke Jurnal Harian serta Nilai Kehadiran.'
+                : 'Data Absensi berhasil disimpan & disinkronkan otomatis ke Jurnal Harian.',
             'saved_at' => now()->format('H:i:s'),
         ]);
     }

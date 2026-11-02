@@ -16,12 +16,13 @@
     @include('exports.pdf.partials.header', [
         'documentTitle' => 'DAFTAR NILAI & CAPAIAN KOMPETENSI PESERTA DIDIK',
         'documentSubtitle' => sprintf(
-            'Rumus Kontrak Belajar NA: Rata-rata PH (%s%%) + Kehadiran (%s%%) + Rata-rata NT (%s%%) + STS (%s%%) + SAS (%s%%) = 100%%',
+            'Rumus Kontrak Belajar NA: Rata-rata PH (%s%%) + Kehadiran (%s%%) + Rata-rata NT (%s%%) + STS (%s%%) + SAS (%s%%) = 100%%%s',
             rtrim(rtrim(number_format($w->weight_ph, 2), '0'), '.'),
             rtrim(rtrim(number_format($w->weight_attendance, 2), '0'), '.'),
             rtrim(rtrim(number_format($w->weight_nt, 2), '0'), '.'),
             rtrim(rtrim(number_format($w->weight_sts, 2), '0'), '.'),
-            rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.')
+            rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.'),
+            $w->isAutoAttendance() ? sprintf(' | Kehadiran Otomatis (Toleransi S+I: %dx)', (int) ($w->sick_leave_tolerance ?? 3)) : ''
         ),
     ])
 

@@ -64,7 +64,7 @@ class GradeCalculationService
     /**
      * Hitung ulang seluruh nilai murid di dalam satu kelas ajar.
      */
-    public function recalculateClass(TeachingClass $teachingClass): void
+    public function recalculateClass(TeachingClass $teachingClass, ?AttendanceJournalSyncService $attendanceService = null): void
     {
         $teachingClass->ensureDefaultsInitialized();
 
@@ -74,12 +74,23 @@ class GradeCalculationService
         $students = $teachingClass->activeStudents()->get();
         $existingGrades = $teachingClass->studentGrades()->get()->keyBy('class_student_id');
 
-        DB::transaction(function () use ($teachingClass, $students, $existingGrades, $phColumns, $ntColumns, $weight) {
+        $autoAttendanceMap = [];
+        if ($weight->isAutoAttendance()) {
+            $syncSvc = $attendanceService ?? app(AttendanceJournalSyncService::class);
+            $autoAttendanceMap = $syncSvc->buildToleranceMapForClass(
+                $teachingClass,
+                (int) ($weight->sick_leave_tolerance ?? 3)
+            );
+        }
+
+        DB::transaction(function () use ($teachingClass, $students, $existingGrades, $phColumns, $ntColumns, $weight, $autoAttendanceMap) {
             foreach ($students as $student) {
                 /** @var StudentGrade|null $grade */
                 $grade = $existingGrades->get($student->id);
                 $dynamicScores = $grade?->dynamic_scores ?? [];
-                $att = $grade?->attendance_score;
+                $att = $weight->isAutoAttendance()
+                    ? ($autoAttendanceMap[$student->id]['auto_score'] ?? null)
+                    : $grade?->attendance_score;
                 $sts = $grade?->sts_score;
                 $sas = $grade?->sas_score;
 
@@ -127,17 +138,26 @@ class GradeCalculationService
         $gradesByStudent = $teachingClass->studentGrades()->get()->keyBy('class_student_id');
         $kktp = $teachingClass->effective_kktp;
 
-        $attendanceRef = [];
-        if ($attendanceService) {
-            $recap = $attendanceService->buildSemesterRecap($teachingClass);
-            foreach ($recap['rows'] as $r) {
-                $attendanceRef[$r['student']->id] = [
-                    'present' => $r['present'],
-                    'total' => $r['total_meetings'],
-                    'percentage' => $r['percentage'],
-                ];
-            }
-        }
+        $tolerance = (int) ($weight->sick_leave_tolerance ?? 3);
+        $syncSvc = $attendanceService ?? app(AttendanceJournalSyncService::class);
+        $attendanceRef = $syncSvc->buildToleranceMapForClass($teachingClass, $tolerance);
+
+        $defaultRef = [
+            'dot' => 0,
+            'dispen' => 0,
+            'present' => 0,
+            'sakit' => 0,
+            'izin' => 0,
+            'alfa' => 0,
+            'total' => 0,
+            'percentage' => 0.0,
+            'tolerance' => $tolerance,
+            'sick_leave_total' => 0,
+            'tolerated_si' => 0,
+            'excess_si' => 0,
+            'effective_present' => 0,
+            'auto_score' => null,
+        ];
 
         $rows = [];
         $scores = [];
@@ -155,9 +175,14 @@ class GradeCalculationService
                 $normalizedDynamic[(string) $col->id] = ($val !== null && $val !== '') ? (float) $val : null;
             }
 
+            $ref = $attendanceRef[$student->id] ?? $defaultRef;
+            $attScore = $weight->isAutoAttendance()
+                ? $ref['auto_score']
+                : $grade?->attendance_score;
+
             $calc = $this->calculateStudentRow(
                 $normalizedDynamic,
-                $grade?->attendance_score,
+                $attScore,
                 $grade?->sts_score,
                 $grade?->sas_score,
                 $phColumns,
@@ -178,14 +203,14 @@ class GradeCalculationService
                 'no' => $index + 1,
                 'student' => $student,
                 'dynamic_scores' => $normalizedDynamic,
-                'attendance_score' => $grade?->attendance_score,
+                'attendance_score' => $attScore,
                 'sts_score' => $grade?->sts_score,
                 'sas_score' => $grade?->sas_score,
                 'avg_ph' => $calc['avg_ph'],
                 'avg_nt' => $calc['avg_nt'],
                 'final_score' => $finalScore,
                 'is_tuntas' => $isTuntas,
-                'attendance_ref' => $attendanceRef[$student->id] ?? ['present' => 0, 'total' => 0, 'percentage' => 0],
+                'attendance_ref' => $ref,
             ];
         }
 
@@ -240,6 +265,8 @@ class GradeCalculationService
                     'weight_sts' => $sourceWeight->weight_sts,
                     'weight_sas' => $sourceWeight->weight_sas,
                     'rounding_precision' => $sourceWeight->rounding_precision,
+                    'attendance_mode' => $sourceWeight->attendance_mode ?? GradeWeight::MODE_MANUAL,
+                    'sick_leave_tolerance' => (int) ($sourceWeight->sick_leave_tolerance ?? 3),
                     'agreement_note' => $sourceWeight->agreement_note,
                 ]
             );

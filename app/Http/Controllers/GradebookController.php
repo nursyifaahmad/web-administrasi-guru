@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\GradeColumn;
+use App\Models\GradeWeight;
 use App\Models\StudentGrade;
 use App\Models\TeachingClass;
 use App\Services\AttendanceJournalSyncService;
@@ -68,7 +69,8 @@ class GradebookController extends Controller
     public function bulkSaveScores(
         Request $request,
         TeachingClass $teachingClass,
-        GradeCalculationService $gradeService
+        GradeCalculationService $gradeService,
+        AttendanceJournalSyncService $attendanceService
     ): JsonResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
         $teachingClass->ensureDefaultsInitialized();
@@ -88,7 +90,28 @@ class GradebookController extends Controller
         $allColumnIds = $phColumns->concat($ntColumns)->pluck('id')->map(fn ($id) => (string) $id)->flip();
         $weight = $teachingClass->gradeWeight()->firstOrFail();
 
-        DB::transaction(function () use ($teachingClass, $validated, $validStudentIds, $allColumnIds, $phColumns, $ntColumns, $weight, $gradeService) {
+        $autoAttendanceMap = [];
+        if ($weight->isAutoAttendance()) {
+            $autoAttendanceMap = $attendanceService->buildToleranceMapForClass(
+                $teachingClass,
+                (int) ($weight->sick_leave_tolerance ?? 3)
+            );
+        }
+
+        $syncedAttendanceScores = [];
+
+        DB::transaction(function () use (
+            $teachingClass,
+            $validated,
+            $validStudentIds,
+            $allColumnIds,
+            $phColumns,
+            $ntColumns,
+            $weight,
+            $gradeService,
+            $autoAttendanceMap,
+            &$syncedAttendanceScores
+        ) {
             foreach ($validated['rows'] as $row) {
                 $sid = (int) $row['student_id'];
                 if (! $validStudentIds->has($sid)) {
@@ -112,9 +135,18 @@ class GradebookController extends Controller
                     }
                 }
 
-                $att = ($row['attendance_score'] !== null && $row['attendance_score'] !== '') ? round((float) $row['attendance_score'], 2) : null;
-                $sts = ($row['sts_score'] !== null && $row['sts_score'] !== '') ? round((float) $row['sts_score'], 2) : null;
-                $sas = ($row['sas_score'] !== null && $row['sas_score'] !== '') ? round((float) $row['sas_score'], 2) : null;
+                if ($weight->isAutoAttendance()) {
+                    $att = $autoAttendanceMap[$sid]['auto_score'] ?? null;
+                } else {
+                    $attRaw = $row['attendance_score'] ?? null;
+                    $att = ($attRaw !== null && $attRaw !== '') ? round((float) $attRaw, 2) : null;
+                }
+                $syncedAttendanceScores[(string) $sid] = $att;
+
+                $stsRaw = $row['sts_score'] ?? null;
+                $sasRaw = $row['sas_score'] ?? null;
+                $sts = ($stsRaw !== null && $stsRaw !== '') ? round((float) $stsRaw, 2) : null;
+                $sas = ($sasRaw !== null && $sasRaw !== '') ? round((float) $sasRaw, 2) : null;
 
                 $calc = $gradeService->calculateStudentRow($cleanDynamic, $att, $sts, $sas, $phColumns, $ntColumns, $weight);
 
@@ -140,6 +172,7 @@ class GradebookController extends Controller
             'status' => 'ok',
             'message' => 'Seluruh nilai & Nilai Akhir (NA) berhasil disimpan.',
             'saved_at' => now()->format('H:i:s'),
+            'attendance_scores' => $syncedAttendanceScores,
         ]);
     }
 
@@ -239,6 +272,8 @@ class GradebookController extends Controller
             'weight_sts' => ['required', 'numeric', 'min:0', 'max:100'],
             'weight_sas' => ['required', 'numeric', 'min:0', 'max:100'],
             'rounding_precision' => ['required', Rule::in([0, 1, 2, '0', '1', '2'])],
+            'attendance_mode' => ['nullable', Rule::in([GradeWeight::MODE_MANUAL, GradeWeight::MODE_AUTO])],
+            'sick_leave_tolerance' => ['nullable', 'integer', 'min:0', 'max:100'],
             'agreement_note' => ['nullable', 'string', 'max:200'],
             'copy_to_class_ids' => ['nullable', 'array'],
             'copy_to_class_ids.*' => ['integer', 'exists:teaching_classes,id'],
@@ -259,6 +294,12 @@ class GradebookController extends Controller
             ]);
         }
 
+        $existingWeight = $teachingClass->gradeWeight()->first();
+        $resolvedMode = $validated['attendance_mode'] ?? ($existingWeight?->attendance_mode ?? GradeWeight::MODE_MANUAL);
+        $resolvedTolerance = array_key_exists('sick_leave_tolerance', $validated) && $validated['sick_leave_tolerance'] !== null
+            ? (int) $validated['sick_leave_tolerance']
+            : (int) ($existingWeight?->sick_leave_tolerance ?? 3);
+
         $teachingClass->gradeWeight()->updateOrCreate(
             ['teaching_class_id' => $teachingClass->id],
             [
@@ -268,6 +309,8 @@ class GradebookController extends Controller
                 'weight_sts' => (float) $validated['weight_sts'],
                 'weight_sas' => (float) $validated['weight_sas'],
                 'rounding_precision' => (int) $validated['rounding_precision'],
+                'attendance_mode' => $resolvedMode,
+                'sick_leave_tolerance' => $resolvedTolerance,
                 'agreement_note' => $validated['agreement_note'] ?? null,
             ]
         );

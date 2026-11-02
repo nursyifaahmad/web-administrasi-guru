@@ -704,6 +704,9 @@ class ExcelExportImportService
             rtrim(rtrim(number_format($w->weight_sts, 2), '0'), '.'),
             rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.')
         );
+        if ($w->isAutoAttendance()) {
+            $subtitle .= sprintf(' | Kehadiran Otomatis (Toleransi S+I: %dx)', (int) ($w->sick_leave_tolerance ?? 3));
+        }
 
         $row = $this->renderOfficialHeader(
             $sheet,
@@ -1318,6 +1321,10 @@ class ExcelExportImportService
 
         foreach (array_keys($affectedDates) as $dateStr) {
             $this->attendanceService->syncJournalForDate($teachingClass, $dateStr);
+        }
+
+        if ($teachingClass->gradeWeight()->first()?->isAutoAttendance()) {
+            $this->gradeService->recalculateClass($teachingClass, $this->attendanceService);
         }
 
         return $updatedRows;
