@@ -6,8 +6,8 @@
 
         <title>Laravel</title>
         <!-- Favicon / Logo Tab Browser -->
-        <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
-        <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
+        <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}?v=2">
+        <link rel="shortcut icon" href="{{ asset('favicon.ico') }}?v=2">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
