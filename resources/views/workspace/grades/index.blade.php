@@ -17,6 +17,7 @@
 @endphp
 
 <div class="space-y-4"
+     :class="(isDirty || saving || justSaved) ? 'pb-24' : ''"
      x-data="gradebookSpreadsheet({
         rows: @js($alpineRows),
         phColIds: @js($phColumns->pluck('id')->map(fn($id) => (string)$id)->values()),
@@ -52,13 +53,13 @@
                     <strong>SAS {{ rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.') }}%</strong> = 100%
                 </div>
                 @if($isAutoAtt)
-                    <button type="button" @click="weightsModal = true"
+                    <button type="button" @click="openWeightsModal()"
                             class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold hover:bg-emerald-100 transition"
                             title="Klik untuk mengubah mode atau batas toleransi Sakit/Izin">
                         Kehadiran: Otomatis Absensi (Toleransi S+I: {{ $tolValue }}x)
                     </button>
                 @else
-                    <button type="button" @click="weightsModal = true"
+                    <button type="button" @click="openWeightsModal()"
                             class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-bold hover:bg-amber-100 transition"
                             title="Klik untuk mengaktifkan Nilai Kehadiran otomatis dengan toleransi Sakit/Izin">
                         Kehadiran: Input Manual
@@ -68,15 +69,15 @@
 
             <div class="flex flex-wrap items-center gap-2 text-xs">
                 <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
-                    Belum disimpan
+                    Belum disimpan (<span x-text="dirtyCount"></span> nilai / <span x-text="dirtyStudentCount"></span> murid)
                 </span>
-                <span x-show="savedMessage" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
+                <span x-show="savedMessage && !isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
 
-                <button type="button" @click="saveScores()" :disabled="saving"
+                <button type="button" @click="saveScores()" :disabled="saving" title="Pintasan keyboard: Ctrl + S"
                         class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
                     <span x-text="saving ? 'Menyimpan...' : 'Simpan Nilai'"></span>
                 </button>
-                <button type="button" @click="weightsModal = true"
+                <button type="button" @click="openWeightsModal()"
                         class="px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition">
                     Atur Persentase Rumus NA
                 </button>
@@ -84,7 +85,7 @@
                         class="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold hover:bg-indigo-100">
                     Import Excel
                 </button>
-                <button type="button" @click="exportModal = true"
+                <button type="button" @click="openExportModal()"
                         class="px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition">
                     Cetak PDF & Excel
                 </button>
@@ -94,18 +95,18 @@
         {{-- Baris Kontrol Kolom Dinamis PH & NT + Statistik Real-time --}}
         <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div class="flex flex-wrap items-center gap-2">
-                <form method="POST" action="{{ route('grades.columns.store', $teachingClass) }}">
+                <form method="POST" action="{{ route('grades.columns.store', $teachingClass) }}" data-skip-dirty-guard="1" @submit.prevent="submitColumnAdd($event)">
                     @csrf
                     <input type="hidden" name="type" value="PH">
-                    <button type="submit" onclick="if(window.__gradeDirty && !confirm('Simpan perubahan nilai terlebih dahulu agar tidak hilang. Lanjutkan tambah kolom PH?')) return false;"
+                    <button type="submit"
                             class="px-3 py-1.5 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 font-bold hover:bg-sky-100">
                         + Tambah Kolom PH ({{ $phColumns->count() }})
                     </button>
                 </form>
-                <form method="POST" action="{{ route('grades.columns.store', $teachingClass) }}">
+                <form method="POST" action="{{ route('grades.columns.store', $teachingClass) }}" data-skip-dirty-guard="1" @submit.prevent="submitColumnAdd($event)">
                     @csrf
                     <input type="hidden" name="type" value="NT">
-                    <button type="submit" onclick="if(window.__gradeDirty && !confirm('Simpan perubahan nilai terlebih dahulu agar tidak hilang. Lanjutkan tambah kolom NT?')) return false;"
+                    <button type="submit"
                             class="px-3 py-1.5 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 font-bold hover:bg-purple-100">
                         + Tambah Kolom NT ({{ $ntColumns->count() }})
                     </button>
@@ -175,13 +176,13 @@
                         @foreach($phColumns as $col)
                             <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-sky-50/50 min-w-[68px]">
                                 <button type="button"
-                                        @click="editCol = @js([
+                                        @click="openEditCol(@js([
                                             'label' => $col->label,
                                             'topic_note' => $col->topic_note,
                                             'type' => 'PH',
                                             'update_url' => route('grades.columns.update', [$teachingClass, $col]),
                                             'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
-                                        ])"
+                                        ]))"
                                         class="w-full hover:text-sky-700 group" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
                                     <div class="font-extrabold flex items-center justify-center gap-0.5">
                                         <span>{{ $col->label }}</span>
@@ -197,13 +198,13 @@
                         @foreach($ntColumns as $col)
                             <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-purple-50/50 min-w-[68px]">
                                 <button type="button"
-                                        @click="editCol = @js([
+                                        @click="openEditCol(@js([
                                             'label' => $col->label,
                                             'topic_note' => $col->topic_note,
                                             'type' => 'NT',
                                             'update_url' => route('grades.columns.update', [$teachingClass, $col]),
                                             'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
-                                        ])"
+                                        ]))"
                                         class="w-full hover:text-purple-700 group" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
                                     <div class="font-extrabold flex items-center justify-center gap-0.5">
                                         <span>{{ $col->label }}</span>
@@ -325,6 +326,106 @@
                     </template>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    {{-- Kartu & Tombol Simpan Panjang di Bawah Tabel Daftar Nilai --}}
+    <div x-show="rows.length > 0"
+         class="rounded-2xl border p-4 shadow-2xs transition"
+         :class="isDirty ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-200/70' : 'bg-white border-slate-200'">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs mb-3">
+            <div class="flex items-center gap-2">
+                <template x-if="isDirty">
+                    <span class="inline-flex items-center gap-2 font-bold text-amber-950">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        <span>Ada <strong x-text="dirtyCount"></strong> perubahan nilai pada <strong x-text="dirtyStudentCount"></strong> murid yang belum disimpan.</span>
+                    </span>
+                </template>
+                <template x-if="!isDirty">
+                    <span class="inline-flex items-center gap-1.5 font-semibold text-emerald-800">
+                        <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span x-text="savedMessage || 'Seluruh nilai & Nilai Akhir (NA) pada tabel ini sudah tersimpan'"></span>
+                    </span>
+                </template>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                <span>Rata-rata: <strong class="text-slate-900" x-text="summaryStats().avg"></strong></span>
+                <span>&bull;</span>
+                <span>Tuntas: <strong class="text-emerald-700" x-text="summaryStats().tuntas"></strong></span>
+                <span>&bull;</span>
+                <span>Remedial: <strong class="text-rose-700" x-text="summaryStats().remedial"></strong></span>
+                <span>&bull;</span>
+                <span>Pintasan: <kbd class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300 font-bold text-slate-700">Ctrl + S</kbd></span>
+            </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <button type="button"
+                    @click="saveScores()"
+                    :disabled="saving"
+                    class="flex-1 py-3.5 px-6 rounded-xl text-sm font-extrabold text-white shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                    :class="isDirty ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400/50' : 'bg-emerald-600 hover:bg-emerald-700'">
+                <svg x-show="!saving" class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 13l4 4L19 7"/></svg>
+                <svg x-show="saving" x-cloak class="w-5 h-5 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                <span x-text="saving ? 'Sedang Menyimpan Daftar Nilai & Menghitung NA...' : (isDirty ? `Simpan Perubahan Daftar Nilai (${dirtyCount} nilai / ${dirtyStudentCount} murid)` : 'Simpan Seluruh Daftar Nilai & Perbarui Nilai Akhir (NA)')"></span>
+            </button>
+
+            <button type="button"
+                    x-show="isDirty && !saving"
+                    x-cloak
+                    @click="revertChanges()"
+                    class="px-4 py-3.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 text-xs font-bold transition cursor-pointer">
+                Urungkan Perubahan
+            </button>
+        </div>
+    </div>
+
+    {{-- Bar Simpan Melayang (Sticky Floating Action Bar) --}}
+    <div x-show="isDirty || saving || justSaved"
+         x-cloak
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 translate-y-4"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-4"
+         class="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-2xl">
+        <div class="rounded-2xl bg-slate-900/95 text-white border shadow-2xl px-4 py-3 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs"
+             :class="isDirty ? 'border-amber-400/80' : 'border-emerald-500/70'">
+            <template x-if="saving">
+                <div class="flex items-center gap-2.5 font-bold text-emerald-300">
+                    <svg class="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                    <span>Menyimpan daftar nilai &amp; memperbarui Nilai Akhir (NA)...</span>
+                </div>
+            </template>
+
+            <template x-if="!saving && isDirty">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+                    <div>
+                        <span class="font-extrabold text-amber-300"><span x-text="dirtyCount"></span> nilai diubah (<span x-text="dirtyStudentCount"></span> murid) &mdash; belum disimpan</span>
+                        <span class="hidden sm:inline text-slate-300"> &bull; jangan lupa klik Simpan</span>
+                    </div>
+                </div>
+            </template>
+
+            <template x-if="!saving && !isDirty && justSaved">
+                <div class="flex items-center gap-2 font-bold text-emerald-300">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                    <span x-text="savedMessage"></span>
+                </div>
+            </template>
+
+            <div x-show="isDirty && !saving" class="flex items-center gap-2 ml-auto">
+                <button type="button" @click="revertChanges()"
+                        class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold transition cursor-pointer">
+                    Urungkan
+                </button>
+                <button type="button" @click="saveScores()"
+                        class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-sm transition cursor-pointer">
+                    Simpan Nilai (Ctrl+S)
+                </button>
+            </div>
         </div>
     </div>
 
@@ -523,6 +624,7 @@
                 <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 flex items-center justify-between gap-2">
                     <span>Template Excel otomatis mengikuti kolom PH & NT kelas ini:</span>
                     <a href="{{ route('grades.template', $teachingClass) }}"
+                       data-skip-dirty-guard="1"
                        class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 shrink-0">
                         Unduh Template
                     </a>
@@ -554,6 +656,7 @@
 function gradebookSpreadsheet(cfg) {
     return {
         rows: cfg.rows,
+        savedSnapshot: [],
         phColIds: cfg.phColIds,
         ntColIds: cfg.ntColIds,
         weights: cfg.weights,
@@ -561,17 +664,141 @@ function gradebookSpreadsheet(cfg) {
         sickLeaveTolerance: Number(cfg.sickLeaveTolerance || 0),
         kktp: cfg.kktp,
         isDirty: false,
+        dirtyCount: 0,
+        dirtyStudentCount: 0,
         saving: false,
+        justSaved: false,
+        _savedTimer: null,
         savedMessage: '',
         editCol: null,
         weightsModal: false,
         importModal: false,
         exportModal: false,
 
+        init() {
+            this.savedSnapshot = this.cloneRows(this.rows);
+            window.__gradeDirty = false;
+            window.__workspaceDirty = false;
+            window.__workspaceDirtyLabel = 'Daftar Nilai Peserta Didik';
+            window.__workspaceSaveFn = () => this.saveScores();
+
+            window.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
+                    e.preventDefault();
+                    if (!this.saving) {
+                        this.saveScores();
+                    }
+                }
+            });
+        },
+
+        cloneRows(src) {
+            return JSON.parse(JSON.stringify(src || []));
+        },
+
+        normalizeScoreVal(v) {
+            if (v === null || v === undefined || String(v).trim() === '') return '';
+            const n = Number(v);
+            return Number.isNaN(n) ? String(v).trim() : String(Math.round(n * 100) / 100);
+        },
+
+        recalculateDirty() {
+            const origMap = {};
+            for (let i = 0; i < this.savedSnapshot.length; i++) {
+                origMap[String(this.savedSnapshot[i].student_id)] = this.savedSnapshot[i];
+            }
+
+            let cellChanges = 0;
+            let rowChanges = 0;
+
+            for (let i = 0; i < this.rows.length; i++) {
+                const curr = this.rows[i];
+                const orig = origMap[String(curr.student_id)] || {};
+                const currDyn = curr.dynamic_scores || {};
+                const origDyn = orig.dynamic_scores || {};
+                let rowDiff = 0;
+
+                for (let p = 0; p < this.phColIds.length; p++) {
+                    const cid = this.phColIds[p];
+                    if (this.normalizeScoreVal(currDyn[cid]) !== this.normalizeScoreVal(origDyn[cid])) {
+                        rowDiff++;
+                    }
+                }
+                for (let n = 0; n < this.ntColIds.length; n++) {
+                    const cid = this.ntColIds[n];
+                    if (this.normalizeScoreVal(currDyn[cid]) !== this.normalizeScoreVal(origDyn[cid])) {
+                        rowDiff++;
+                    }
+                }
+                if (!this.isAutoAttendance) {
+                    if (this.normalizeScoreVal(curr.attendance_score) !== this.normalizeScoreVal(orig.attendance_score)) {
+                        rowDiff++;
+                    }
+                }
+                if (this.normalizeScoreVal(curr.sts_score) !== this.normalizeScoreVal(orig.sts_score)) {
+                    rowDiff++;
+                }
+                if (this.normalizeScoreVal(curr.sas_score) !== this.normalizeScoreVal(orig.sas_score)) {
+                    rowDiff++;
+                }
+
+                if (rowDiff > 0) {
+                    cellChanges += rowDiff;
+                    rowChanges++;
+                }
+            }
+
+            this.dirtyCount = cellChanges;
+            this.dirtyStudentCount = rowChanges;
+            this.isDirty = cellChanges > 0;
+            window.__gradeDirty = this.isDirty;
+            window.__workspaceDirty = this.isDirty;
+        },
+
         markDirty() {
-            this.isDirty = true;
-            window.__gradeDirty = true;
+            this.justSaved = false;
             this.savedMessage = '';
+            this.recalculateDirty();
+        },
+
+        revertChanges() {
+            if (!this.isDirty) return;
+            if (!window.confirm(`Batalkan ${this.dirtyCount} perubahan nilai pada ${this.dirtyStudentCount} murid dan kembalikan ke nilai tersimpan terakhir?`)) {
+                return;
+            }
+            this.rows = this.cloneRows(this.savedSnapshot);
+            this.recalculateDirty();
+            this.savedMessage = 'Perubahan nilai dibatalkan';
+        },
+
+        async ensureSavedBeforeAction(actionLabel) {
+            if (!this.isDirty) return true;
+            const saveNow = window.confirm(
+                `Ada ${this.dirtyCount} perubahan nilai (${this.dirtyStudentCount} murid) yang belum disimpan.\n\n` +
+                `Klik "OK" untuk MENYIMPAN nilai terlebih dahulu sebelum ${actionLabel}, atau klik "Batal" untuk kembali ke tabel.`
+            );
+            if (!saveNow) return false;
+            return await this.saveScores();
+        },
+
+        async openExportModal() {
+            if (!(await this.ensureSavedBeforeAction('membuka Cetak PDF & Excel'))) return;
+            this.exportModal = true;
+        },
+
+        async openWeightsModal() {
+            if (!(await this.ensureSavedBeforeAction('mengatur rumus persentase NA'))) return;
+            this.weightsModal = true;
+        },
+
+        async openEditCol(colData) {
+            if (!(await this.ensureSavedBeforeAction(`mengubah pengaturan kolom ${colData.label}`))) return;
+            this.editCol = colData;
+        },
+
+        async submitColumnAdd(e) {
+            if (!(await this.ensureSavedBeforeAction('menambah kolom nilai baru'))) return;
+            e.target.submit();
         },
         selectInput(e) {
             if (e && e.target && typeof e.target.select === 'function') {
@@ -664,6 +891,7 @@ function gradebookSpreadsheet(cfg) {
             };
         },
         async saveScores() {
+            if (this.saving) return false;
             this.saving = true;
             this.savedMessage = '';
             try {
@@ -679,6 +907,7 @@ function gradebookSpreadsheet(cfg) {
                 const data = await res.json();
                 if (!res.ok) {
                     alert(data.message || 'Gagal menyimpan nilai. Pastikan seluruh angka berada pada rentang 0 - 100.');
+                    return false;
                 } else {
                     if (this.isAutoAttendance && data.attendance_scores) {
                         this.rows.forEach((r) => {
@@ -688,12 +917,17 @@ function gradebookSpreadsheet(cfg) {
                             }
                         });
                     }
-                    this.isDirty = false;
-                    window.__gradeDirty = false;
+                    this.savedSnapshot = this.cloneRows(this.rows);
+                    this.recalculateDirty();
                     this.savedMessage = `Nilai tersimpan (${data.saved_at})`;
+                    this.justSaved = true;
+                    clearTimeout(this._savedTimer);
+                    this._savedTimer = setTimeout(() => { this.justSaved = false; }, 3500);
+                    return true;
                 }
             } catch (e) {
                 alert('Terjadi kesalahan jaringan saat menyimpan nilai.');
+                return false;
             } finally {
                 this.saving = false;
             }

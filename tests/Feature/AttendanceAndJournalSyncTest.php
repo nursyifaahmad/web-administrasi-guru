@@ -166,4 +166,25 @@ class AttendanceAndJournalSyncTest extends TestCase
         $this->assertSame(0, $journal->absent_count);
         $this->assertFalse($journal->is_attendance_overridden);
     }
+
+    public function test_attendance_and_gradebook_pages_render_bottom_save_cards_sticky_bars_and_navigation_guards(): void
+    {
+        [$guru, $tClass] = $this->createClassWithFiveStudents();
+
+        $attPage = $this->actingAs($guru)->get(route('attendances.index', [$tClass, 'tab' => 'monthly', 'month' => 11, 'year' => 2026]));
+        $attPage->assertOk()
+            ->assertSee('Simpan Seluruh Data Absensi Bulan', false)
+            ->assertSee('Simpan Absensi (Ctrl+S)', false)
+            ->assertSee('Urungkan Perubahan', false)
+            ->assertSee('window.confirmWorkspaceDiscard', false)
+            ->assertSee('window.handleGuardedSelectNavigate', false);
+
+        $gradePage = $this->actingAs($guru)->get(route('grades.index', $tClass));
+        $gradePage->assertOk()
+            ->assertSee('Simpan Seluruh Daftar Nilai & Perbarui Nilai Akhir (NA)', false)
+            ->assertSee('Simpan Nilai (Ctrl+S)', false)
+            ->assertSee('Urungkan Perubahan', false)
+            ->assertSee('ensureSavedBeforeAction', false)
+            ->assertSee('window.confirmWorkspaceDiscard', false);
+    }
 }

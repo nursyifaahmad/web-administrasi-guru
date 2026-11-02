@@ -12,12 +12,15 @@
 @endphp
 
 <div class="space-y-4"
+     :class="(isMonthly && (isDirty || saving || justSaved)) ? 'pb-24' : ''"
      x-data="attendanceSpreadsheet({
         students: @js($alpineStudents),
         initialCells: @js($alpineCells),
         daysInMonth: @js($matrix['days_in_month']),
         year: @js($year),
         month: @js($month),
+        monthLabel: @js($monthName . ' ' . $year),
+        isMonthly: @js($tab === 'monthly'),
         saveUrl: @js(route('attendances.bulk-save', $teachingClass)),
         csrf: @js(csrf_token())
      })">
@@ -35,14 +38,14 @@
             </a>
 
             @if($tab === 'monthly')
-                <form method="GET" action="{{ route('attendances.index', $teachingClass) }}" class="flex items-center gap-1.5 ml-1">
+                <form method="GET" action="{{ route('attendances.index', $teachingClass) }}" data-skip-dirty-guard="1" class="flex items-center gap-1.5 ml-1">
                     <input type="hidden" name="tab" value="monthly">
-                    <select name="month" onchange="this.form.submit()" class="rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-800">
+                    <select name="month" data-prev-value="{{ $month }}" onchange="window.handleGuardedSelectNavigate(this, 'submit')" class="rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-800">
                         @foreach(\App\Support\IndonesianDate::MONTHS as $mNum => $mLbl)
                             <option value="{{ $mNum }}" @selected($month === $mNum)>{{ $mLbl }}</option>
                         @endforeach
                     </select>
-                    <input type="number" name="year" value="{{ $year }}" min="2020" max="2099" onchange="this.form.submit()"
+                    <input type="number" name="year" value="{{ $year }}" data-prev-value="{{ $year }}" min="2020" max="2099" onchange="window.handleGuardedSelectNavigate(this, 'submit')"
                            class="w-24 rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-800">
                 </form>
             @endif
@@ -51,11 +54,11 @@
         <div class="flex flex-wrap items-center gap-2 text-xs">
             @if($tab === 'monthly')
                 <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
-                    Ada perubahan belum disimpan
+                    Belum disimpan (<span x-text="dirtyCount"></span> perubahan)
                 </span>
-                <span x-show="savedMessage" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
+                <span x-show="savedMessage && !isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
 
-                <button type="button" @click="saveAll()" :disabled="saving"
+                <button type="button" @click="saveAll()" :disabled="saving" title="Pintasan keyboard: Ctrl + S"
                         class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
                     <span x-text="saving ? 'Menyimpan...' : 'Simpan Absensi'"></span>
                 </button>
@@ -64,7 +67,7 @@
                     Import Excel
                 </button>
             @endif
-            <button type="button" @click="exportModal = true"
+            <button type="button" @click="openExportModal()"
                     class="px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition">
                 Cetak PDF & Download Excel
             </button>
@@ -217,6 +220,100 @@
                 </table>
             </div>
         </div>
+
+        {{-- Kartu & Tombol Simpan Panjang di Bawah Tabel Absensi --}}
+        <div x-show="students.length > 0"
+             class="rounded-2xl border p-4 shadow-2xs transition"
+             :class="isDirty ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-200/70' : 'bg-white border-slate-200'">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs mb-3">
+                <div class="flex items-center gap-2">
+                    <template x-if="isDirty">
+                        <span class="inline-flex items-center gap-2 font-bold text-amber-950">
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                            <span>Ada <strong x-text="dirtyCount"></strong> kotak tanggal diubah &amp; belum disimpan.</span>
+                        </span>
+                    </template>
+                    <template x-if="!isDirty">
+                        <span class="inline-flex items-center gap-1.5 font-semibold text-emerald-800">
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <span x-text="savedMessage || 'Seluruh data absensi pada tabel ini sudah tersimpan'"></span>
+                        </span>
+                    </template>
+                </div>
+                <span class="text-[11px] text-slate-500">
+                    Otomatis menyinkronkan <strong>Jurnal Harian</strong> &amp; <strong>Nilai Kehadiran</strong> &bull; Pintasan: <kbd class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300 font-bold text-slate-700">Ctrl + S</kbd>
+                </span>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <button type="button"
+                        @click="saveAll()"
+                        :disabled="saving"
+                        class="flex-1 py-3.5 px-6 rounded-xl text-sm font-extrabold text-white shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                        :class="isDirty ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400/50' : 'bg-emerald-600 hover:bg-emerald-700'">
+                    <svg x-show="!saving" class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 13l4 4L19 7"/></svg>
+                    <svg x-show="saving" x-cloak class="w-5 h-5 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                    <span x-text="saving ? 'Sedang Menyimpan Absensi & Sinkronisasi Jurnal...' : (isDirty ? `Simpan Perubahan Absensi Bulan ${monthLabel} (${dirtyCount} perubahan)` : `Simpan Seluruh Data Absensi Bulan ${monthLabel}`)"></span>
+                </button>
+
+                <button type="button"
+                        x-show="isDirty && !saving"
+                        x-cloak
+                        @click="revertChanges()"
+                        class="px-4 py-3.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 text-xs font-bold transition cursor-pointer">
+                    Urungkan Perubahan
+                </button>
+            </div>
+        </div>
+
+        {{-- Bar Simpan Melayang (Sticky Floating Action Bar) --}}
+        <div x-show="isDirty || saving || justSaved"
+             x-cloak
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 translate-y-4"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 translate-y-4"
+             class="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-2xl">
+            <div class="rounded-2xl bg-slate-900/95 text-white border shadow-2xl px-4 py-3 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs"
+                 :class="isDirty ? 'border-amber-400/80' : 'border-emerald-500/70'">
+                <template x-if="saving">
+                    <div class="flex items-center gap-2.5 font-bold text-emerald-300">
+                        <svg class="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                        <span>Menyimpan data absensi &amp; menyinkronkan Jurnal Harian...</span>
+                    </div>
+                </template>
+
+                <template x-if="!saving && isDirty">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+                        <div>
+                            <span class="font-extrabold text-amber-300"><span x-text="dirtyCount"></span> perubahan absensi belum disimpan</span>
+                            <span class="hidden sm:inline text-slate-300"> &mdash; jangan lupa klik Simpan sebelum pindah menu</span>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="!saving && !isDirty && justSaved">
+                    <div class="flex items-center gap-2 font-bold text-emerald-300">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                        <span x-text="savedMessage"></span>
+                    </div>
+                </template>
+
+                <div x-show="isDirty && !saving" class="flex items-center gap-2 ml-auto">
+                    <button type="button" @click="revertChanges()"
+                            class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold transition cursor-pointer">
+                        Urungkan
+                    </button>
+                    <button type="button" @click="saveAll()"
+                            class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-sm transition cursor-pointer">
+                        Simpan Absensi (Ctrl+S)
+                    </button>
+                </div>
+            </div>
+        </div>
     @else
         {{-- Tampilan Rekapitulasi 1 Semester Penuh --}}
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
@@ -286,6 +383,7 @@
                 <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 flex items-center justify-between gap-2">
                     <span>Unduh template Excel absensi bulan ini:</span>
                     <a href="{{ route('attendances.template', [$teachingClass, 'month' => $month, 'year' => $year]) }}"
+                       data-skip-dirty-guard="1"
                        class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 shrink-0">
                         Unduh Template
                     </a>
@@ -325,14 +423,84 @@ function attendanceSpreadsheet(cfg) {
     return {
         students: cfg.students,
         cells: cfg.initialCells,
+        savedSnapshot: {},
         daysInMonth: cfg.daysInMonth,
         daysArray: Array.from({ length: cfg.daysInMonth }, (_, i) => i + 1),
+        monthLabel: cfg.monthLabel || '',
+        isMonthly: Boolean(cfg.isMonthly),
         tapStamp: null,
         isDirty: false,
+        dirtyCount: 0,
         saving: false,
+        justSaved: false,
+        _savedTimer: null,
         savedMessage: '',
         importModal: false,
         exportModal: false,
+
+        init() {
+            this.savedSnapshot = this.cloneCells(this.cells);
+            window.__workspaceDirty = false;
+            window.__workspaceDirtyLabel = 'Absensi Peserta Didik';
+            window.__workspaceSaveFn = () => this.saveAll();
+
+            if (this.isMonthly) {
+                window.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
+                        e.preventDefault();
+                        if (!this.saving) {
+                            this.saveAll();
+                        }
+                    }
+                });
+            }
+        },
+
+        cloneCells(src) {
+            return JSON.parse(JSON.stringify(src || {}));
+        },
+
+        recalculateDirty() {
+            let count = 0;
+            for (let i = 0; i < this.students.length; i++) {
+                const sid = String(this.students[i].id);
+                const currRow = this.cells[sid] || {};
+                const origRow = this.savedSnapshot[sid] || {};
+                for (let d = 1; d <= this.daysInMonth; d++) {
+                    const currVal = currRow[d] || '';
+                    const origVal = origRow[d] || '';
+                    if (currVal !== origVal) {
+                        count++;
+                    }
+                }
+            }
+            this.dirtyCount = count;
+            this.isDirty = count > 0;
+            window.__workspaceDirty = this.isDirty;
+        },
+
+        revertChanges() {
+            if (!this.isDirty) return;
+            if (!window.confirm(`Batalkan ${this.dirtyCount} perubahan absensi yang belum disimpan dan kembalikan ke data tersimpan terakhir?`)) {
+                return;
+            }
+            this.cells = this.cloneCells(this.savedSnapshot);
+            this.recalculateDirty();
+            this.savedMessage = 'Perubahan dibatalkan';
+        },
+
+        async openExportModal() {
+            if (this.isMonthly && this.isDirty) {
+                const saveNow = window.confirm(
+                    `Ada ${this.dirtyCount} perubahan absensi yang belum disimpan.\n\n` +
+                    `Klik "OK" untuk MENYIMPAN absensi sekarang lalu membuka Cetak PDF & Excel, atau klik "Batal" untuk kembali ke tabel.`
+                );
+                if (!saveNow) return;
+                const ok = await this.saveAll();
+                if (!ok) return;
+            }
+            this.exportModal = true;
+        },
 
         onCellTap(studentId, day) {
             if (this.tapStamp !== null) {
@@ -348,13 +516,19 @@ function attendanceSpreadsheet(cfg) {
             const key = String(studentId);
             if (!this.cells[key]) this.cells[key] = {};
             this.cells[key][day] = val;
-            this.isDirty = true;
+            this.justSaved = false;
             this.savedMessage = '';
+            this.recalculateDirty();
         },
         fillDay(day, statusVal) {
             this.students.forEach((st) => {
-                this.setCell(st.id, day, statusVal);
+                const key = String(st.id);
+                if (!this.cells[key]) this.cells[key] = {};
+                this.cells[key][day] = statusVal;
             });
+            this.justSaved = false;
+            this.savedMessage = '';
+            this.recalculateDirty();
         },
         columnHasData(day) {
             return this.students.some((st) => this.getCell(st.id, day) !== '');
@@ -427,6 +601,7 @@ function attendanceSpreadsheet(cfg) {
             }
         },
         async saveAll() {
+            if (this.saving) return false;
             this.saving = true;
             this.savedMessage = '';
             try {
@@ -446,12 +621,19 @@ function attendanceSpreadsheet(cfg) {
                 const data = await res.json();
                 if (!res.ok) {
                     alert(data.message || 'Gagal menyimpan data absensi.');
+                    return false;
                 } else {
-                    this.isDirty = false;
+                    this.savedSnapshot = this.cloneCells(this.cells);
+                    this.recalculateDirty();
                     this.savedMessage = `Tersimpan (${data.saved_at}) & Jurnal tersinkron`;
+                    this.justSaved = true;
+                    clearTimeout(this._savedTimer);
+                    this._savedTimer = setTimeout(() => { this.justSaved = false; }, 3500);
+                    return true;
                 }
             } catch (err) {
                 alert('Terjadi kesalahan jaringan saat menyimpan absensi.');
+                return false;
             } finally {
                 this.saving = false;
             }

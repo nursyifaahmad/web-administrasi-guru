@@ -215,7 +215,8 @@
                         @if(isset($teachingClass) && $quickSwitcherClasses->count() > 1)
                             <div class="flex items-center gap-1.5">
                                 <span class="hidden sm:inline text-xs font-medium text-slate-500">Pindah Kelas:</span>
-                                <select onchange="if(this.value) window.location.href = this.value"
+                                <select data-prev-value="{{ route($currentSubMenu, $teachingClass) }}"
+                                        onchange="window.handleGuardedSelectNavigate(this, 'href')"
                                         class="text-xs font-semibold rounded-lg border-slate-300 bg-slate-50 py-1.5 pl-2.5 pr-7 text-slate-800 focus:border-emerald-500 focus:ring-emerald-500">
                                     @foreach($quickSwitcherClasses as $qCls)
                                         <option value="{{ route($currentSubMenu, $qCls) }}" @selected($qCls->id === $teachingClass->id)>
@@ -227,9 +228,11 @@
                         @endif
 
                         {{-- Pemilih Tahun Ajaran & Semester --}}
-                        <form method="POST" action="{{ route('academic-year.switch') }}" class="flex items-center">
+                        <form method="POST" action="{{ route('academic-year.switch') }}" data-skip-dirty-guard="1" class="flex items-center">
                             @csrf
-                            <select name="academic_year_id" onchange="this.form.submit()"
+                            <select name="academic_year_id"
+                                    data-prev-value="{{ $selectedAcademicYear->id }}"
+                                    onchange="window.handleGuardedSelectNavigate(this, 'submit')"
                                     class="text-xs font-semibold rounded-lg border border-emerald-200 bg-emerald-50/70 py-1.5 pl-2.5 pr-7 text-emerald-900 focus:border-emerald-500 focus:ring-emerald-500">
                                 @foreach($globalAcademicYears as $ay)
                                     <option value="{{ $ay->id }}" @selected($ay->id === $selectedAcademicYear->id)>
@@ -283,6 +286,78 @@
             </footer>
         </div>
     </div>
+    <script>
+        window.__workspaceDirty = false;
+        window.__workspaceDirtyLabel = 'Absensi / Nilai';
+        window.__workspaceSaveFn = null;
+
+        window.confirmWorkspaceDiscard = function () {
+            if (!window.__workspaceDirty) return true;
+            const label = window.__workspaceDirtyLabel || 'data';
+            const proceed = window.confirm(
+                `Perhatian: Ada perubahan ${label} yang BELUM DISIMPAN.\n\n` +
+                `• Klik "Batal" untuk tetap di halaman ini lalu tekan tombol Simpan.\n` +
+                `• Klik "OK" jika ingin keluar dan mengabaikan perubahan yang belum disimpan.`
+            );
+            if (proceed) {
+                window.__workspaceDirty = false;
+                window.__gradeDirty = false;
+            }
+            return proceed;
+        };
+
+        window.handleGuardedSelectNavigate = function (el, mode) {
+            if (!window.confirmWorkspaceDiscard()) {
+                const prev = el.getAttribute('data-prev-value');
+                if (prev !== null) {
+                    el.value = prev;
+                } else if (typeof el.defaultValue !== 'undefined') {
+                    el.value = el.defaultValue;
+                }
+                return false;
+            }
+            el.setAttribute('data-prev-value', el.value);
+            if (mode === 'href' && el.value) {
+                window.location.href = el.value;
+            } else if (mode === 'submit' && el.form) {
+                el.form.submit();
+            }
+            return true;
+        };
+
+        window.addEventListener('beforeunload', function (e) {
+            if (window.__workspaceDirty) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!window.__workspaceDirty || e.defaultPrevented || e.button !== 0) return;
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            const link = e.target && typeof e.target.closest === 'function' ? e.target.closest('a[href]') : null;
+            if (!link) return;
+            const href = (link.getAttribute('href') || '').trim();
+            if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+            if (link.target === '_blank' || link.hasAttribute('download') || link.dataset.skipDirtyGuard === '1') return;
+
+            if (!window.confirmWorkspaceDiscard()) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true);
+
+        document.addEventListener('submit', function (e) {
+            if (!window.__workspaceDirty || e.defaultPrevented) return;
+            const form = e.target;
+            if (!form || form.target === '_blank' || form.dataset.skipDirtyGuard === '1') return;
+
+            if (!window.confirmWorkspaceDiscard()) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true);
+    </script>
     @stack('scripts')
 </body>
 </html>

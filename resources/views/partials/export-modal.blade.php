@@ -118,11 +118,11 @@
                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition">
                 <span>Buka / Cetak PDF</span>
             </a>
-            <a :href="buildUrl(@js($pdfRoute), true)"
+            <a :href="buildUrl(@js($pdfRoute), true)" data-skip-dirty-guard="1"
                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition">
                 <span>Unduh PDF</span>
             </a>
-            <a :href="buildUrl(@js($excelRoute), false)"
+            <a :href="buildUrl(@js($excelRoute), false)" data-skip-dirty-guard="1"
                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition">
                 <span>Download Excel (.xlsx)</span>
             </a>

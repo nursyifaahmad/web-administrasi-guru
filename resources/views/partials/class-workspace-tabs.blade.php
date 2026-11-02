@@ -37,8 +37,24 @@
             </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2" x-data="{ bundleModal: false }">
-            <button type="button" @click="bundleModal = true"
+        <div class="flex flex-wrap items-center gap-2"
+             x-data="{
+                bundleModal: false,
+                async openBundleModal() {
+                    if (window.__workspaceDirty && typeof window.__workspaceSaveFn === 'function') {
+                        const label = window.__workspaceDirtyLabel || 'data';
+                        const saveNow = window.confirm(
+                            'Ada perubahan ' + label + ' di halaman ini yang belum disimpan.\n\n' +
+                            'Klik \"OK\" untuk MENYIMPAN perubahan sekarang lalu membuka Cetak Bundel Lengkap, atau klik \"Batal\" untuk kembali ke tabel.'
+                        );
+                        if (!saveNow) return;
+                        const ok = await window.__workspaceSaveFn();
+                        if (!ok) return;
+                    }
+                    this.bundleModal = true;
+                }
+             }">
+            <button type="button" @click="openBundleModal()"
                     class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition shadow-2xs">
                 <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                 <span>Cetak Bundel Lengkap</span>
