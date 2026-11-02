@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -20,6 +21,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Gunakan path relatif (/build/...) agar aset CSS/JS selalu mengikuti domain & port aktif
+        // (baik via IP Tailscale :4010, LAN lokal :4010, maupun HTTPS Cloudflare Tunnel).
+        Vite::createAssetPathsUsing(fn (string $path) => '/'.ltrim($path, '/'));
+
         $appUrl = (string) config('app.url');
         $configuredHttpsHost = str_starts_with($appUrl, 'https://')
             ? parse_url($appUrl, PHP_URL_HOST)
