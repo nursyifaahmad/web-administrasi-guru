@@ -186,10 +186,10 @@ class TeachingClassController extends Controller
 
         $validated = $request->validate([
             'subject_id' => ['required', 'exists:subjects,id'],
-            'grade_level' => ['required', 'string', 'max:20'],
-            'class_name' => ['required', 'string', 'max:60'],
             'schedule_info' => ['nullable', 'string', 'max:180'],
-            'homeroom_teacher_name' => ['required', 'string', 'max:180'],
+            'grade_level' => ['nullable', 'string', 'max:20'],
+            'class_name' => ['nullable', 'string', 'max:60'],
+            'homeroom_teacher_name' => ['nullable', 'string', 'max:180'],
             'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
             'homeroom_teacher_signature_data' => ['nullable', 'string'],
             'homeroom_teacher_signature_file' => ['nullable', 'image', 'max:2048'],
@@ -205,8 +205,13 @@ class TeachingClassController extends Controller
             $wkSig = $validated['homeroom_teacher_signature_data'];
         }
 
-        if (! $request->user()->isAdmin() && $teachingClass->schoolClass) {
-            $sc = $teachingClass->schoolClass;
+        $sc = $teachingClass->schoolClass;
+        $gradeLevel = ! empty($validated['grade_level']) ? strtoupper(trim($validated['grade_level'])) : ($sc ? $sc->grade_level : $teachingClass->grade_level);
+        $className = ! empty($validated['class_name']) ? trim($validated['class_name']) : ($sc ? $sc->name : $teachingClass->class_name);
+        $wkName = ! empty($validated['homeroom_teacher_name']) ? trim($validated['homeroom_teacher_name']) : ($sc ? $sc->homeroom_teacher_name : $teachingClass->homeroom_teacher_name);
+        $wkNip = array_key_exists('homeroom_teacher_nip', $validated) ? $validated['homeroom_teacher_nip'] : ($sc ? $sc->homeroom_teacher_nip : $teachingClass->homeroom_teacher_nip);
+
+        if (! $request->user()->isAdmin() && $sc) {
             $teachingClass->update([
                 'subject_id' => (int) $validated['subject_id'],
                 'schedule_info' => $validated['schedule_info'] ?? null,
@@ -219,23 +224,23 @@ class TeachingClassController extends Controller
         } else {
             $teachingClass->update([
                 'subject_id' => (int) $validated['subject_id'],
-                'grade_level' => strtoupper(trim($validated['grade_level'])),
-                'class_name' => trim($validated['class_name']),
+                'grade_level' => $gradeLevel,
+                'class_name' => $className,
                 'schedule_info' => $validated['schedule_info'] ?? null,
-                'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
-                'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
+                'homeroom_teacher_name' => $wkName,
+                'homeroom_teacher_nip' => $wkNip,
                 'homeroom_teacher_signature' => $wkSig,
             ]);
 
-            if ($request->user()->isAdmin() && $teachingClass->schoolClass) {
-                $teachingClass->schoolClass->update([
-                    'grade_level' => strtoupper(trim($validated['grade_level'])),
-                    'name' => trim($validated['class_name']),
-                    'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
-                    'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
+            if ($request->user()->isAdmin() && $sc) {
+                $sc->update([
+                    'grade_level' => $gradeLevel,
+                    'name' => $className,
+                    'homeroom_teacher_name' => $wkName,
+                    'homeroom_teacher_nip' => $wkNip,
                     'homeroom_teacher_signature' => $wkSig,
                 ]);
-                $teachingClass->schoolClass->syncToTeachingClasses();
+                $sc->syncToTeachingClasses();
             }
         }
 

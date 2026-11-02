@@ -130,8 +130,8 @@
                         <a href="{{ route('grades.index', $cls) }}" class="py-1.5 rounded-lg bg-white border border-slate-200 text-amber-800 hover:bg-amber-600 hover:text-white hover:border-amber-600 transition">
                             Nilai
                         </a>
-                        <a href="{{ route('classes.students', $cls) }}" class="py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-800 hover:text-white transition">
-                            Murid
+                        <a href="{{ route('classes.settings', $cls) }}" class="py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-800 hover:text-white transition">
+                            Pengaturan
                         </a>
                     </div>
                 </div>

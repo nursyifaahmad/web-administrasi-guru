@@ -83,7 +83,8 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::put('/kelas/{teachingClass}', [TeachingClassController::class, 'update'])->name('classes.update');
     Route::delete('/kelas/{teachingClass}', [TeachingClassController::class, 'destroy'])->name('classes.destroy');
 
-    // Manajemen Daftar Murid & Wali Kelas per Kelas Administrasi
+    // Pengaturan Buku Kelas & Identitas
+    Route::get('/kelas/{teachingClass}/pengaturan', [TeachingClassController::class, 'students'])->name('classes.settings');
     Route::get('/kelas/{teachingClass}/murid', [TeachingClassController::class, 'students'])->name('classes.students');
     Route::post('/kelas/{teachingClass}/murid', [TeachingClassController::class, 'storeStudent'])->name('classes.students.store');
     Route::put('/kelas/{teachingClass}/murid/{student}', [TeachingClassController::class, 'updateStudent'])->name('classes.students.update');
