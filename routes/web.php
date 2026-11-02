@@ -12,6 +12,7 @@ use App\Http\Controllers\DailyJournalController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\GradebookController;
 use App\Http\Controllers\TeachingClassController;
+use App\Http\Controllers\TeachingScheduleController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -84,6 +85,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     });
 
     // Ruang Kerja Kelas Administrasi (Guru 1..15+ Kelas & Kontrol Admin)
+    Route::get('/jadwal-mengajar', [TeachingScheduleController::class, 'index'])->name('schedules.index');
     Route::get('/kelas', [TeachingClassController::class, 'index'])->name('classes.index');
     Route::post('/kelas', [TeachingClassController::class, 'store'])->name('classes.store');
     Route::put('/kelas/{teachingClass}', [TeachingClassController::class, 'update'])->name('classes.update');

@@ -126,6 +126,13 @@
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Daftar Kelas Administrasi</span>
                         </a>
+                        <a href="{{ route('schedules.index') }}"
+                           title="Jadwal Mengajar Mingguan (Senin–Sabtu)"
+                           :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
+                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('schedules.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Jadwal Mengajar</span>
+                        </a>
                     </div>
 
                     @if($quickSwitcherClasses->isNotEmpty())
