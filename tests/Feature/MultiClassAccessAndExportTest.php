@@ -241,6 +241,22 @@ class MultiClassAccessAndExportTest extends TestCase
         ]);
 
         // 2. Admin menambahkan 3 murid ke Master Rombel VII-A
+        $tmpDir = sys_get_temp_dir();
+        $tplRes = $this->actingAs($admin)->get(route('admin.classes.students.template', $schoolClass));
+        $tplRes->assertOk();
+
+        ob_start();
+        $tplRes->sendContent();
+        $binaryTpl = ob_get_clean();
+
+        $verifyTpl = $tmpDir . DIRECTORY_SEPARATOR . 'ver_tpl_' . uniqid() . '.xlsx';
+        file_put_contents($verifyTpl, $binaryTpl);
+        $loadedTpl = IOFactory::load($verifyTpl);
+        $tplRows = $loadedTpl->getActiveSheet()->toArray();
+        @unlink($verifyTpl);
+
+        $this->assertSame(['No', 'NIS / NISN', 'Nama Lengkap', 'Nama Panggilan', 'Jenis Kelamin (L/P)'], $tplRows[0]);
+
         $this->actingAs($admin)->post(route('admin.classes.students.store', $schoolClass), [
             'order_number' => 1,
             'nis_nisn' => '1001',

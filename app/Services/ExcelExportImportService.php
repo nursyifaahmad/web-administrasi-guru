@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Attendance;
 use App\Models\ClassStudent;
 use App\Models\DailyJournal;
+use App\Models\SchoolClass;
 use App\Models\SchoolSetting;
 use App\Models\StudentGrade;
 use App\Models\TeachingClass;
@@ -1090,7 +1091,7 @@ class ExcelExportImportService
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Template Murid ' . $schoolClass->name);
+        $sheet->setTitle('Template Daftar Murid');
 
         $headers = ['No', 'NIS / NISN', 'Nama Lengkap', 'Nama Panggilan', 'Jenis Kelamin (L/P)'];
         foreach ($headers as $i => $h) {
