@@ -15,8 +15,10 @@
         <thead>
             <tr>
                 <th rowspan="2" style="width: 22px;">No</th>
-                <th rowspan="2" style="width: 145px;">Nama Lengkap</th>
-                <th rowspan="2" style="width: 62px;">Nama Panggilan</th>
+                <th rowspan="2" style="width: {{ ($options['show_nickname'] ?? true) ? '145px' : '207px' }};">Nama Lengkap</th>
+                @if($options['show_nickname'] ?? true)
+                    <th rowspan="2" style="width: 62px;">Nama Panggilan</th>
+                @endif
                 <th rowspan="2" style="width: 24px;">L/P</th>
                 <th colspan="{{ $matrix['days_in_month'] }}">Bulan {{ $monthLabel }} (Tanggal)</th>
                 <th rowspan="2" style="width: 34px;">Jml Hadir</th>
@@ -36,7 +38,9 @@
                 <tr>
                     <td class="text-center">{{ $row['no'] }}</td>
                     <td>{{ $row['student']->full_name }}</td>
-                    <td class="text-center">{{ $row['student']->nickname ?: '-' }}</td>
+                    @if($options['show_nickname'] ?? true)
+                        <td class="text-center">{{ $row['student']->nickname ?: '-' }}</td>
+                    @endif
                     <td class="text-center">{{ $row['student']->gender }}</td>
                     @for($d = 1; $d <= $matrix['days_in_month']; $d++)
                         @php $st = $row['days'][$d] ?? ''; @endphp
@@ -51,7 +55,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="{{ 8 + $matrix['days_in_month'] }}" class="text-center" style="padding: 14px;">Belum ada daftar peserta didik di kelas ini.</td>
+                    <td colspan="{{ (($options['show_nickname'] ?? true) ? 8 : 7) + $matrix['days_in_month'] }}" class="text-center" style="padding: 14px;">Belum ada daftar peserta didik di kelas ini.</td>
                 </tr>
             @endforelse
         </tbody>

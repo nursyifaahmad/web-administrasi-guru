@@ -531,7 +531,9 @@ class ExcelExportImportService
 
         $matrix = $this->attendanceService->buildMonthlyMatrix($teachingClass, $year, $month);
         $daysInMonth = $matrix['days_in_month'];
-        $totalCols = 4 + $daysInMonth + 4; // No, Nama Lengkap, Panggilan, L/P, 1..N, Jml Hadir, S, I, A
+        $showNickname = $options['show_nickname'] ?? ($teachingClass->show_nickname_column ?? true);
+        $fixedLeftCols = $showNickname ? 4 : 3;
+        $totalCols = $fixedLeftCols + $daysInMonth + 4; // No, Nama Lengkap, [Panggilan], L/P, 1..N, Jml Hadir, S, I, A
 
         $row = $this->renderOfficialHeader(
             $sheet,
@@ -546,18 +548,21 @@ class ExcelExportImportService
         $h1 = $row;
         $h2 = $row + 1;
 
-        $fixedLeft = [1 => 'No', 2 => 'Nama Lengkap', 3 => 'Nama Panggilan', 4 => 'Jenis Kelamin'];
+        $fixedLeft = $showNickname
+            ? [1 => 'No', 2 => 'Nama Lengkap', 3 => 'Nama Panggilan', 4 => 'Jenis Kelamin']
+            : [1 => 'No', 2 => 'Nama Lengkap', 3 => 'Jenis Kelamin'];
+
         foreach ($fixedLeft as $c => $lbl) {
             $sheet->mergeCells($this->range($c, $h1, $c, $h2));
             $sheet->setCellValue($this->cell($c, $h1), $lbl);
         }
 
-        $dayStartCol = 5;
-        $dayEndCol = 4 + $daysInMonth;
+        $dayStartCol = $fixedLeftCols + 1;
+        $dayEndCol = $fixedLeftCols + $daysInMonth;
         $sheet->mergeCells($this->range($dayStartCol, $h1, $dayEndCol, $h1));
         $sheet->setCellValue($this->cell($dayStartCol, $h1), 'Bulan ' . $monthLabel . ' (Tanggal)');
         for ($d = 1; $d <= $daysInMonth; $d++) {
-            $c = 4 + $d;
+            $c = $fixedLeftCols + $d;
             $sheet->setCellValue($this->cell($c, $h2), $d);
             $sheet->getColumnDimension($this->col($c))->setWidth(3.6);
         }
@@ -579,9 +584,13 @@ class ExcelExportImportService
         $this->styleTableHeader($sheet, $this->range(1, $h1, $totalCols, $h2));
 
         $sheet->getColumnDimension('A')->setWidth(5);
-        $sheet->getColumnDimension('B')->setWidth(28);
-        $sheet->getColumnDimension('C')->setWidth(14);
-        $sheet->getColumnDimension('D')->setWidth(10);
+        $sheet->getColumnDimension('B')->setWidth($showNickname ? 28 : 34);
+        if ($showNickname) {
+            $sheet->getColumnDimension('C')->setWidth(14);
+            $sheet->getColumnDimension('D')->setWidth(10);
+        } else {
+            $sheet->getColumnDimension('C')->setWidth(10);
+        }
         $sheet->getColumnDimension($this->col($hadirCol))->setWidth(9);
         $sheet->getColumnDimension($this->col($sCol))->setWidth(5.5);
         $sheet->getColumnDimension($this->col($iCol))->setWidth(5.5);
@@ -593,12 +602,16 @@ class ExcelExportImportService
         foreach ($matrix['rows'] as $r) {
             $sheet->setCellValue($this->cell(1, $curr), $r['no']);
             $sheet->setCellValue($this->cell(2, $curr), $r['student']->full_name);
-            $sheet->setCellValue($this->cell(3, $curr), $r['student']->nickname ?: '-');
-            $sheet->setCellValue($this->cell(4, $curr), $r['student']->gender);
+            if ($showNickname) {
+                $sheet->setCellValue($this->cell(3, $curr), $r['student']->nickname ?: '-');
+                $sheet->setCellValue($this->cell(4, $curr), $r['student']->gender);
+            } else {
+                $sheet->setCellValue($this->cell(3, $curr), $r['student']->gender);
+            }
 
             for ($d = 1; $d <= $daysInMonth; $d++) {
                 $st = $r['days'][$d] ?? '';
-                $c = 4 + $d;
+                $c = $fixedLeftCols + $d;
                 $sheet->setCellValue($this->cell($c, $curr), $st);
                 if ($st === 'd') {
                     $sheet->getStyle($this->cell($c, $curr))->getFill()
@@ -642,7 +655,8 @@ class ExcelExportImportService
         $this->applyPageSetup($sheet, $options);
 
         $recap = $this->attendanceService->buildSemesterRecap($teachingClass);
-        $totalCols = 12;
+        $showNickname = $options['show_nickname'] ?? ($teachingClass->show_nickname_column ?? true);
+        $totalCols = $showNickname ? 12 : 11;
 
         $row = $this->renderOfficialHeader(
             $sheet,
@@ -657,26 +671,37 @@ class ExcelExportImportService
         $h1 = $row;
         $h2 = $row + 1;
 
-        foreach ([1 => 'No', 2 => 'Nama Lengkap', 3 => 'Nama Panggilan', 4 => 'L/P', 12 => '% Kehadiran'] as $c => $lbl) {
+        $fixedHeaders = $showNickname
+            ? [1 => 'No', 2 => 'Nama Lengkap', 3 => 'Nama Panggilan', 4 => 'L/P', 12 => '% Kehadiran']
+            : [1 => 'No', 2 => 'Nama Lengkap', 3 => 'L/P', 11 => '% Kehadiran'];
+
+        foreach ($fixedHeaders as $c => $lbl) {
             $sheet->mergeCells($this->range($c, $h1, $c, $h2));
             $sheet->setCellValue($this->cell($c, $h1), $lbl);
         }
-        $sheet->mergeCells($this->range(5, $h1, 7, $h1));
-        $sheet->setCellValue($this->cell(5, $h1), 'Rincian Kehadiran');
-        $sheet->setCellValue($this->cell(5, $h2), 'Hadir (.)');
-        $sheet->setCellValue($this->cell(6, $h2), 'Dispen (d)');
-        $sheet->setCellValue($this->cell(7, $h2), 'Jml Hadir');
 
-        $sheet->mergeCells($this->range(8, $h1, 11, $h1));
-        $sheet->setCellValue($this->cell(8, $h1), 'Jumlah Ketidakhadiran');
-        $sheet->setCellValue($this->cell(8, $h2), 'Sakit');
-        $sheet->setCellValue($this->cell(9, $h2), 'Izin');
-        $sheet->setCellValue($this->cell(10, $h2), 'Alfa');
-        $sheet->setCellValue($this->cell(11, $h2), 'Total');
+        $rincianStart = $showNickname ? 5 : 4;
+        $rincianEnd = $showNickname ? 7 : 6;
+        $sheet->mergeCells($this->range($rincianStart, $h1, $rincianEnd, $h1));
+        $sheet->setCellValue($this->cell($rincianStart, $h1), 'Rincian Kehadiran');
+        $sheet->setCellValue($this->cell($rincianStart, $h2), 'Hadir (.)');
+        $sheet->setCellValue($this->cell($rincianStart + 1, $h2), 'Dispen (d)');
+        $sheet->setCellValue($this->cell($rincianStart + 2, $h2), 'Jml Hadir');
+
+        $abStart = $showNickname ? 8 : 7;
+        $abEnd = $showNickname ? 11 : 10;
+        $sheet->mergeCells($this->range($abStart, $h1, $abEnd, $h1));
+        $sheet->setCellValue($this->cell($abStart, $h1), 'Jumlah Ketidakhadiran');
+        $sheet->setCellValue($this->cell($abStart, $h2), 'Sakit');
+        $sheet->setCellValue($this->cell($abStart + 1, $h2), 'Izin');
+        $sheet->setCellValue($this->cell($abStart + 2, $h2), 'Alfa');
+        $sheet->setCellValue($this->cell($abStart + 3, $h2), 'Total');
 
         $this->styleTableHeader($sheet, $this->range(1, $h1, $totalCols, $h2));
 
-        $widths = [1 => 5, 2 => 28, 3 => 15, 4 => 7, 5 => 10, 6 => 11, 7 => 11, 8 => 9, 9 => 9, 10 => 9, 11 => 10, 12 => 13];
+        $widths = $showNickname
+            ? [1 => 5, 2 => 28, 3 => 15, 4 => 7, 5 => 10, 6 => 11, 7 => 11, 8 => 9, 9 => 9, 10 => 9, 11 => 10, 12 => 13]
+            : [1 => 5, 2 => 34, 3 => 7, 4 => 10, 5 => 11, 6 => 11, 7 => 9, 8 => 9, 9 => 9, 10 => 10, 11 => 13];
         foreach ($widths as $c => $w) {
             $sheet->getColumnDimension($this->col($c))->setWidth($w);
         }
@@ -686,16 +711,22 @@ class ExcelExportImportService
         foreach ($recap['rows'] as $r) {
             $sheet->setCellValue($this->cell(1, $curr), $r['no']);
             $sheet->setCellValue($this->cell(2, $curr), $r['student']->full_name);
-            $sheet->setCellValue($this->cell(3, $curr), $r['student']->nickname ?: '-');
-            $sheet->setCellValue($this->cell(4, $curr), $r['student']->gender);
-            $sheet->setCellValue($this->cell(5, $curr), $r['dot']);
-            $sheet->setCellValue($this->cell(6, $curr), $r['dispen']);
-            $sheet->setCellValue($this->cell(7, $curr), $r['present']);
-            $sheet->setCellValue($this->cell(8, $curr), $r['sakit']);
-            $sheet->setCellValue($this->cell(9, $curr), $r['izin']);
-            $sheet->setCellValue($this->cell(10, $curr), $r['alfa']);
-            $sheet->setCellValue($this->cell(11, $curr), $r['absent']);
-            $sheet->setCellValue($this->cell(12, $curr), $r['percentage'] . '%');
+            if ($showNickname) {
+                $sheet->setCellValue($this->cell(3, $curr), $r['student']->nickname ?: '-');
+                $sheet->setCellValue($this->cell(4, $curr), $r['student']->gender);
+                $offset = 0;
+            } else {
+                $sheet->setCellValue($this->cell(3, $curr), $r['student']->gender);
+                $offset = -1;
+            }
+            $sheet->setCellValue($this->cell(5 + $offset, $curr), $r['dot']);
+            $sheet->setCellValue($this->cell(6 + $offset, $curr), $r['dispen']);
+            $sheet->setCellValue($this->cell(7 + $offset, $curr), $r['present']);
+            $sheet->setCellValue($this->cell(8 + $offset, $curr), $r['sakit']);
+            $sheet->setCellValue($this->cell(9 + $offset, $curr), $r['izin']);
+            $sheet->setCellValue($this->cell(10 + $offset, $curr), $r['alfa']);
+            $sheet->setCellValue($this->cell(11 + $offset, $curr), $r['absent']);
+            $sheet->setCellValue($this->cell(12 + $offset, $curr), $r['percentage'] . '%');
             $curr++;
         }
 
@@ -907,7 +938,7 @@ class ExcelExportImportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->pdfService->normalizeOptions($input, $school, 'landscape');
+        $options = $this->pdfService->normalizeOptions($input, $school, 'landscape', $teachingClass);
 
         $spreadsheet = new Spreadsheet();
         $this->populateJournalSheet($spreadsheet->getActiveSheet(), $teachingClass, $school, $options, $input);
@@ -921,7 +952,7 @@ class ExcelExportImportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->pdfService->normalizeOptions($input, $school, 'landscape');
+        $options = $this->pdfService->normalizeOptions($input, $school, 'landscape', $teachingClass);
 
         $spreadsheet = new Spreadsheet();
         $this->populateAttendanceMonthlySheet($spreadsheet->getActiveSheet(), $teachingClass, $school, $year, $month, $options);
@@ -936,7 +967,7 @@ class ExcelExportImportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->pdfService->normalizeOptions($input, $school, 'portrait');
+        $options = $this->pdfService->normalizeOptions($input, $school, 'portrait', $teachingClass);
 
         $spreadsheet = new Spreadsheet();
         $this->populateAttendanceRecapSheet($spreadsheet->getActiveSheet(), $teachingClass, $school, $options);
@@ -950,7 +981,7 @@ class ExcelExportImportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->pdfService->normalizeOptions($input, $school, 'landscape');
+        $options = $this->pdfService->normalizeOptions($input, $school, 'landscape', $teachingClass);
 
         $spreadsheet = new Spreadsheet();
         $this->populateGradebookSheet($spreadsheet->getActiveSheet(), $teachingClass, $school, $options);
@@ -964,7 +995,7 @@ class ExcelExportImportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->pdfService->normalizeOptions($input, $school, 'landscape');
+        $options = $this->pdfService->normalizeOptions($input, $school, 'landscape', $teachingClass);
 
         $spreadsheet = new Spreadsheet();
         $this->populateJournalSheet($spreadsheet->getActiveSheet(), $teachingClass, $school, $options, $input);

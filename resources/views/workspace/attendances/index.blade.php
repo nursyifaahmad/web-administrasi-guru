@@ -62,9 +62,20 @@
                         class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
                     <span x-text="saving ? 'Menyimpan...' : 'Simpan Absensi'"></span>
                 </button>
+                <button type="button" @click="nicknameModal = true"
+                        class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
+                        title="Atur nama panggilan peserta didik kelas ini">
+                    ✏️ Atur Panggilan
+                </button>
                 <button type="button" @click="importModal = true"
                         class="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold hover:bg-indigo-100">
                     Import Excel
+                </button>
+            @else
+                <button type="button" @click="nicknameModal = true"
+                        class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
+                        title="Atur nama panggilan peserta didik kelas ini">
+                    ✏️ Atur Panggilan
                 </button>
             @endif
             <button type="button" @click="openExportModal()"
@@ -130,7 +141,9 @@
                         <tr class="bg-slate-100 text-slate-800 text-[11px] uppercase border-b border-slate-300">
                             <th rowspan="2" class="sticky left-0 z-20 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10">No</th>
                             <th rowspan="2" class="sticky left-9 sm:left-10 z-20 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[185px]">Nama Lengkap</th>
-                            <th rowspan="2" class="px-2.5 py-2.5 text-center border-r border-slate-300 min-w-[90px]">Nama Panggilan</th>
+                            @if($teachingClass->show_nickname_column)
+                                <th rowspan="2" class="px-2.5 py-2.5 text-center border-r border-slate-300 min-w-[90px]">Nama Panggilan</th>
+                            @endif
                             <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 w-10">L/P</th>
                             <th :colspan="daysInMonth" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-slate-200/70 font-extrabold">
                                 Bulan {{ $monthName }} {{ $year }} — Klik Angka Tanggal untuk Isi Cepat
@@ -173,7 +186,7 @@
                     <tbody class="divide-y divide-slate-200">
                         <template x-if="students.length === 0">
                             <tr>
-                                <td :colspan="8 + daysInMonth" class="px-5 py-10 text-center text-slate-500">
+                                <td :colspan="({{ $teachingClass->show_nickname_column ? 8 : 7 }}) + daysInMonth" class="px-5 py-10 text-center text-slate-500">
                                     Belum ada peserta didik di kelas ini. Tambahkan murid pada tab <strong>Peserta Didik & Wali Kelas</strong> terlebih dahulu.
                                 </td>
                             </tr>
@@ -182,7 +195,9 @@
                             <tr class="hover:bg-slate-50/80">
                                 <td class="sticky left-0 z-10 bg-white px-2 py-1.5 text-center font-bold text-slate-600 border-r border-slate-200" x-text="st.no"></td>
                                 <td class="sticky left-9 sm:left-10 z-10 bg-white px-2.5 sm:px-3 py-1.5 font-bold text-slate-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[210px]" x-text="st.full_name"></td>
-                                <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200 truncate" x-text="st.nickname"></td>
+                                @if($teachingClass->show_nickname_column)
+                                    <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200 truncate" x-text="st.nickname"></td>
+                                @endif
                                 <td class="px-2 py-1.5 text-center font-semibold text-slate-700 border-r border-slate-200" x-text="st.gender"></td>
 
                                 <template x-for="d in daysArray" :key="st.id + '-' + d">
@@ -328,7 +343,9 @@
                         <tr>
                             <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200 w-12">No</th>
                             <th rowspan="2" class="px-4 py-2.5 border-r border-slate-200">Nama Lengkap</th>
-                            <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200">Nama Panggilan</th>
+                            @if($teachingClass->show_nickname_column)
+                                <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200">Nama Panggilan</th>
+                            @endif
                             <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200 w-14">L/P</th>
                             <th colspan="3" class="px-3 py-2 text-center border-b border-r border-slate-200 bg-emerald-50 text-emerald-900">Kehadiran</th>
                             <th colspan="4" class="px-3 py-2 text-center border-b border-r border-slate-200 bg-rose-50 text-rose-900">Ketidakhadiran</th>
@@ -349,7 +366,9 @@
                             <tr class="hover:bg-slate-50/70">
                                 <td class="px-3 py-2.5 text-center font-bold border-r border-slate-100">{{ $r['no'] }}</td>
                                 <td class="px-4 py-2.5 font-bold text-slate-900 border-r border-slate-100">{{ $r['student']->full_name }}</td>
-                                <td class="px-3 py-2.5 text-center text-slate-600 border-r border-slate-100">{{ $r['student']->nickname ?: '-' }}</td>
+                                @if($teachingClass->show_nickname_column)
+                                    <td class="px-3 py-2.5 text-center text-slate-600 border-r border-slate-100">{{ $r['student']->nickname ?: '-' }}</td>
+                                @endif
                                 <td class="px-3 py-2.5 text-center font-semibold border-r border-slate-100">{{ $r['student']->gender }}</td>
                                 <td class="px-3 py-2.5 text-center border-r border-slate-100">{{ $r['dot'] }}</td>
                                 <td class="px-3 py-2.5 text-center font-semibold text-sky-700 border-r border-slate-100">{{ $r['dispen'] }}</td>
@@ -361,7 +380,7 @@
                                 <td class="px-3 py-2.5 text-center font-extrabold text-slate-900">{{ number_format($r['percentage'], 1) }}%</td>
                             </tr>
                         @empty
-                            <tr><td colspan="12" class="px-5 py-10 text-center text-slate-500">Belum ada data peserta didik.</td></tr>
+                            <tr><td colspan="{{ $teachingClass->show_nickname_column ? 12 : 11 }}" class="px-5 py-10 text-center text-slate-500">Belum ada data peserta didik.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -415,6 +434,11 @@
         'defaultOrientation' => $tab === 'recap' ? 'portrait' : 'landscape',
         'extraParams' => ['month' => $month, 'year' => $year],
     ])
+
+    @include('partials.nickname-modal', [
+        'teachingClass' => $teachingClass,
+        'students' => $teachingClass->activeStudents()->get(),
+    ])
 </div>
 
 @push('scripts')
@@ -437,6 +461,7 @@ function attendanceSpreadsheet(cfg) {
         savedMessage: '',
         importModal: false,
         exportModal: false,
+        nicknameModal: false,
 
         init() {
             this.savedSnapshot = this.cloneCells(this.cells);

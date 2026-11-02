@@ -11,6 +11,7 @@
             show_headmaster: false,
             show_digital_signature: true,
             show_journal_paraf: true,
+            show_nickname: @js($teachingClass->show_nickname_column ?? true),
             month: @js($extraParams['month'] ?? ''),
             year: @js($extraParams['year'] ?? now()->year),
             buildUrl(base, downloadPdf = false) {
@@ -23,6 +24,7 @@
                 params.set('show_headmaster', this.show_headmaster ? '1' : '0');
                 params.set('show_digital_signature', this.show_digital_signature ? '1' : '0');
                 params.set('show_journal_paraf', this.show_journal_paraf ? '1' : '0');
+                params.set('show_nickname', this.show_nickname ? '1' : '0');
                 if (this.month) params.set('month', this.month);
                 if (this.year) params.set('year', this.year);
                 if (downloadPdf) params.set('download', '1');
@@ -98,6 +100,12 @@
                     <input type="checkbox" x-model="show_digital_signature" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
                     <span class="text-slate-700 font-medium">Tampilkan Gambar Tanda Tangan Digital (bila tersedia)</span>
                 </label>
+                @if(isset($teachingClass))
+                <label class="flex items-center gap-2.5 cursor-pointer">
+                    <input type="checkbox" x-model="show_nickname" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                    <span class="text-slate-700 font-medium">Sertakan Kolom Nama Panggilan Siswa</span>
+                </label>
+                @endif
                 @if(!empty($isJournalExport))
                 <label class="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" x-model="show_journal_paraf" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">

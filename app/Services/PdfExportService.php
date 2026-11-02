@@ -17,7 +17,7 @@ class PdfExportService
         protected GradeCalculationService $gradeService
     ) {}
 
-    public function normalizeOptions(array $input, SchoolSetting $school, string $defaultOrientation = 'landscape'): array
+    public function normalizeOptions(array $input, SchoolSetting $school, string $defaultOrientation = 'landscape', ?TeachingClass $teachingClass = null): array
     {
         $city = trim((string) ($input['city'] ?? $school->default_city ?? 'Lemahabang'));
         if ($city === '') {
@@ -33,6 +33,8 @@ class PdfExportService
             ? 'portrait'
             : 'landscape';
 
+        $showNicknameDefault = $teachingClass ? (bool) $teachingClass->show_nickname_column : true;
+
         return [
             'city' => $city,
             'print_date' => $printDate,
@@ -43,6 +45,7 @@ class PdfExportService
             'show_headmaster' => $this->boolOption($input, 'show_headmaster', false),
             'show_digital_signature' => $this->boolOption($input, 'show_digital_signature', true),
             'show_journal_paraf' => $this->boolOption($input, 'show_journal_paraf', true),
+            'show_nickname' => $this->boolOption($input, 'show_nickname', $showNicknameDefault),
         ];
     }
 
@@ -70,7 +73,7 @@ class PdfExportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->normalizeOptions($input, $school, 'landscape');
+        $options = $this->normalizeOptions($input, $school, 'landscape', $teachingClass);
 
         $query = DailyJournal::query()
             ->where('teaching_class_id', $teachingClass->id)
@@ -106,7 +109,7 @@ class PdfExportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->normalizeOptions($input, $school, 'landscape');
+        $options = $this->normalizeOptions($input, $school, 'landscape', $teachingClass);
         $matrix = $this->attendanceService->buildMonthlyMatrix($teachingClass, $year, $month);
         $monthLabel = IndonesianDate::monthName($month) . ' ' . $year;
 
@@ -125,7 +128,7 @@ class PdfExportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->normalizeOptions($input, $school, 'portrait');
+        $options = $this->normalizeOptions($input, $school, 'portrait', $teachingClass);
         $recap = $this->attendanceService->buildSemesterRecap($teachingClass);
 
         $pdf = Pdf::loadView('exports.pdf.attendance-recap', [
@@ -142,7 +145,7 @@ class PdfExportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->normalizeOptions($input, $school, 'landscape');
+        $options = $this->normalizeOptions($input, $school, 'landscape', $teachingClass);
         $gradebook = $this->gradeService->buildGradebookData($teachingClass, $this->attendanceService);
 
         $pdf = Pdf::loadView('exports.pdf.gradebook', [
@@ -159,7 +162,7 @@ class PdfExportService
     {
         $teachingClass->loadMissing(['teacher', 'subject.kktps', 'academicYear']);
         $school = SchoolSetting::current();
-        $options = $this->normalizeOptions($input, $school, 'landscape');
+        $options = $this->normalizeOptions($input, $school, 'landscape', $teachingClass);
 
         $journals = DailyJournal::query()
             ->where('teaching_class_id', $teachingClass->id)

@@ -120,8 +120,10 @@
         <thead>
             <tr>
                 <th rowspan="2" style="width: 22px;">No</th>
-                <th rowspan="2" style="width: 145px;">Nama Lengkap</th>
-                <th rowspan="2" style="width: 60px;">Panggilan</th>
+                <th rowspan="2" style="width: {{ ($options['show_nickname'] ?? true) ? '145px' : '205px' }};">Nama Lengkap</th>
+                @if($options['show_nickname'] ?? true)
+                    <th rowspan="2" style="width: 60px;">Panggilan</th>
+                @endif
                 <th rowspan="2" style="width: 24px;">L/P</th>
                 <th colspan="{{ $matrix['days_in_month'] }}">Tanggal ({{ $monthLabel }})</th>
                 <th rowspan="2" style="width: 34px;">Hadir</th>
@@ -141,7 +143,9 @@
                 <tr>
                     <td class="text-center">{{ $row['no'] }}</td>
                     <td>{{ $row['student']->full_name }}</td>
-                    <td class="text-center">{{ $row['student']->nickname ?: '-' }}</td>
+                    @if($options['show_nickname'] ?? true)
+                        <td class="text-center">{{ $row['student']->nickname ?: '-' }}</td>
+                    @endif
                     <td class="text-center">{{ $row['student']->gender }}</td>
                     @for($d = 1; $d <= $matrix['days_in_month']; $d++)
                         <td class="text-center">{{ $row['days'][$d] ?? '' }}</td>
@@ -152,7 +156,7 @@
                     <td class="text-center">{{ $row['alfa'] }}</td>
                 </tr>
             @empty
-                <tr><td colspan="{{ 8 + $matrix['days_in_month'] }}" class="text-center">Belum ada peserta didik.</td></tr>
+                <tr><td colspan="{{ (($options['show_nickname'] ?? true) ? 8 : 7) + $matrix['days_in_month'] }}" class="text-center">Belum ada peserta didik.</td></tr>
             @endforelse
         </tbody>
     </table>

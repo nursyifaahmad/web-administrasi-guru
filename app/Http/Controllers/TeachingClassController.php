@@ -187,6 +187,7 @@ class TeachingClassController extends Controller
         $validated = $request->validate([
             'subject_id' => ['required', 'exists:subjects,id'],
             'schedule_info' => ['nullable', 'string', 'max:180'],
+            'show_nickname_column' => ['nullable', 'boolean'],
             'grade_level' => ['nullable', 'string', 'max:20'],
             'class_name' => ['nullable', 'string', 'max:60'],
             'homeroom_teacher_name' => ['nullable', 'string', 'max:180'],
@@ -205,6 +206,7 @@ class TeachingClassController extends Controller
             $wkSig = $validated['homeroom_teacher_signature_data'];
         }
 
+        $showNickname = $request->boolean('show_nickname_column');
         $sc = $teachingClass->schoolClass;
         $gradeLevel = ! empty($validated['grade_level']) ? strtoupper(trim($validated['grade_level'])) : ($sc ? $sc->grade_level : $teachingClass->grade_level);
         $className = ! empty($validated['class_name']) ? trim($validated['class_name']) : ($sc ? $sc->name : $teachingClass->class_name);
@@ -215,6 +217,7 @@ class TeachingClassController extends Controller
             $teachingClass->update([
                 'subject_id' => (int) $validated['subject_id'],
                 'schedule_info' => $validated['schedule_info'] ?? null,
+                'show_nickname_column' => $showNickname,
                 'grade_level' => $sc->grade_level,
                 'class_name' => $sc->name,
                 'homeroom_teacher_name' => $sc->homeroom_teacher_name,
@@ -227,6 +230,7 @@ class TeachingClassController extends Controller
                 'grade_level' => $gradeLevel,
                 'class_name' => $className,
                 'schedule_info' => $validated['schedule_info'] ?? null,
+                'show_nickname_column' => $showNickname,
                 'homeroom_teacher_name' => $wkName,
                 'homeroom_teacher_nip' => $wkNip,
                 'homeroom_teacher_signature' => $wkSig,
@@ -283,6 +287,30 @@ class TeachingClassController extends Controller
             'gradeLevels' => $school->gradeLevels(),
             'otherClasses' => $otherClassesQuery->get(),
         ]);
+    }
+
+    public function updateNicknames(Request $request, TeachingClass $teachingClass): RedirectResponse
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        $validated = $request->validate([
+            'nicknames' => ['required', 'array'],
+            'nicknames.*' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $studentIds = $teachingClass->activeStudents()->pluck('id');
+
+        DB::transaction(function () use ($validated, $studentIds) {
+            foreach ($validated['nicknames'] as $studentId => $nickname) {
+                if ($studentIds->contains((int) $studentId)) {
+                    ClassStudent::where('id', $studentId)->update([
+                        'nickname' => ! empty($nickname) ? trim($nickname) : null,
+                    ]);
+                }
+            }
+        });
+
+        return back()->with('success', 'Nama panggilan seluruh peserta didik berhasil disimpan.');
     }
 
     public function storeStudent(Request $request, TeachingClass $teachingClass, GradeCalculationService $gradeService): RedirectResponse

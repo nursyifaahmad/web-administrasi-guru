@@ -20,6 +20,7 @@ class TeachingClass extends Model
         'homeroom_teacher_name',
         'homeroom_teacher_nip',
         'homeroom_teacher_signature',
+        'show_nickname_column',
         'is_archived',
     ];
 
@@ -59,6 +60,7 @@ class TeachingClass extends Model
     protected function casts(): array
     {
         return [
+            'show_nickname_column' => 'boolean',
             'is_archived' => 'boolean',
         ];
     }
