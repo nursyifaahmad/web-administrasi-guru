@@ -137,13 +137,18 @@
         text-align: center;
         padding: 2px 8px;
     }
-    .sig-space {
-        height: 54px;
-        vertical-align: middle;
+    .sig-space-empty {
+        height: 40px;
+    }
+    .sig-space-filled {
+        line-height: 0;
     }
     .sig-img {
-        max-height: 50px;
-        max-width: 140px;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        position: relative;
+        z-index: 10;
     }
     .sig-name {
         font-weight: bold;

@@ -48,10 +48,11 @@
                     <td class="text-center" style="height: 32px;">
                         @if($options['show_journal_paraf'] ?? true)
                             @php
-                                $parafImg = $journal->signature_data ?: $teachingClass->teacher?->signature_data;
+                                $parafRaw = $journal->signature_data ?: $teachingClass->teacher?->signature_data;
+                                $parafNorm = \App\Support\SignatureImageHelper::normalizeInk($parafRaw);
                             @endphp
-                            @if(!empty($parafImg))
-                                <img src="{{ $parafImg }}" style="max-height: 28px; max-width: 65px;" alt="Paraf">
+                            @if($parafNorm)
+                                <img src="{{ $parafNorm['data_uri'] }}" style="max-height: 38px; max-width: 74px; margin-top: -4px; margin-bottom: -4px; position: relative; z-index: 5;" alt="Paraf">
                             @endif
                         @endif
                     </td>

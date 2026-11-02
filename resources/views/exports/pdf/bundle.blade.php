@@ -85,9 +85,12 @@
                     <td>{{ $journal->notes }}</td>
                     <td class="text-center">
                         @if($options['show_journal_paraf'] ?? true)
-                            @php $p = $journal->signature_data ?: $teachingClass->teacher?->signature_data; @endphp
-                            @if(!empty($p))
-                                <img src="{{ $p }}" style="max-height: 25px; max-width: 60px;" alt="Paraf">
+                            @php
+                                $pRaw = $journal->signature_data ?: $teachingClass->teacher?->signature_data;
+                                $pNorm = \App\Support\SignatureImageHelper::normalizeInk($pRaw);
+                            @endphp
+                            @if($pNorm)
+                                <img src="{{ $pNorm['data_uri'] }}" style="max-height: 36px; max-width: 72px; margin-top: -4px; margin-bottom: -4px; position: relative; z-index: 5;" alt="Paraf">
                             @endif
                         @endif
                     </td>

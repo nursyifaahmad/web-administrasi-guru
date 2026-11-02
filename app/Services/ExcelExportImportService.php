@@ -9,6 +9,7 @@ use App\Models\SchoolSetting;
 use App\Models\StudentGrade;
 use App\Models\TeachingClass;
 use App\Support\IndonesianDate;
+use App\Support\SignatureImageHelper;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -285,23 +286,29 @@ class ExcelExportImportService
         $sheet->mergeCells($this->range($rightStart, $row, $rightEnd, $row));
         $sheet->setCellValue($this->cell($rightStart, $row), 'Guru Mata Pelajaran');
 
-        // Ruang tanda tangan (3 baris)
-        $sigRow = $row + 1;
+        // Ruang tanda tangan basah (menimpa baris jabatan di atas & nama bergaris bawah di bawah)
         if ($options['show_digital_signature'] ?? true) {
-            $wkImg = $this->createTempImageFromBase64($teachingClass->homeroom_teacher_signature);
+            $wkNorm = SignatureImageHelper::normalizeInk($teachingClass->homeroom_teacher_signature);
+            $wkImg = $this->createTempImageFromBase64($wkNorm['data_uri'] ?? null);
             if ($wkImg) {
+                $leftAnchor = max($leftStart, (int) floor(($leftStart + $leftEnd) / 2));
                 $drawing = new Drawing();
                 $drawing->setPath($wkImg);
-                $drawing->setHeight(48);
-                $drawing->setCoordinates($this->cell($leftStart + 1, $sigRow));
+                $drawing->setHeight(98);
+                $drawing->setCoordinates($this->cell($leftAnchor, $row));
+                $drawing->setOffsetY(2);
                 $drawing->setWorksheet($sheet);
             }
-            $guruImg = $this->createTempImageFromBase64($teachingClass->teacher?->signature_data);
+
+            $guruNorm = SignatureImageHelper::normalizeInk($teachingClass->teacher?->signature_data);
+            $guruImg = $this->createTempImageFromBase64($guruNorm['data_uri'] ?? null);
             if ($guruImg) {
+                $rightAnchor = max($rightStart, (int) floor(($rightStart + $rightEnd) / 2) - ($rightEnd - $rightStart >= 3 ? 1 : 0));
                 $drawing = new Drawing();
                 $drawing->setPath($guruImg);
-                $drawing->setHeight(48);
-                $drawing->setCoordinates($this->cell($rightStart, $sigRow));
+                $drawing->setHeight(98);
+                $drawing->setCoordinates($this->cell($rightAnchor, $row));
+                $drawing->setOffsetY(2);
                 $drawing->setWorksheet($sheet);
             }
         }
@@ -333,12 +340,14 @@ class ExcelExportImportService
             $sheet->setCellValue($this->cell(1, $hmRow), 'Kepala ' . $school->school_name);
 
             if ($options['show_digital_signature'] ?? true) {
-                $hmImg = $this->createTempImageFromBase64($school->headmaster_signature);
+                $hmNorm = SignatureImageHelper::normalizeInk($school->headmaster_signature);
+                $hmImg = $this->createTempImageFromBase64($hmNorm['data_uri'] ?? null);
                 if ($hmImg) {
                     $drawing = new Drawing();
                     $drawing->setPath($hmImg);
-                    $drawing->setHeight(48);
-                    $drawing->setCoordinates($this->cell(max(1, (int) floor($totalCols / 2)), $hmRow + 1));
+                    $drawing->setHeight(98);
+                    $drawing->setCoordinates($this->cell(max(1, (int) floor($totalCols / 2)), $hmRow));
+                    $drawing->setOffsetY(2);
                     $drawing->setWorksheet($sheet);
                 }
             }
@@ -468,14 +477,15 @@ class ExcelExportImportService
 
                 if ($options['show_journal_paraf'] ?? true) {
                     $parafData = $journal->signature_data ?: $teachingClass->teacher?->signature_data;
-                    $tmpParaf = $this->createTempImageFromBase64($parafData);
+                    $parafNorm = SignatureImageHelper::normalizeInk($parafData);
+                    $tmpParaf = $this->createTempImageFromBase64($parafNorm['data_uri'] ?? null);
                     if ($tmpParaf) {
                         $dr = new Drawing();
                         $dr->setPath($tmpParaf);
-                        $dr->setHeight(24);
+                        $dr->setHeight(34);
                         $dr->setCoordinates($this->cell(8, $curr));
-                        $dr->setOffsetX(12);
-                        $dr->setOffsetY(4);
+                        $dr->setOffsetX(8);
+                        $dr->setOffsetY(1);
                         $dr->setWorksheet($sheet);
                     } elseif (! empty($journal->signature_data)) {
                         $sheet->setCellValue($this->cell(8, $curr), 'Terparaf');
