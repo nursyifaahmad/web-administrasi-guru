@@ -18,31 +18,31 @@
         width: 100%;
         border-bottom: 3px double #111827;
         margin-bottom: 10px;
-        padding-bottom: 6px;
+        padding-bottom: 8px;
     }
     .kop-table td {
         vertical-align: middle;
         border: none;
     }
     .kop-gov {
-        font-size: 10pt;
+        font-size: 11pt;
         font-weight: bold;
         text-transform: uppercase;
         letter-spacing: 0.4px;
     }
     .kop-dept {
-        font-size: 10pt;
+        font-size: 11.5pt;
         font-weight: bold;
         text-transform: uppercase;
     }
     .kop-school {
-        font-size: 13.5pt;
+        font-size: 15pt;
         font-weight: bold;
         text-transform: uppercase;
         margin: 2px 0;
     }
     .kop-address {
-        font-size: 8pt;
+        font-size: 8.5pt;
         color: #374151;
     }
     .doc-title {

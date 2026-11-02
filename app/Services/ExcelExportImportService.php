@@ -124,38 +124,76 @@ class ExcelExportImportService
         $totalCols = max(6, $totalCols);
 
         if ($options['show_header'] ?? true) {
+            $kopStartRow = $row;
+
             $sheet->mergeCells($this->range(1, $row, $totalCols, $row));
             $sheet->setCellValue($this->cell(1, $row), strtoupper((string) $school->gov_header));
             $sheet->getStyle($this->cell(1, $row))->applyFromArray([
                 'font' => ['bold' => true, 'size' => 11],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ]);
+            $sheet->getRowDimension($row)->setRowHeight(19);
             $row++;
 
             $sheet->mergeCells($this->range(1, $row, $totalCols, $row));
             $sheet->setCellValue($this->cell(1, $row), strtoupper((string) $school->department_header));
             $sheet->getStyle($this->cell(1, $row))->applyFromArray([
                 'font' => ['bold' => true, 'size' => 11],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ]);
+            $sheet->getRowDimension($row)->setRowHeight(19);
             $row++;
 
             $sheet->mergeCells($this->range(1, $row, $totalCols, $row));
             $sheet->setCellValue($this->cell(1, $row), strtoupper((string) $school->school_name));
             $sheet->getStyle($this->cell(1, $row))->applyFromArray([
-                'font' => ['bold' => true, 'size' => 14],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'font' => ['bold' => true, 'size' => 15],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ]);
+            $sheet->getRowDimension($row)->setRowHeight(23);
             $row++;
 
             $sheet->mergeCells($this->range(1, $row, $totalCols, $row));
-            $addrText = 'NPSN: ' . $school->npsn . ($school->address ? ' | ' . $school->address : '');
-            $sheet->setCellValue($this->cell(1, $row), $addrText);
+            $addrParts = array_filter([
+                $school->npsn ? 'NPSN: ' . $school->npsn : null,
+                $school->address ?: null,
+                $school->phone ? 'Telp: ' . $school->phone : null,
+                $school->email ? 'Email: ' . $school->email : null,
+            ]);
+            $sheet->setCellValue($this->cell(1, $row), implode(' | ', $addrParts));
             $sheet->getStyle($this->range(1, $row, $totalCols, $row))->applyFromArray([
                 'font' => ['size' => 9, 'italic' => true],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
                 'borders' => ['bottom' => ['borderStyle' => Border::BORDER_DOUBLE, 'color' => ['rgb' => '0F172A']]],
             ]);
+            $sheet->getRowDimension($row)->setRowHeight(24);
+
+            $leftLogoTmp = $this->createTempImageFromBase64($school->logo_left_data);
+            if ($leftLogoTmp) {
+                $leftBox = $school->resolvedLogoBox('left');
+                $drawingLeft = new Drawing();
+                $drawingLeft->setName('Logo Kiri');
+                $drawingLeft->setPath($leftLogoTmp);
+                $drawingLeft->setCoordinates($this->cell(1, $kopStartRow));
+                $drawingLeft->setOffsetX(8);
+                $drawingLeft->setOffsetY(4);
+                $drawingLeft->setHeight($leftBox['height']);
+                $drawingLeft->setWorksheet($sheet);
+            }
+
+            $rightLogoTmp = $this->createTempImageFromBase64($school->logo_right_data);
+            if ($rightLogoTmp) {
+                $rightBox = $school->resolvedLogoBox('right');
+                $drawingRight = new Drawing();
+                $drawingRight->setName('Logo Kanan');
+                $drawingRight->setPath($rightLogoTmp);
+                $drawingRight->setCoordinates($this->cell(max(1, $totalCols - 1), $kopStartRow));
+                $drawingRight->setOffsetX(4);
+                $drawingRight->setOffsetY(4);
+                $drawingRight->setHeight($rightBox['height']);
+                $drawingRight->setWorksheet($sheet);
+            }
+
             $row += 2;
         }
 

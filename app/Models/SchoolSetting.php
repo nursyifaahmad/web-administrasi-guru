@@ -18,7 +18,9 @@ class SchoolSetting extends Model
         'email',
         'website',
         'logo_left_data',
+        'logo_left_size',
         'logo_right_data',
+        'logo_right_size',
         'default_city',
         'headmaster_name',
         'headmaster_nip',
@@ -30,6 +32,8 @@ class SchoolSetting extends Model
     protected function casts(): array
     {
         return [
+            'logo_left_size' => 'integer',
+            'logo_right_size' => 'integer',
             'global_default_kktp' => 'integer',
             'available_grade_levels' => 'array',
         ];
@@ -58,5 +62,45 @@ class SchoolSetting extends Model
         return is_array($levels) && count($levels) > 0
             ? array_values($levels)
             : ['VII', 'VIII', 'IX'];
+    }
+
+    /**
+     * Hitung dimensi proporsional logo (width, height, cell_width) dalam satuan px
+     * agar DomPDF maupun pratinjau merender ukuran logo secara presisi tanpa gepeng.
+     *
+     * @return array{width: int, height: int, cell_width: int}
+     */
+    public function resolvedLogoBox(string $side): array
+    {
+        $dataUri = $side === 'right' ? $this->logo_right_data : $this->logo_left_data;
+        $targetHeight = (int) (($side === 'right' ? $this->logo_right_size : $this->logo_left_size) ?: 92);
+        $targetHeight = max(40, min(160, $targetHeight));
+        $maxWidth = (int) round($targetHeight * 1.35);
+
+        $width = $targetHeight;
+        $height = $targetHeight;
+
+        if (! empty($dataUri) && str_contains($dataUri, ',')) {
+            [, $b64] = explode(',', $dataUri, 2);
+            $raw = base64_decode($b64, true);
+            if ($raw !== false) {
+                $info = @getimagesizefromstring($raw);
+                if (is_array($info) && $info[0] > 0 && $info[1] > 0) {
+                    $ratio = $info[0] / $info[1];
+                    $height = $targetHeight;
+                    $width = (int) max(1, round($height * $ratio));
+                    if ($width > $maxWidth) {
+                        $width = $maxWidth;
+                        $height = (int) max(1, round($width / $ratio));
+                    }
+                }
+            }
+        }
+
+        return [
+            'width' => $width,
+            'height' => $height,
+            'cell_width' => max(110, $width + 18),
+        ];
     }
 }

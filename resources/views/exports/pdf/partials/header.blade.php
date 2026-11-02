@@ -1,12 +1,21 @@
 @if($options['show_header'] ?? true)
+@php
+    $leftLogo = $school->resolvedLogoBox('left');
+    $rightLogo = $school->resolvedLogoBox('right');
+    $sideCellWidth = max($leftLogo['cell_width'], $rightLogo['cell_width']);
+@endphp
 <table class="kop-table">
     <tr>
-        <td style="width: 75px; text-align: center;">
+        <td style="width: {{ $sideCellWidth }}px; text-align: center;">
             @if(!empty($school->logo_left_data))
-                <img src="{{ $school->logo_left_data }}" style="max-height: 62px; max-width: 62px;" alt="Logo Kiri">
+                <img src="{{ $school->logo_left_data }}"
+                     width="{{ $leftLogo['width'] }}"
+                     height="{{ $leftLogo['height'] }}"
+                     style="width: {{ $leftLogo['width'] }}px; height: {{ $leftLogo['height'] }}px;"
+                     alt="Logo Kiri">
             @endif
         </td>
-        <td style="text-align: center;">
+        <td style="text-align: center; padding: 0 8px;">
             @if(!empty($school->gov_header))
                 <div class="kop-gov">{{ $school->gov_header }}</div>
             @endif
@@ -25,9 +34,13 @@
                 @endif
             </div>
         </td>
-        <td style="width: 75px; text-align: center;">
+        <td style="width: {{ $sideCellWidth }}px; text-align: center;">
             @if(!empty($school->logo_right_data))
-                <img src="{{ $school->logo_right_data }}" style="max-height: 62px; max-width: 62px;" alt="Logo Kanan">
+                <img src="{{ $school->logo_right_data }}"
+                     width="{{ $rightLogo['width'] }}"
+                     height="{{ $rightLogo['height'] }}"
+                     style="width: {{ $rightLogo['width'] }}px; height: {{ $rightLogo['height'] }}px;"
+                     alt="Logo Kanan">
             @endif
         </td>
     </tr>

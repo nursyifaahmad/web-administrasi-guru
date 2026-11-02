@@ -43,6 +43,8 @@ class SchoolAndYearController extends Controller
             'headmaster_nip' => ['nullable', 'string', 'max:40'],
             'logo_left_file' => ['nullable', 'image', 'max:2048'],
             'logo_right_file' => ['nullable', 'image', 'max:2048'],
+            'logo_left_size' => ['nullable', 'integer', 'min:40', 'max:160'],
+            'logo_right_size' => ['nullable', 'integer', 'min:40', 'max:160'],
             'headmaster_signature_file' => ['nullable', 'image', 'max:2048'],
             'headmaster_signature_data' => ['nullable', 'string'],
             'clear_logo_left' => ['nullable', 'boolean'],
@@ -90,7 +92,9 @@ class SchoolAndYearController extends Controller
             'headmaster_name' => $validated['headmaster_name'],
             'headmaster_nip' => $validated['headmaster_nip'] ?? null,
             'logo_left_data' => $logoLeft,
+            'logo_left_size' => (int) ($validated['logo_left_size'] ?? $school->logo_left_size ?? 92),
             'logo_right_data' => $logoRight,
+            'logo_right_size' => (int) ($validated['logo_right_size'] ?? $school->logo_right_size ?? 92),
             'headmaster_signature' => $hmSig,
         ]);
 

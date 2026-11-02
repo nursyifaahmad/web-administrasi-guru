@@ -13,6 +13,22 @@
               x-data="{
                 hmSigData: '',
                 pad: null,
+                leftSize: {{ (int) old('logo_left_size', $school->logo_left_size ?: 92) }},
+                rightSize: {{ (int) old('logo_right_size', $school->logo_right_size ?: 92) }},
+                leftPreview: @js($school->logo_left_data ?? ''),
+                rightPreview: @js($school->logo_right_data ?? ''),
+                clearLeft: false,
+                clearRight: false,
+                previewFile(event, side) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        if (side === 'left') { this.leftPreview = e.target.result; this.clearLeft = false; }
+                        else { this.rightPreview = e.target.result; this.clearRight = false; }
+                    };
+                    reader.readAsDataURL(file);
+                },
                 init() {
                     this.$nextTick(() => {
                         this.pad = window.initSignatureCanvas(this.$refs.hmCanvas, (d) => this.hmSigData = d);
@@ -67,31 +83,86 @@
                 </div>
             </div>
 
-            {{-- Upload Logo Kiri & Kanan --}}
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">Logo Kop Kiri (Pemda / Yayasan)</label>
-                    @if(!empty($school->logo_left_data))
-                        <div class="mb-2 flex items-center gap-3">
-                            <img src="{{ $school->logo_left_data }}" class="h-12 w-12 object-contain border rounded p-1" alt="Logo Kiri">
-                            <label class="flex items-center gap-1.5 text-rose-600 font-semibold">
-                                <input type="checkbox" name="clear_logo_left" value="1"> Hapus
-                            </label>
+            {{-- Upload & Ukuran Logo Kiri & Kanan --}}
+            <div class="pt-3 border-t border-slate-100 space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                        <label class="block font-bold text-slate-700">Logo Kop Kiri (Pemda / Yayasan)</label>
+                        @if(!empty($school->logo_left_data))
+                            <div class="flex items-center gap-3">
+                                <img src="{{ $school->logo_left_data }}" class="h-14 w-14 object-contain bg-white border rounded p-1" alt="Logo Kiri">
+                                <label class="flex items-center gap-1.5 text-rose-600 font-semibold cursor-pointer">
+                                    <input type="checkbox" name="clear_logo_left" value="1" x-model="clearLeft"> Hapus Logo Kiri
+                                </label>
+                            </div>
+                        @endif
+                        <input type="file" name="logo_left_file" accept="image/*" @change="previewFile($event, 'left')" class="w-full text-xs">
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-semibold text-slate-700">Ukuran Tinggi Logo Kiri:</span>
+                                <span class="font-extrabold text-emerald-700" x-text="leftSize + ' px'"></span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="range" name="logo_left_size" min="40" max="160" step="2" x-model.number="leftSize" class="w-full accent-emerald-600">
+                                <input type="number" min="40" max="160" x-model.number="leftSize" class="w-16 rounded-lg border border-slate-300 px-2 py-1 text-center font-bold">
+                            </div>
                         </div>
-                    @endif
-                    <input type="file" name="logo_left_file" accept="image/*" class="w-full text-xs">
+                    </div>
+
+                    <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                        <label class="block font-bold text-slate-700">Logo Kop Kanan (Logo Sekolah)</label>
+                        @if(!empty($school->logo_right_data))
+                            <div class="flex items-center gap-3">
+                                <img src="{{ $school->logo_right_data }}" class="h-14 w-14 object-contain bg-white border rounded p-1" alt="Logo Kanan">
+                                <label class="flex items-center gap-1.5 text-rose-600 font-semibold cursor-pointer">
+                                    <input type="checkbox" name="clear_logo_right" value="1" x-model="clearRight"> Hapus Logo Kanan
+                                </label>
+                            </div>
+                        @endif
+                        <input type="file" name="logo_right_file" accept="image/*" @change="previewFile($event, 'right')" class="w-full text-xs">
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-semibold text-slate-700">Ukuran Tinggi Logo Kanan:</span>
+                                <span class="font-extrabold text-emerald-700" x-text="rightSize + ' px'"></span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="range" name="logo_right_size" min="40" max="160" step="2" x-model.number="rightSize" class="w-full accent-emerald-600">
+                                <input type="number" min="40" max="160" x-model.number="rightSize" class="w-16 rounded-lg border border-slate-300 px-2 py-1 text-center font-bold">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">Logo Kop Kanan (Logo Sekolah)</label>
-                    @if(!empty($school->logo_right_data))
-                        <div class="mb-2 flex items-center gap-3">
-                            <img src="{{ $school->logo_right_data }}" class="h-12 w-12 object-contain border rounded p-1" alt="Logo Kanan">
-                            <label class="flex items-center gap-1.5 text-rose-600 font-semibold">
-                                <input type="checkbox" name="clear_logo_right" value="1"> Hapus
-                            </label>
+
+                {{-- Pratinjau Langsung Kop Surat --}}
+                <div class="rounded-xl border border-slate-300 bg-white p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Pratinjau Proporsi Kop Surat Cetakan</span>
+                        <span class="text-[11px] text-slate-400">Geser slider ukuran di atas untuk menyeimbangkan logo kiri & kanan</span>
+                    </div>
+                    <div class="border-b-4 border-double border-slate-900 pb-3 flex items-center justify-between gap-3">
+                        <div class="shrink-0 flex items-center justify-center" style="min-width: 110px;">
+                            <template x-if="leftPreview && !clearLeft">
+                                <img :src="leftPreview" :style="'height:' + leftSize + 'px; width: auto; max-width:' + Math.round(leftSize * 1.35) + 'px;'" class="object-contain" alt="Preview Logo Kiri">
+                            </template>
                         </div>
-                    @endif
-                    <input type="file" name="logo_right_file" accept="image/*" class="w-full text-xs">
+                        <div class="text-center flex-1 leading-snug">
+                            <div class="text-xs sm:text-sm font-bold uppercase text-slate-900">{{ $school->gov_header ?: 'PEMERINTAH KABUPATEN / KOTA' }}</div>
+                            <div class="text-xs sm:text-sm font-bold uppercase text-slate-900">{{ $school->department_header ?: 'DINAS PENDIDIKAN' }}</div>
+                            <div class="text-base sm:text-lg font-extrabold uppercase text-slate-950">{{ $school->school_name }}</div>
+                            <div class="text-[11px] text-slate-600">
+                                NPSN: {{ $school->npsn ?: '-' }}
+                                @if(!empty($school->address)) <br>{{ $school->address }} @endif
+                                @if(!empty($school->phone) || !empty($school->email))
+                                    <br>{{ $school->phone ? 'Telp: '.$school->phone : '' }} {{ (!empty($school->phone) && !empty($school->email)) ? '|' : '' }} {{ $school->email ? 'Email: '.$school->email : '' }}
+                                @endif
+                            </div>
+                        </div>
+                        <div class="shrink-0 flex items-center justify-center" style="min-width: 110px;">
+                            <template x-if="rightPreview && !clearRight">
+                                <img :src="rightPreview" :style="'height:' + rightSize + 'px; width: auto; max-width:' + Math.round(rightSize * 1.35) + 'px;'" class="object-contain" alt="Preview Logo Kanan">
+                            </template>
+                        </div>
+                    </div>
                 </div>
             </div>
 
