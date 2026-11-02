@@ -55,13 +55,15 @@ Aplikasi web **Administrasi Guru** berbasis **Laravel 11, Alpine.js, Tailwind CS
 
 ## Deploy ke Server / Mini PC dengan Docker (Port `4010`)
 
-Repository ini sudah dilengkapi `Dockerfile` *multi-stage* (Node 20 Vite Build + PHP 8.2-FPM + Nginx + Supervisor) dan `docker-compose.yml` (bersama MariaDB 10.11) yang siap jalan pada **port `4010`**:
+Repository ini sudah dilengkapi `Dockerfile` *multi-stage* (Node 20 Vite Build + PHP 8.2-FPM + Nginx + Supervisor) dan `docker-compose.yml` (bersama MariaDB 10.11) yang siap jalan pada **port `4010`**. Seluruh data persisten (database MariaDB, upload TTD/Logo, dan log) disimpan langsung di dalam folder `./data/` pada lokasi proyek (misalnya `/mnt/storage2/web-administrasi-guru/data/`):
 
 ```bash
-git clone https://github.com/nursyifaahmad/web-administrasi-guru.git
-cd web-administrasi-guru
+sudo mkdir -p /mnt/storage2/web-administrasi-guru
+sudo chown -R $USER:$USER /mnt/storage2/web-administrasi-guru
+git clone https://github.com/nursyifaahmad/web-administrasi-guru.git /mnt/storage2/web-administrasi-guru
+cd /mnt/storage2/web-administrasi-guru
 cp .env.docker.example .env
-# Opsional: sesuaikan APP_URL, DB_PASSWORD, dan DB_ROOT_PASSWORD di file .env
+# Opsional: sesuaikan APP_URL (misal IP Tailscale), DB_PASSWORD, dan DB_ROOT_PASSWORD di file .env
 docker compose up -d --build
 ```
 

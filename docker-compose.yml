@@ -9,7 +9,8 @@ services:
       - "${APP_PORT:-4010}:80"
     volumes:
       - ./.env:/var/www/html/.env
-      - app_storage:/var/www/html/storage/app/public
+      - ./data/storage:/var/www/html/storage/app/public
+      - ./data/logs:/var/www/html/storage/logs
     depends_on:
       db:
         condition: service_healthy
@@ -30,7 +31,7 @@ services:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-GantiPasswordRoot2026!}
       TZ: Asia/Jakarta
     volumes:
-      - db_data:/var/lib/mysql
+      - ./data/mariadb:/var/lib/mysql
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -38,10 +39,6 @@ services:
       retries: 20
     networks:
       - administrasi_net
-
-volumes:
-  app_storage:
-  db_data:
 
 networks:
   administrasi_net:
