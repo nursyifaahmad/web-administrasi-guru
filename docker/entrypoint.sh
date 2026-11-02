@@ -22,7 +22,14 @@ php artisan config:clear --ansi >/dev/null 2>&1 || true
 
 if ! grep -qE '^APP_KEY=base64:.+' .env; then
     echo "==> [2/6] Membuat APP_KEY baru..."
-    php artisan key:generate --force --ansi
+    if ! php artisan key:generate --force --ansi 2>/dev/null; then
+        KEY_FILE="storage/app/public/.app_key"
+        if [ ! -f "$KEY_FILE" ]; then
+            php -r 'echo "base64:".base64_encode(random_bytes(32));' > "$KEY_FILE"
+        fi
+        export APP_KEY=$(cat "$KEY_FILE")
+        echo "    .env read-only di container -> menggunakan APP_KEY persisten dari $KEY_FILE"
+    fi
 else
     echo "==> [2/6] APP_KEY sudah tersedia."
 fi
@@ -87,7 +94,9 @@ php artisan config:cache --ansi
 php artisan route:cache --ansi
 php artisan view:cache --ansi
 
-chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+chown -R www-data:www-data /var/www/html/storage/framework /var/www/html/bootstrap/cache
+chown -R www-data:www-data /var/www/html/storage/app/public /var/www/html/storage/logs 2>/dev/null || true
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
 
 echo "==> Sistem Administrasi Guru siap melayani request!"
 exec "$@"
