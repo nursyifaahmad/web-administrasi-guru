@@ -79,7 +79,7 @@
 
                 <button type="button" @click="saveAll()" :disabled="saving" title="Pintasan keyboard: Ctrl + S"
                         class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
-                    <span x-text="saving ? 'Menyimpan...' : 'Simpan Absensi'"></span>
+                    <span x-text="saving ? 'Menyimpan...' : 'Simpan Absensi (Ctrl+S)'"></span>
                 </button>
                 <button type="button" @click="nicknameModal = true"
                         class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
@@ -351,55 +351,6 @@
                         class="px-4 py-3.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 text-xs font-bold transition cursor-pointer">
                     Urungkan Perubahan
                 </button>
-            </div>
-        </div>
-
-        {{-- Bar Simpan Melayang (Sticky Floating Action Bar) --}}
-        <div x-show="isDirty || saving || justSaved"
-             x-cloak
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 translate-y-4"
-             x-transition:enter-end="opacity-100 translate-y-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-y-0"
-             x-transition:leave-end="opacity-0 translate-y-4"
-             class="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-2xl">
-            <div class="rounded-2xl bg-slate-900/95 text-white border shadow-2xl px-4 py-3 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs"
-                 :class="isDirty ? 'border-amber-400/80' : 'border-emerald-500/70'">
-                <template x-if="saving">
-                    <div class="flex items-center gap-2.5 font-bold text-emerald-300">
-                        <svg class="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
-                        <span>Menyimpan data absensi &amp; menyinkronkan Jurnal Harian...</span>
-                    </div>
-                </template>
-
-                <template x-if="!saving && isDirty">
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
-                        <div>
-                            <span class="font-extrabold text-amber-300"><span x-text="dirtyCount"></span> perubahan absensi belum disimpan</span>
-                            <span class="hidden sm:inline text-slate-300"> &mdash; jangan lupa klik Simpan sebelum pindah menu</span>
-                        </div>
-                    </div>
-                </template>
-
-                <template x-if="!saving && !isDirty && justSaved">
-                    <div class="flex items-center gap-2 font-bold text-emerald-300">
-                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                        <span x-text="savedMessage"></span>
-                    </div>
-                </template>
-
-                <div x-show="isDirty && !saving" class="flex items-center gap-2 ml-auto">
-                    <button type="button" @click="revertChanges()"
-                            class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold transition cursor-pointer">
-                        Urungkan
-                    </button>
-                    <button type="button" @click="saveAll()"
-                            class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-sm transition cursor-pointer">
-                        Simpan Absensi (Ctrl+S)
-                    </button>
-                </div>
             </div>
         </div>
     @else
