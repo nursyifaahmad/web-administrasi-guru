@@ -100,12 +100,6 @@
                     Masuk Sekarang
                 </button>
             </form>
-
-            <div class="mt-6 rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-[11px] text-slate-600 space-y-1">
-                <div class="font-bold text-slate-800">Akun Demo Awal:</div>
-                <div>&bull; <strong>Admin:</strong> <code>admin@sekolah.sch.id</code> | Sandi: <code>password</code></div>
-                <div>&bull; <strong>Guru (5 Kelas):</strong> <code>guru@sekolah.sch.id</code> | Sandi: <code>password</code></div>
-            </div>
         </div>
     </div>
 </body>
