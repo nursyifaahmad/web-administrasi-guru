@@ -43,5 +43,8 @@ class ExampleTest extends TestCase
         $response->assertSee('favicon.svg');
         $response->assertSee('favicon-32x32.png');
         $response->assertSee('apple-touch-icon.png');
+        $response->assertSee('Waktu Sistem Realtime (WIB)');
+        $response->assertSee('timeFormatted');
+        $response->assertSee('dateFormatted');
     }
 }

@@ -281,6 +281,47 @@
                             <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                             <span>Profil & TTD</span>
                         </a>
+
+                        {{-- Widget Tanggal & Jam Realtime di Pojok Kanan Atas --}}
+                        <div x-data="{
+                                now: new Date(),
+                                timer: null,
+                                init() {
+                                    this.updateNow();
+                                    this.timer = setInterval(() => { this.updateNow(); }, 1000);
+                                },
+                                destroy() {
+                                    if (this.timer) clearInterval(this.timer);
+                                },
+                                updateNow() {
+                                    this.now = new Date();
+                                },
+                                get dayName() {
+                                    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+                                    return days[this.now.getDay()];
+                                },
+                                get dateFormatted() {
+                                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                                    return `${this.dayName}, ${this.now.getDate()} ${months[this.now.getMonth()]} ${this.now.getFullYear()}`;
+                                },
+                                get timeFormatted() {
+                                    const pad = (n) => String(n).padStart(2, '0');
+                                    return `${pad(this.now.getHours())}:${pad(this.now.getMinutes())}:${pad(this.now.getSeconds())} WIB`;
+                                }
+                             }"
+                             title='Waktu Sistem Realtime (WIB)'
+                             class="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 rounded-xl border border-slate-200 bg-slate-50/90 text-slate-700 select-none shadow-2xs">
+                            <div class="flex items-center justify-center shrink-0">
+                                <span class="relative flex h-2 w-2">
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                </span>
+                            </div>
+                            <div class="flex flex-col text-left leading-tight">
+                                <span class="text-[10px] font-semibold text-slate-500 truncate" x-text="dateFormatted"></span>
+                                <span class="text-xs font-black font-mono tracking-tight text-slate-900" x-text="timeFormatted"></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </header>
