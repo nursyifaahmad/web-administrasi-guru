@@ -150,26 +150,15 @@ class DailyJournalController extends Controller
             'journal_date' => ['required', 'date'],
             'lesson_hours' => ['required', 'string', 'max:50'],
             'activity_material' => ['required', 'string', 'max:3000'],
-            'present_count' => ['nullable', 'integer', 'min:0', 'max:500'],
-            'absent_count' => ['nullable', 'integer', 'min:0', 'max:500'],
-            'is_attendance_overridden' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'signature_mode' => ['nullable', 'string'], // profile, canvas, empty
             'signature_data' => ['nullable', 'string'],
         ]);
 
         $summary = $syncService->summarizeForDate($teachingClass, $validated['journal_date']);
-        $manualOverride = $request->boolean('is_attendance_overridden');
-
-        if (! $manualOverride && $summary['total_recorded'] > 0) {
-            $present = $summary['present_count'];
-            $absent = $summary['absent_count'];
-            $breakdown = $summary['breakdown'];
-        } else {
-            $present = (int) ($validated['present_count'] ?? $summary['present_count']);
-            $absent = (int) ($validated['absent_count'] ?? $summary['absent_count']);
-            $breakdown = $manualOverride ? 'Input Manual' : $summary['breakdown'];
-        }
+        $present = $summary['present_count'];
+        $absent = $summary['absent_count'];
+        $breakdown = $summary['breakdown'];
 
         $signature = null;
         $mode = $validated['signature_mode'] ?? 'profile';
@@ -187,7 +176,7 @@ class DailyJournalController extends Controller
             'present_count' => $present,
             'absent_count' => $absent,
             'attendance_breakdown' => $breakdown,
-            'is_attendance_overridden' => $manualOverride,
+            'is_attendance_overridden' => false,
             'notes' => $validated['notes'] ?? null,
             'signature_data' => $signature,
         ]);
@@ -208,26 +197,15 @@ class DailyJournalController extends Controller
             'journal_date' => ['required', 'date'],
             'lesson_hours' => ['required', 'string', 'max:50'],
             'activity_material' => ['required', 'string', 'max:3000'],
-            'present_count' => ['nullable', 'integer', 'min:0', 'max:500'],
-            'absent_count' => ['nullable', 'integer', 'min:0', 'max:500'],
-            'is_attendance_overridden' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'signature_mode' => ['nullable', 'string'], // keep, profile, canvas, empty
             'signature_data' => ['nullable', 'string'],
         ]);
 
         $summary = $syncService->summarizeForDate($teachingClass, $validated['journal_date']);
-        $manualOverride = $request->boolean('is_attendance_overridden');
-
-        if (! $manualOverride && $summary['total_recorded'] > 0) {
-            $present = $summary['present_count'];
-            $absent = $summary['absent_count'];
-            $breakdown = $summary['breakdown'];
-        } else {
-            $present = (int) ($validated['present_count'] ?? $journal->present_count);
-            $absent = (int) ($validated['absent_count'] ?? $journal->absent_count);
-            $breakdown = $manualOverride ? 'Input Manual' : $summary['breakdown'];
-        }
+        $present = $summary['present_count'];
+        $absent = $summary['absent_count'];
+        $breakdown = $summary['breakdown'];
 
         $signature = $journal->signature_data;
         $mode = $validated['signature_mode'] ?? 'keep';
@@ -246,7 +224,7 @@ class DailyJournalController extends Controller
             'present_count' => $present,
             'absent_count' => $absent,
             'attendance_breakdown' => $breakdown,
-            'is_attendance_overridden' => $manualOverride,
+            'is_attendance_overridden' => false,
             'notes' => $validated['notes'] ?? null,
             'signature_data' => $signature,
         ]);

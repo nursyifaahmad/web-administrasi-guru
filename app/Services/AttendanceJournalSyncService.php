@@ -78,7 +78,7 @@ class AttendanceJournalSyncService
     /**
      * Sinkronkan data kehadiran tanggal tertentu ke baris Jurnal Harian kelas yang sama.
      */
-    public function syncJournalForDate(TeachingClass $teachingClass, string $date, bool $forceResetOverride = false): array
+    public function syncJournalForDate(TeachingClass $teachingClass, string $date, bool $forceResetOverride = true): array
     {
         $summary = $this->summarizeForDate($teachingClass, $date);
 
@@ -88,18 +88,12 @@ class AttendanceJournalSyncService
             ->get();
 
         foreach ($journals as $journal) {
-            if ($journal->is_attendance_overridden && ! $forceResetOverride) {
-                continue;
-            }
-
-            if ($summary['total_recorded'] > 0 || $forceResetOverride) {
-                $journal->update([
-                    'present_count' => $summary['present_count'],
-                    'absent_count' => $summary['absent_count'],
-                    'attendance_breakdown' => $summary['breakdown'],
-                    'is_attendance_overridden' => false,
-                ]);
-            }
+            $journal->update([
+                'present_count' => $summary['present_count'],
+                'absent_count' => $summary['absent_count'],
+                'attendance_breakdown' => $summary['breakdown'],
+                'is_attendance_overridden' => false,
+            ]);
         }
 
         return $summary;

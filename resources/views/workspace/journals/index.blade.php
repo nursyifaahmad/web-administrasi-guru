@@ -197,37 +197,42 @@
                               class="w-full rounded-xl border border-slate-300 px-3 py-2"></textarea>
                 </div>
 
-                {{-- Panel Sinkronisasi Kehadiran Otomatis dari Menu Absensi --}}
+                {{-- Panel Sinkronisasi Kehadiran Otomatis dari Menu Absensi (Terkunci) --}}
                 <div class="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-2.5">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div class="font-bold text-emerald-950">Jumlah Murid (Tersinkronisasi dengan Menu Absensi)</div>
-                        <button type="button" @click="fetchAttendanceForDate(true)"
-                                class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700">
-                            Tarik dari Absensi
+                        <div class="flex items-center gap-1.5 font-bold text-emerald-950">
+                            <svg class="w-4 h-4 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            <span>Kehadiran Murid (Terkunci & Otomatis dari Absensi)</span>
+                        </div>
+                        <button type="button" @click="fetchAttendanceForDate()"
+                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 shadow-2xs transition">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            <span>Perbarui dari Absensi</span>
                         </button>
                     </div>
-                    <p class="text-[11px] text-emerald-800" x-text="syncMessage"></p>
 
                     <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block font-semibold text-emerald-900 mb-1">Jumlah Hadir (. + Dispen)</label>
-                            <input type="number" name="present_count" x-model="form.present_count" min="0"
-                                   :readonly="!form.is_attendance_overridden && syncedRecorded > 0"
-                                   class="w-full rounded-xl border border-emerald-300 bg-white px-3 py-1.5 font-extrabold text-emerald-800">
+                        <div class="p-2.5 rounded-xl bg-white border border-emerald-300 shadow-2xs">
+                            <div class="flex items-center justify-between text-[11px] font-semibold text-emerald-900">
+                                <span>Jumlah Hadir (. + Dispen)</span>
+                                <span class="text-[10px] text-emerald-600 font-bold bg-emerald-100 px-1.5 py-0.5 rounded">Terkunci</span>
+                            </div>
+                            <div class="text-xl font-extrabold text-emerald-700 mt-1" x-text="form.present_count"></div>
                         </div>
-                        <div>
-                            <label class="block font-semibold text-rose-900 mb-1">Jumlah Tidak Hadir (S + I + A)</label>
-                            <input type="number" name="absent_count" x-model="form.absent_count" min="0"
-                                   :readonly="!form.is_attendance_overridden && syncedRecorded > 0"
-                                   class="w-full rounded-xl border border-rose-300 bg-white px-3 py-1.5 font-extrabold text-rose-800">
+                        <div class="p-2.5 rounded-xl bg-white border border-rose-300 shadow-2xs">
+                            <div class="flex items-center justify-between text-[11px] font-semibold text-rose-900">
+                                <span>Jumlah Tidak Hadir (S + I + A)</span>
+                                <span class="text-[10px] text-rose-600 font-bold bg-rose-100 px-1.5 py-0.5 rounded">Terkunci</span>
+                            </div>
+                            <div class="text-xl font-extrabold text-rose-700 mt-1" x-text="form.absent_count"></div>
                         </div>
                     </div>
 
-                    <label class="flex items-center gap-2 cursor-pointer pt-0.5">
-                        <input type="checkbox" name="is_attendance_overridden" value="1" x-model="form.is_attendance_overridden"
-                               class="rounded border-slate-300 text-emerald-600">
-                        <span class="text-[11px] text-slate-700 font-medium">Ubah angka Hadir/Tidak Hadir secara manual (kunci dari auto-sync)</span>
-                    </label>
+                    <p class="text-[11px] text-emerald-900 font-medium leading-relaxed" x-text="syncMessage"></p>
                 </div>
 
                 <div>
@@ -497,12 +502,12 @@ function journalWorkspace(cfg) {
                 activity_material: '',
                 present_count: 0,
                 absent_count: 0,
-                is_attendance_overridden: false,
                 notes: '',
                 signature_mode: cfg.hasProfileSig ? 'profile' : 'canvas',
                 has_signature: false,
                 update_url: '',
             };
+            this.syncMessage = 'Memeriksa data Absensi pada tanggal terpilih...';
             this.formModal = true;
             this.fetchAttendanceForDate();
             if (this.form.signature_mode === 'canvas') {
@@ -517,16 +522,16 @@ function journalWorkspace(cfg) {
                 activity_material: item.activity_material,
                 present_count: item.present_count,
                 absent_count: item.absent_count,
-                is_attendance_overridden: Boolean(item.is_attendance_overridden),
                 notes: item.notes || '',
                 signature_mode: item.has_signature ? 'keep' : 'profile',
                 has_signature: item.has_signature,
                 update_url: item.update_url,
             };
-            this.syncMessage = item.is_attendance_overridden
-                ? 'Menggunakan angka kehadiran manual.'
-                : 'Tersinkronisasi dengan data Absensi.';
+            this.syncMessage = (item.present_count > 0 || item.absent_count > 0)
+                ? 'Tersinkronisasi otomatis dengan data Absensi.'
+                : 'Belum ada isian Absensi pada tanggal ini. Angka kehadiran otomatis tersinkronisasi begitu Anda mengisi data di menu Absensi.';
             this.formModal = true;
+            this.fetchAttendanceForDate();
         },
         initCanvas() {
             this.$nextTick(() => {
@@ -535,7 +540,7 @@ function journalWorkspace(cfg) {
                 });
             });
         },
-        async fetchAttendanceForDate(forceApply = false) {
+        async fetchAttendanceForDate() {
             if (!this.form.journal_date) return;
             try {
                 const res = await fetch(`${cfg.previewUrl}?date=${encodeURIComponent(this.form.journal_date)}`, {
@@ -544,15 +549,12 @@ function journalWorkspace(cfg) {
                 if (!res.ok) return;
                 const data = await res.json();
                 this.syncedRecorded = data.total_recorded || 0;
+                this.form.present_count = data.present_count || 0;
+                this.form.absent_count = data.absent_count || 0;
                 if (data.total_recorded > 0) {
-                    this.syncMessage = `Ditemukan data Absensi (${data.total_recorded} murid): Hadir ${data.present_count} (termasuk Dispen ${data.dispen_count}), Tidak Hadir ${data.absent_count} (${data.breakdown}).`;
-                    if (!this.form.is_attendance_overridden || forceApply) {
-                        this.form.present_count = data.present_count;
-                        this.form.absent_count = data.absent_count;
-                        if (forceApply) this.form.is_attendance_overridden = false;
-                    }
+                    this.syncMessage = `Tersinkronisasi otomatis dengan menu Absensi (${data.total_recorded} murid): Hadir ${data.present_count} (termasuk Dispen ${data.dispen_count}), Tidak Hadir ${data.absent_count} (${data.breakdown || 'Lengkap'}).`;
                 } else {
-                    this.syncMessage = 'Belum ada isian Absensi pada tanggal ini. Anda dapat mengisi Absensi terlebih dahulu atau memasukkan angka sementara.';
+                    this.syncMessage = 'Belum ada isian Absensi pada tanggal ini. Angka kehadiran otomatis tersinkronisasi begitu Anda mengisi data di menu Absensi.';
                 }
             } catch (e) {
                 this.syncMessage = 'Gagal memuat pratinjau absensi.';

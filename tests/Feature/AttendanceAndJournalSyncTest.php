@@ -119,10 +119,11 @@ class AttendanceAndJournalSyncTest extends TestCase
         $this->assertSame(3, $matrix['grand_totals']['absent']);
     }
 
-    public function test_invalid_attendance_code_is_rejected_and_manual_journal_override_is_respected(): void
+    public function test_journal_attendance_is_locked_and_always_automatically_synced_even_when_journal_created_before_attendance(): void
     {
         [$guru, $tClass, $students] = $this->createClassWithFiveStudents();
 
+        // 1. Kode absensi tidak valid ditolak
         $badResp = $this->actingAs($guru)->postJson(route('attendances.bulk-save', $tClass), [
             'year' => 2026,
             'month' => 11,
@@ -132,20 +133,43 @@ class AttendanceAndJournalSyncTest extends TestCase
         ]);
         $badResp->assertStatus(422);
 
-        // Buat jurnal dengan manual override
+        // 2. Guru mengisi jurnal terlebih dahulu sebelum absensi (pada tanggal 2026-11-05)
+        // Meskipun form mengirimkan input manual present_count/is_attendance_overridden, backend menguncinya mengikuti absensi (0 hadir saat ini)
         $this->actingAs($guru)->post(route('journals.store', $tClass), [
             'journal_date' => '2026-11-05',
             'lesson_hours' => '3 - 4',
             'activity_material' => 'Diskusi Kelompok',
-            'present_count' => 4,
-            'absent_count' => 1,
+            'present_count' => 99,
+            'absent_count' => 50,
             'is_attendance_overridden' => 1,
         ])->assertRedirect();
 
         $journal = DailyJournal::query()->whereDate('journal_date', '2026-11-05')->firstOrFail();
-        $this->assertTrue($journal->is_attendance_overridden);
+        $this->assertFalse($journal->is_attendance_overridden);
+        $this->assertSame(0, $journal->present_count);
+        $this->assertSame(0, $journal->absent_count);
 
-        // Simpan absensi semua hadir (5 murid) pada tanggal yang sama -> karena overridden, jurnal tetap 4 hadir
+        // 3. Guru kemudian mengisi menu Absensi untuk tanggal 2026-11-05: 4 hadir (.), 1 sakit (s)
+        $attendanceData = [
+            (string) $students[0]->id => [5 => '.'],
+            (string) $students[1]->id => [5 => '.'],
+            (string) $students[2]->id => [5 => '.'],
+            (string) $students[3]->id => [5 => '.'],
+            (string) $students[4]->id => [5 => 's'],
+        ];
+        $this->actingAs($guru)->postJson(route('attendances.bulk-save', $tClass), [
+            'year' => 2026,
+            'month' => 11,
+            'cells' => $attendanceData,
+        ])->assertOk();
+
+        // Jurnal otomatis tersinkronisasi menjadi 4 Hadir, 1 Tidak Hadir tanpa perlu klik resync manual!
+        $journal->refresh();
+        $this->assertSame(4, $journal->present_count);
+        $this->assertSame(1, $journal->absent_count);
+        $this->assertStringContainsString('S:1', (string) $journal->attendance_breakdown);
+
+        // 4. Guru memperbarui absensi menjadi semua hadir (5 murid .)
         $allPresent = [];
         foreach ($students as $st) {
             $allPresent[(string) $st->id] = [5 => '.'];
@@ -156,11 +180,20 @@ class AttendanceAndJournalSyncTest extends TestCase
             'cells' => $allPresent,
         ])->assertOk();
 
+        // Jurnal otomatis terupdate lagi menjadi 5 Hadir, 0 Tidak Hadir!
         $journal->refresh();
-        $this->assertSame(4, $journal->present_count);
+        $this->assertSame(5, $journal->present_count);
+        $this->assertSame(0, $journal->absent_count);
 
-        // Klik tombol Resync -> override direset dan mengikuti data absensi (5 hadir, 0 tidak hadir)
-        $this->actingAs($guru)->post(route('journals.resync', [$tClass, $journal]))->assertRedirect();
+        // 5. Guru mencoba mengedit jurnal dengan angka manual sembarangan -> tetap dikunci mengikuti absensi
+        $this->actingAs($guru)->put(route('journals.update', [$tClass, $journal]), [
+            'journal_date' => '2026-11-05',
+            'lesson_hours' => '3 - 4',
+            'activity_material' => 'Diskusi Kelompok - Revisi',
+            'present_count' => 12,
+            'absent_count' => 88,
+        ])->assertRedirect();
+
         $journal->refresh();
         $this->assertSame(5, $journal->present_count);
         $this->assertSame(0, $journal->absent_count);
