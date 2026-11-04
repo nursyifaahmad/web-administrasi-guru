@@ -18,9 +18,18 @@
 <body class="min-h-screen font-sans antialiased flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950">
     <div class="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-800/20">
         {{-- Panel Branding Kiri --}}
-        <div class="lg:col-span-6 bg-slate-900 text-white p-8 sm:p-10 flex flex-col justify-between relative overflow-hidden">
+        <div class="lg:col-span-5 bg-slate-900 text-white p-8 sm:p-10 flex flex-col justify-center relative overflow-hidden">
+            @php
+                $resolvedLeftLogo = $school?->resolvedLogoBox('left');
+                $hasLogo = !empty($resolvedLeftLogo['data_uri']);
+            @endphp
             <div>
-                <div class="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-xs font-bold mb-6">
+                @if($hasLogo)
+                    <div class="mb-5 inline-block p-2 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xs">
+                        <img src="{{ $resolvedLeftLogo['data_uri'] }}" alt="Logo {{ $school->school_name }}" class="h-14 w-auto object-contain">
+                    </div>
+                @endif
+                <div class="inline-flex items-center gap-2.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[11px] font-bold mb-4">
                     <span>Platform Administrasi Akademik Guru</span>
                 </div>
                 <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight leading-snug">
@@ -29,36 +38,14 @@
                 <p class="mt-2 text-sm text-slate-300 font-medium">
                     {{ $school->school_name }}
                 </p>
-
-                <div class="mt-8 space-y-3.5 text-xs text-slate-300">
-                    <div class="flex items-start gap-3">
-                        <span class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold shrink-0">1</span>
-                        <div>
-                            <strong class="text-white">Jurnal Harian Otomatis</strong> — Tersinkronisasi langsung dengan jumlah kehadiran murid di menu Absensi & mendukung Paraf Digital.
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <span class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold shrink-0">2</span>
-                        <div>
-                            <strong class="text-white">Matriks Absensi Bulanan & Semester</strong> — Input cepat kode <code class="text-emerald-300">. / s / i / a / d</code> (Dispensasi tetap dihitung Hadir).
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <span class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold shrink-0">3</span>
-                        <div>
-                            <strong class="text-white">Daftar Nilai Dinamis & Multi-Kelas (15+ Kelas)</strong> — Kolom PH & NT dinamis, rumus kontrak belajar fleksibel, standar KKTP Admin, serta Cetak PDF & Excel resmi ber-NIP.
-                        </div>
-                    </div>
+                <div class="mt-4 text-xs text-slate-400 leading-relaxed">
+                    Portal terpadu untuk pencatatan Jurnal Harian KBM, Matriks Absensi Peserta Didik, dan Pengelolaan Nilai Siswa.
                 </div>
-            </div>
-
-            <div class="mt-8 pt-5 border-t border-slate-800 text-[11px] text-slate-400">
-                Mendukung pencetakan resmi ukuran F4 (Folio) & A4 lengkap dengan Titimangsa, Wali Kelas, Guru Mapel, dan Kepala Sekolah.
             </div>
         </div>
 
         {{-- Form Login Kanan --}}
-        <div class="lg:col-span-6 p-8 sm:p-10 flex flex-col justify-center">
+        <div class="lg:col-span-7 p-8 sm:p-10 flex flex-col justify-center">
             <h2 class="text-xl font-extrabold text-slate-900">Masuk ke Akun Anda</h2>
             <p class="text-xs text-slate-500 mt-1">Gunakan Email atau NIP yang terdaftar oleh Administrator.</p>
 
