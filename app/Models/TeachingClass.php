@@ -114,27 +114,14 @@ class TeachingClass extends Model
 
     public function students(): HasMany
     {
-        if ($this->school_class_id) {
-            return $this->hasMany(ClassStudent::class, 'school_class_id', 'school_class_id')
-                ->orderBy('order_number')
-                ->orderBy('full_name');
-        }
-
-        return $this->hasMany(ClassStudent::class, 'teaching_class_id')
+        return $this->hasMany(ClassStudent::class, 'school_class_id', 'school_class_id')
             ->orderBy('order_number')
             ->orderBy('full_name');
     }
 
     public function activeStudents(): HasMany
     {
-        if ($this->school_class_id) {
-            return $this->hasMany(ClassStudent::class, 'school_class_id', 'school_class_id')
-                ->where('is_active', true)
-                ->orderBy('order_number')
-                ->orderBy('full_name');
-        }
-
-        return $this->hasMany(ClassStudent::class, 'teaching_class_id')
+        return $this->hasMany(ClassStudent::class, 'school_class_id', 'school_class_id')
             ->where('is_active', true)
             ->orderBy('order_number')
             ->orderBy('full_name');

@@ -222,4 +222,62 @@ class TeachingScheduleTest extends TestCase
         $res->assertSee(route('schedules.index'));
         $res->assertSee('Jadwal Mengajar');
     }
+
+    public function test_teaching_schedule_and_classes_list_eager_load_students_added_via_admin_rombel(): void
+    {
+        $env = $this->setupScheduleEnvironment();
+        $guru = $env['guru'];
+        $year = $env['year'];
+
+        // Buat Rombel VII-D dari portal Admin
+        $sc7d = SchoolClass::query()->create([
+            'academic_year_id' => $year->id,
+            'name' => 'VII-D',
+            'grade_level' => 'VII',
+            'homeroom_teacher_name' => 'Wali Kelas VII-D',
+        ]);
+
+        // Masukkan 38 murid ke Rombel VII-D dengan teaching_class_id = null (simulasi input via Admin)
+        for ($i = 1; $i <= 38; $i++) {
+            ClassStudent::query()->create([
+                'school_class_id' => $sc7d->id,
+                'teaching_class_id' => null,
+                'order_number' => $i,
+                'nis_nisn' => '7D' . str_pad((string) $i, 3, '0', STR_PAD_LEFT),
+                'full_name' => "Murid VII-D {$i}",
+                'gender' => $i % 2 === 0 ? 'P' : 'L',
+                'is_active' => true,
+            ]);
+        }
+
+        // Guru mengajar di kelas VII-D
+        $cls7d = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'school_class_id' => $sc7d->id,
+            'subject_id' => Subject::first()->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-D',
+            'schedule_info' => 'Rabu jam 1-3',
+            'teaching_days' => [3], // Rabu
+            'only_teaching_days' => true,
+            'homeroom_teacher_name' => 'Wali Kelas VII-D',
+        ]);
+        $cls7d->ensureDefaultsInitialized();
+
+        // 1. Uji tampilan Jadwal Mengajar: Eager loading activeStudents harus menghasilkan 38, bukan 0
+        $scheduleRes = $this->actingAs($guru)->get(route('schedules.index'));
+        $scheduleRes->assertOk();
+        $scheduleRes->assertSee('Kelas VII-D');
+        $scheduleRes->assertSee('Murid: <span class="font-bold text-slate-700">38</span> orang', false);
+
+        // 2. Uji tampilan Daftar Kelas Guru: withCount activeStudents harus bernilai 38
+        $classesRes = $this->actingAs($guru)->get(route('classes.index'));
+        $classesRes->assertOk();
+        $classesRes->assertSee('VII-D');
+        $classesData = $classesRes->viewData('classes');
+        $matchedClass = $classesData->firstWhere('id', $cls7d->id);
+        $this->assertNotNull($matchedClass);
+        $this->assertEquals(38, $matchedClass->students_count);
+    }
 }
