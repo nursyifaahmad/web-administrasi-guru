@@ -17,6 +17,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="h-full font-sans text-slate-800 antialiased"
+      :class="sidebarOpen ? 'overflow-hidden lg:overflow-auto' : ''"
       x-data="{
           sidebarOpen: false,
           sidebarCollapsed: localStorage.getItem('ag_sidebar_collapsed') === '1',
@@ -28,14 +29,20 @@
     <div class="min-h-screen flex flex-col lg:flex-row">
         {{-- Mobile Sidebar Overlay --}}
         <div x-show="sidebarOpen" x-cloak @click="sidebarOpen = false"
-             class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden"></div>
+             x-transition:enter="transition-opacity ease-linear duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-linear duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed inset-0 z-40 bg-slate-950/75 backdrop-blur-xs lg:hidden"></div>
 
-        {{-- Sidebar Utama (Mendukung Minimize / Expand di Desktop) --}}
+        {{-- Sidebar Utama (Mendukung Minimize / Expand di Desktop & Drawer Penuh di Mobile) --}}
         <aside :class="[
                    sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
                    sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'
                ]"
-               class="fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 text-slate-100 flex flex-col transition-all duration-200 ease-in-out lg:static lg:shrink-0 relative">
+               class="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-screen h-dvh bg-slate-900 text-slate-100 flex flex-col transition-transform duration-200 ease-in-out shadow-2xl lg:shadow-none lg:static lg:h-auto lg:shrink-0 lg:relative">
 
             {{-- Tombol Floating Kecilkan / Besarkan Sidebar (Desktop) --}}
             <button type="button"
@@ -47,20 +54,28 @@
                 </svg>
             </button>
 
-            <div class="py-5 border-b border-slate-800 flex items-center justify-between"
-                 :class="sidebarCollapsed ? 'px-5 lg:px-2 lg:justify-center' : 'px-5'">
+            <div class="py-4 border-b border-slate-800 flex items-center justify-between shrink-0"
+                 :class="sidebarCollapsed ? 'px-4 lg:px-2 lg:justify-center' : 'px-4 sm:px-5'">
                 <div class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
-                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 font-extrabold text-lg shrink-0"
-                         title="Administrasi Guru — {{ $globalSchool->school_name ?? 'Portal Akademik' }}">
-                        AG
-                    </div>
+                    @php
+                        $resolvedLeftLogo = $globalSchool?->resolvedLogoBox('left');
+                        $hasLogo = !empty($resolvedLeftLogo['data_uri']);
+                    @endphp
+                    @if($hasLogo)
+                        <img src="{{ $resolvedLeftLogo['data_uri'] }}" alt="Logo" class="w-10 h-10 object-contain rounded-xl p-0.5 bg-white/10 shrink-0">
+                    @else
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 font-extrabold text-lg shrink-0"
+                             title="Administrasi Guru — {{ $globalSchool->school_name ?? 'Portal Akademik' }}">
+                            AG
+                        </div>
+                    @endif
                     <div class="min-w-0" :class="sidebarCollapsed ? 'lg:hidden' : ''">
                         <div class="text-sm font-bold text-white truncate">Administrasi Guru</div>
                         <div class="text-xs text-slate-400 truncate">{{ $globalSchool->school_name ?? 'Portal Akademik' }}</div>
                     </div>
                 </div>
-                <button @click="sidebarOpen = false" class="lg:hidden text-slate-400 hover:text-white">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <button type="button" @click="sidebarOpen = false" class="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer" title="Tutup Menu">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
 
@@ -153,7 +168,7 @@
                         <div class="px-3 mb-1.5 text-[11px] text-slate-400" :class="sidebarCollapsed ? 'lg:hidden' : ''">
                             Akses Cepat Kelas ({{ $selectedAcademicYear->semester }}):
                         </div>
-                        <div class="max-h-64 overflow-y-auto space-y-1" :class="sidebarCollapsed ? 'lg:pr-0' : 'pr-1'">
+                        <div class="space-y-1" :class="sidebarCollapsed ? 'lg:max-h-64 lg:overflow-y-auto lg:pr-0' : 'pr-1'">
                             @php
                                 $activeClassId = isset($teachingClass) ? $teachingClass->id : null;
                                 $currentSubMenu = 'journals.index';
@@ -189,7 +204,7 @@
                 </div>
             </nav>
 
-            <div class="p-4 border-t border-slate-800 bg-slate-950/50" :class="sidebarCollapsed ? 'lg:px-2 lg:py-3' : ''">
+            <div class="p-3.5 sm:p-4 border-t border-slate-800 bg-slate-950/70 shrink-0" :class="sidebarCollapsed ? 'lg:px-2 lg:py-3' : ''">
                 <div class="flex items-center justify-between gap-2" :class="sidebarCollapsed ? 'lg:flex-col lg:justify-center' : ''">
                     <a href="{{ route('profile.edit') }}"
                        title="Profil & TTD: {{ auth()->user()->name }}"
