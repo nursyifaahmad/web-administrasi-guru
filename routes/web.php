@@ -114,6 +114,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     // Menu 1: Jurnal Harian
     Route::get('/kelas/{teachingClass}/jurnal', [DailyJournalController::class, 'index'])->name('journals.index');
     Route::get('/kelas/{teachingClass}/jurnal/attendance-preview', [DailyJournalController::class, 'attendancePreview'])->name('journals.attendance-preview');
+    Route::get('/kelas/{teachingClass}/jurnal/absent-students', [DailyJournalController::class, 'absentStudents'])->name('journals.absent-students');
     Route::post('/kelas/{teachingClass}/jurnal', [DailyJournalController::class, 'store'])->name('journals.store');
     Route::put('/kelas/{teachingClass}/jurnal/{journal}', [DailyJournalController::class, 'update'])->name('journals.update');
     Route::post('/kelas/{teachingClass}/jurnal/{journal}/resync', [DailyJournalController::class, 'resyncAttendance'])->name('journals.resync');

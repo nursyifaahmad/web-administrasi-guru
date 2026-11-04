@@ -187,4 +187,98 @@ class AttendanceAndJournalSyncTest extends TestCase
             ->assertSee('ensureSavedBeforeAction', false)
             ->assertSee('window.confirmWorkspaceDiscard', false);
     }
+
+    public function test_absent_students_endpoint_returns_correct_absent_list_with_statuses(): void
+    {
+        [$guru, $tClass, $students] = $this->createClassWithFiveStudents();
+
+        // Isi absensi pada tanggal 2026-11-10:
+        // Murid 1: Hadir (.)
+        // Murid 2: Sakit (s)
+        // Murid 3: Izin (i)
+        // Murid 4: Alpa (a)
+        // Murid 5: Dispen (d)
+        $cells = [
+            (string) $students[0]->id => [10 => '.'],
+            (string) $students[1]->id => [10 => 's'],
+            (string) $students[2]->id => [10 => 'i'],
+            (string) $students[3]->id => [10 => 'a'],
+            (string) $students[4]->id => [10 => 'd'],
+        ];
+
+        $this->actingAs($guru)->postJson(route('attendances.bulk-save', $tClass), [
+            'year' => 2026,
+            'month' => 11,
+            'cells' => $cells,
+        ])->assertOk();
+
+        // Buat jurnal harian tanggal tersebut
+        DailyJournal::query()->create([
+            'teaching_class_id' => $tClass->id,
+            'journal_date' => '2026-11-10',
+            'lesson_hours' => '1 - 2',
+            'activity_material' => 'Materi Aljabar',
+            'present_count' => 2, // . + d
+            'absent_count' => 3,  // s + i + a
+        ]);
+
+        // Panggil endpoint absent-students
+        $res = $this->actingAs($guru)->getJson(route('journals.absent-students', [
+            'teachingClass' => $tClass->id,
+            'date' => '2026-11-10',
+        ]));
+
+        $res->assertOk();
+        $data = $res->json();
+
+        $this->assertSame('2026-11-10', $data['date']);
+        $this->assertSame(3, $data['total_absent']);
+        $this->assertSame(1, $data['sakit_count']);
+        $this->assertSame(1, $data['izin_count']);
+        $this->assertSame(1, $data['alfa_count']);
+        $this->assertSame(1, $data['total_dispen']);
+
+        $returnedStudentNames = collect($data['students'])->pluck('full_name')->toArray();
+        $this->assertContains('Murid Ke-2', $returnedStudentNames);
+        $this->assertContains('Murid Ke-3', $returnedStudentNames);
+        $this->assertContains('Murid Ke-4', $returnedStudentNames);
+        $this->assertContains('Murid Ke-5', $returnedStudentNames);
+        $this->assertNotContains('Murid Ke-1', $returnedStudentNames); // Murid Ke-1 Hadir, tidak boleh masuk list
+    }
+
+    public function test_journal_index_renders_lihat_button_for_absent_count_greater_than_zero(): void
+    {
+        [$guru, $tClass] = $this->createClassWithFiveStudents();
+
+        // Jurnal 1: ada murid tidak hadir (absent_count = 2)
+        DailyJournal::query()->create([
+            'teaching_class_id' => $tClass->id,
+            'journal_date' => '2026-11-12',
+            'lesson_hours' => '3 - 4',
+            'activity_material' => 'Latihan Soal',
+            'present_count' => 3,
+            'absent_count' => 2,
+        ]);
+
+        // Jurnal 2: semua hadir (absent_count = 0)
+        DailyJournal::query()->create([
+            'teaching_class_id' => $tClass->id,
+            'journal_date' => '2026-11-13',
+            'lesson_hours' => '1 - 2',
+            'activity_material' => 'Diskusi Kelompok',
+            'present_count' => 5,
+            'absent_count' => 0,
+        ]);
+
+        $res = $this->actingAs($guru)->get(route('journals.index', $tClass));
+        $res->assertOk();
+
+        // Tombol Lihat muncul untuk tanggal 2026-11-12
+        $res->assertSee("openAbsentDetail('2026-11-12')", false);
+        $res->assertSee('Lihat', false);
+
+        // Modal dan rincian murid tidak hadir ada di dokumen
+        $res->assertSee('absentModal', false);
+        $res->assertSee('Rincian Murid Tidak Hadir', false);
+    }
 }

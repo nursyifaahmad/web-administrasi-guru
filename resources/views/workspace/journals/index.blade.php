@@ -10,6 +10,7 @@
 <div class="space-y-4"
      x-data="journalWorkspace({
         previewUrl: @js(route('journals.attendance-preview', $teachingClass)),
+        absentStudentsUrl: @js(route('journals.absent-students', $teachingClass)),
         todayDate: @js(now()->toDateString()),
         hasProfileSig: @js(!empty($teachingClass->teacher?->signature_data) || !empty(auth()->user()->signature_data))
      })">
@@ -80,8 +81,24 @@
                             <td class="px-3 py-3 text-center font-extrabold text-emerald-700 bg-emerald-50/20 border-r border-slate-100">
                                 {{ $journal->present_count }}
                             </td>
-                            <td class="px-3 py-3 text-center font-extrabold {{ $journal->absent_count > 0 ? 'text-rose-700 bg-rose-50/30' : 'text-slate-600' }} border-r border-slate-100">
-                                {{ $journal->absent_count }}
+                            <td class="px-3 py-3 text-center border-r border-slate-100 {{ $journal->absent_count > 0 ? 'bg-rose-50/30' : '' }}">
+                                <div class="flex flex-col items-center justify-center gap-1">
+                                    <span class="font-extrabold {{ $journal->absent_count > 0 ? 'text-rose-700 text-sm' : 'text-slate-500' }}">
+                                        {{ $journal->absent_count }}
+                                    </span>
+                                    @if($journal->absent_count > 0)
+                                        <button type="button"
+                                                @click="openAbsentDetail(@js($journal->journal_date->toDateString()))"
+                                                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold transition shadow-2xs cursor-pointer"
+                                                title="Lihat rincian murid tidak hadir pada tanggal ini">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                            <span>Lihat</span>
+                                        </button>
+                                    @endif
+                                </div>
                             </td>
                             <td class="px-4 py-3 text-slate-600 border-r border-slate-100">
                                 <div>{{ $journal->notes ?: '-' }}</div>
@@ -263,6 +280,151 @@
         </div>
     </div>
 
+    {{-- Modal Rincian Murid Tidak Hadir --}}
+    <div x-show="absentModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div @click.away="absentModal = false" class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-xl w-full overflow-hidden max-h-[90vh] flex flex-col">
+            {{-- Header --}}
+            <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                <div class="space-y-0.5">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex p-1 rounded-lg bg-rose-500/20 text-rose-300">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                        </span>
+                        <h3 class="text-sm font-bold">Rincian Murid Tidak Hadir</h3>
+                    </div>
+                    <p class="text-[11px] text-slate-300">
+                        <span x-text="absentData?.day_name"></span>, <span x-text="absentData?.formatted_date"></span>
+                        • Kelas <span x-text="absentData?.class_name"></span> (<span x-text="absentData?.subject_name"></span>)
+                    </p>
+                </div>
+                <button type="button" @click="absentModal = false" class="text-slate-400 hover:text-white text-2xl leading-none px-1 rounded-lg hover:bg-slate-800 transition">&times;</button>
+            </div>
+
+            {{-- Body --}}
+            <div class="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+                {{-- Loading State --}}
+                <template x-if="absentLoading">
+                    <div class="py-12 flex flex-col items-center justify-center gap-3 text-slate-500">
+                        <svg class="animate-spin w-6 h-6 text-rose-600" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        <span class="font-medium text-xs">Memuat data absensi murid...</span>
+                    </div>
+                </template>
+
+                {{-- Content when loaded --}}
+                <template x-if="!absentLoading && absentData">
+                    <div class="space-y-3.5">
+                        {{-- Ringkasan Status --}}
+                        <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                            <div class="font-bold text-slate-700">
+                                Total Tidak Hadir: <span class="text-rose-700 font-extrabold text-sm" x-text="absentData.total_absent"></span> orang
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+                                <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                                    Sakit: <strong x-text="absentData.sakit_count"></strong>
+                                </span>
+                                <span class="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
+                                    Izin: <strong x-text="absentData.izin_count"></strong>
+                                </span>
+                                <span class="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
+                                    Alpa: <strong x-text="absentData.alfa_count"></strong>
+                                </span>
+                                <template x-if="absentData.total_dispen > 0">
+                                    <span class="px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200">
+                                        Dispen: <strong x-text="absentData.total_dispen"></strong>
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+
+                        {{-- Tabel Siswa Tidak Hadir --}}
+                        <template x-if="absentData.students && absentData.students.length > 0">
+                            <div class="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                                <table class="w-full text-left text-xs border-collapse">
+                                    <thead>
+                                        <tr class="bg-slate-100 text-slate-700 uppercase text-[10px] border-b border-slate-200 font-bold">
+                                            <th class="px-2.5 py-2.5 text-center w-10 border-r border-slate-200">No</th>
+                                            <th class="px-2.5 py-2.5 text-center w-14 border-r border-slate-200">No Absen</th>
+                                            <th class="px-3 py-2.5 border-r border-slate-200">Nama Peserta Didik</th>
+                                            <th class="px-2 py-2.5 text-center w-12 border-r border-slate-200">L/P</th>
+                                            <th class="px-3 py-2.5 text-center w-28">Keterangan</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        <template x-for="(st, idx) in absentData.students" :key="st.id || idx">
+                                            <tr class="hover:bg-slate-50 transition">
+                                                <td class="px-2.5 py-2 text-center text-slate-500 font-medium border-r border-slate-100" x-text="idx + 1"></td>
+                                                <td class="px-2.5 py-2 text-center font-bold text-slate-700 border-r border-slate-100" x-text="st.order_number || '-'"></td>
+                                                <td class="px-3 py-2 border-r border-slate-100">
+                                                    <div class="font-bold text-slate-900" x-text="st.full_name"></div>
+                                                    <template x-if="st.nis_nisn && st.nis_nisn !== '-'">
+                                                        <div class="text-[10px] text-slate-400 font-mono" x-text="'NIS/NISN: ' + st.nis_nisn"></div>
+                                                    </template>
+                                                </td>
+                                                <td class="px-2 py-2 text-center text-slate-600 font-semibold border-r border-slate-100" x-text="st.gender || '-'"></td>
+                                                <td class="px-3 py-2 text-center">
+                                                    <span :class="'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold border ' + st.badge_class"
+                                                          x-text="st.status_label">
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        {{-- Fallback jika detail belum ada di Menu Absensi (misal diinput manual di jurnal) --}}
+                        <template x-if="!absentData.students || absentData.students.length === 0">
+                            <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-2 text-center">
+                                <div class="font-bold text-xs flex items-center justify-center gap-1.5">
+                                    <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <span>Rincian Absensi Belum Diisi</span>
+                                </div>
+                                <p class="text-[11px] text-amber-800 leading-relaxed">
+                                    Jumlah tidak hadir (<strong x-text="absentData.journal_absent_count || absentData.total_absent"></strong> murid) dicatat pada jurnal harian, namun rincian nama murid pada tanggal ini belum diinput pada menu Absensi.
+                                </p>
+                                <div class="pt-1">
+                                    <a :href="absentData.attendance_url"
+                                       class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 transition shadow-2xs">
+                                        <span>Buka Menu Absensi</span>
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                        </svg>
+                                    </a>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+
+            {{-- Footer --}}
+            <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+                <template x-if="absentData?.attendance_url">
+                    <a :href="absentData.attendance_url"
+                       class="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1">
+                        <span>Kelola di Menu Absensi</span>
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                        </svg>
+                    </a>
+                </template>
+                <div class="ml-auto">
+                    <button type="button" @click="absentModal = false" class="px-4 py-1.5 rounded-xl border border-slate-300 font-semibold hover:bg-slate-100 transition">
+                        Tutup
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- Modal Cetak PDF & Download Excel Jurnal Harian --}}
     @include('partials.export-modal', [
         'modalVar' => 'exportModal',
@@ -281,6 +443,10 @@ function journalWorkspace(cfg) {
     return {
         formModal: false,
         exportModal: false,
+        absentModal: false,
+        absentLoading: false,
+        absentData: null,
+        absentCache: {},
         isEdit: false,
         pad: null,
         canvasData: '',
@@ -297,6 +463,31 @@ function journalWorkspace(cfg) {
             signature_mode: 'profile',
             has_signature: false,
             update_url: '',
+        },
+        async openAbsentDetail(date) {
+            if (!date) return;
+            this.absentModal = true;
+            if (this.absentCache[date]) {
+                this.absentData = this.absentCache[date];
+                this.absentLoading = false;
+                return;
+            }
+            this.absentLoading = true;
+            this.absentData = null;
+            try {
+                const res = await fetch(`${cfg.absentStudentsUrl}?date=${encodeURIComponent(date)}`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok) throw new Error('Gagal mengambil data');
+                const data = await res.json();
+                this.absentCache[date] = data;
+                this.absentData = data;
+            } catch (e) {
+                alert('Gagal memuat rincian data murid tidak hadir.');
+                this.absentModal = false;
+            } finally {
+                this.absentLoading = false;
+            }
         },
         openCreate() {
             this.isEdit = false;
