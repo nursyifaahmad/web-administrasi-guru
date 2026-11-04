@@ -30,18 +30,18 @@
 
     {{-- Sub-tab Bulanan vs Rekap Semester + Pemilih Bulan & Ekspor --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <div class="flex flex-wrap items-center gap-2 text-xs">
+        <div class="flex items-center gap-2 text-xs overflow-x-auto no-scrollbar pb-1 whitespace-nowrap w-full lg:w-auto">
             <a href="{{ route('attendances.index', [$teachingClass, 'tab' => 'monthly', 'month' => $month, 'year' => $year]) }}"
-               class="px-3.5 py-2 rounded-xl font-bold transition {{ $tab === 'monthly' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200' }}">
+               class="shrink-0 px-3.5 py-2 rounded-xl font-bold transition {{ $tab === 'monthly' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200' }}">
                 Matriks Bulanan (Tanggal 1–{{ $matrix['days_in_month'] }})
             </a>
             <a href="{{ route('attendances.index', [$teachingClass, 'tab' => 'recap', 'month' => $month, 'year' => $year]) }}"
-               class="px-3.5 py-2 rounded-xl font-bold transition {{ $tab === 'recap' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200' }}">
+               class="shrink-0 px-3.5 py-2 rounded-xl font-bold transition {{ $tab === 'recap' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200' }}">
                 Rekapitulasi 1 Semester
             </a>
 
             @if($tab === 'monthly')
-                <form method="GET" action="{{ route('attendances.index', $teachingClass) }}" data-skip-dirty-guard="1" class="flex items-center gap-1.5 ml-1">
+                <form method="GET" action="{{ route('attendances.index', $teachingClass) }}" data-skip-dirty-guard="1" class="shrink-0 flex items-center gap-1.5 ml-1">
                     <input type="hidden" name="tab" value="monthly">
                     <select name="month" data-prev-value="{{ $month }}" onchange="window.handleGuardedSelectNavigate(this, 'submit')" class="rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-800">
                         @foreach(\App\Support\IndonesianDate::MONTHS as $mNum => $mLbl)
@@ -54,7 +54,7 @@
 
                 <template x-if="hasTeachingDays">
                     <button type="button" @click="filterTeachingDays = !filterTeachingDays"
-                            class="px-3 py-2 rounded-xl font-bold transition flex items-center gap-1.5 border shadow-2xs cursor-pointer select-none"
+                            class="shrink-0 px-3 py-2 rounded-xl font-bold transition flex items-center gap-1.5 border shadow-2xs cursor-pointer select-none"
                             :class="filterTeachingDays ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'"
                             :title="filterTeachingDays ? 'Sedang menyembunyikan hari di luar jadwal. Klik untuk menampilkan semua tanggal (1–' + daysInMonth + ')' : 'Sedang menampilkan semua hari. Klik untuk hanya menampilkan tanggal mengajar'">
                         <span x-text="filterTeachingDays ? '🗓️ Tanggal KBM Saja (' + displayedDays.length + ' Hari)' : '🗓️ Semua Tanggal (' + daysInMonth + ' Hari)'"></span>
@@ -62,7 +62,7 @@
                 </template>
                 <template x-if="!hasTeachingDays">
                     <a href="{{ route('classes.students', $teachingClass) }}"
-                       class="px-3 py-2 rounded-xl text-slate-500 bg-slate-50 border border-slate-200 hover:bg-slate-100 font-semibold text-xs flex items-center gap-1"
+                       class="shrink-0 px-3 py-2 rounded-xl text-slate-500 bg-slate-50 border border-slate-200 hover:bg-slate-100 font-semibold text-xs flex items-center gap-1"
                        title="Atur hari mengajar di Pengaturan Kelas agar tanggal non-KBM otomatis disembunyikan">
                         <span>🗓️ Atur Hari Mengajar</span>
                     </a>
@@ -70,7 +70,7 @@
             @endif
         </div>
 
-        <div class="flex flex-wrap items-center gap-2 text-xs">
+        <div class="flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
             @if($tab === 'monthly')
                 <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
                     Belum disimpan (<span x-text="dirtyCount"></span> perubahan)
@@ -78,7 +78,7 @@
                 <span x-show="savedMessage && !isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
 
                 <button type="button" @click="saveAll()" :disabled="saving" title="Pintasan keyboard: Ctrl + S"
-                        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
+                        class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
                     <span x-text="saving ? 'Menyimpan...' : 'Simpan Absensi (Ctrl+S)'"></span>
                 </button>
                 <button type="button" @click="nicknameModal = true"
@@ -98,7 +98,7 @@
                 </button>
             @endif
             <button type="button" @click="openExportModal()"
-                    class="px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition">
+                    class="w-full sm:w-auto inline-flex items-center justify-center px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition">
                 Cetak PDF & Download Excel
             </button>
         </div>
@@ -107,41 +107,41 @@
     @if($tab === 'monthly')
         {{-- Panduan Kode & Mode Sentuh Cepat HP (Tap-to-Fill) --}}
         <div class="bg-slate-900 text-slate-200 rounded-2xl px-4 py-3 text-xs space-y-2.5">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="font-bold text-white">Mode Input HP / Laptop:</span>
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 whitespace-nowrap">
+                    <span class="font-bold text-white shrink-0 pr-1">Mode HP:</span>
                     <button type="button" @click="tapStamp = null"
-                            class="px-2.5 py-1 rounded-lg font-bold transition border"
+                            class="shrink-0 px-2.5 py-1 rounded-lg font-bold transition border"
                             :class="tapStamp === null ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-slate-300 border-slate-700'">
                         Ketik Keyboard
                     </button>
                     <button type="button" @click="tapStamp = '.'"
-                            class="px-2.5 py-1 rounded-lg font-extrabold transition border"
+                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
                             :class="tapStamp === '.' ? 'bg-emerald-500 text-white border-emerald-400 ring-2 ring-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'">
                         Tap "." Hadir
                     </button>
                     <button type="button" @click="tapStamp = 'd'"
-                            class="px-2.5 py-1 rounded-lg font-extrabold transition border"
+                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
                             :class="tapStamp === 'd' ? 'bg-sky-500 text-white border-sky-400 ring-2 ring-sky-300' : 'bg-sky-500/20 text-sky-300 border-sky-400/30'">
                         Tap "d" Dispen
                     </button>
                     <button type="button" @click="tapStamp = 's'"
-                            class="px-2.5 py-1 rounded-lg font-extrabold transition border"
+                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
                             :class="tapStamp === 's' ? 'bg-amber-500 text-white border-amber-400 ring-2 ring-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-400/30'">
                         Tap "s" Sakit
                     </button>
                     <button type="button" @click="tapStamp = 'i'"
-                            class="px-2.5 py-1 rounded-lg font-extrabold transition border"
+                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
                             :class="tapStamp === 'i' ? 'bg-purple-500 text-white border-purple-400 ring-2 ring-purple-300' : 'bg-purple-500/20 text-purple-300 border-purple-400/30'">
                         Tap "i" Izin
                     </button>
                     <button type="button" @click="tapStamp = 'a'"
-                            class="px-2.5 py-1 rounded-lg font-extrabold transition border"
+                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
                             :class="tapStamp === 'a' ? 'bg-rose-500 text-white border-rose-400 ring-2 ring-rose-300' : 'bg-rose-500/20 text-rose-300 border-rose-400/30'">
                         Tap "a" Alfa
                     </button>
                     <button type="button" @click="tapStamp = ''"
-                            class="px-2.5 py-1 rounded-lg font-bold transition border"
+                            class="shrink-0 px-2.5 py-1 rounded-lg font-bold transition border"
                             :class="tapStamp === '' ? 'bg-slate-600 text-white border-slate-400 ring-2 ring-slate-300' : 'bg-slate-800 text-slate-300 border-slate-700'">
                         Tap Hapus
                     </button>
@@ -159,7 +159,7 @@
                     <thead>
                         <tr class="bg-slate-100 text-slate-800 text-[11px] uppercase border-b border-slate-300">
                             <th rowspan="2" class="sticky left-0 z-20 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10">No</th>
-                            <th rowspan="2" class="sticky left-9 sm:left-10 z-20 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[185px]">Nama Lengkap</th>
+                            <th rowspan="2" class="sticky left-9 sm:left-10 z-20 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[185px] sticky-col-shadow">Nama Lengkap</th>
                             @if($teachingClass->show_nickname_column)
                                 <th rowspan="2" class="px-2.5 py-2.5 text-center border-r border-slate-300 min-w-[90px]">Nama Panggilan</th>
                             @endif
@@ -235,7 +235,7 @@
                         <template x-for="(st, rIdx) in students" :key="st.id">
                             <tr class="hover:bg-slate-50/80">
                                 <td class="sticky left-0 z-10 bg-white px-2 py-1.5 text-center font-bold text-slate-600 border-r border-slate-200" x-text="st.no"></td>
-                                <td class="sticky left-9 sm:left-10 z-10 bg-white px-2.5 sm:px-3 py-1.5 font-bold text-slate-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[210px]" x-text="st.full_name"></td>
+                                <td class="sticky left-9 sm:left-10 z-10 bg-white px-2.5 sm:px-3 py-1.5 font-bold text-slate-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[210px] sticky-col-shadow" x-text="st.full_name"></td>
                                 @if($teachingClass->show_nickname_column)
                                     <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200 truncate" x-text="st.nickname"></td>
                                 @endif
@@ -366,7 +366,7 @@
                     <thead class="bg-slate-100 text-slate-700 uppercase text-[11px] border-b border-slate-200">
                         <tr>
                             <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200 w-12">No</th>
-                            <th rowspan="2" class="px-4 py-2.5 border-r border-slate-200">Nama Lengkap</th>
+                            <th rowspan="2" class="px-4 py-2.5 border-r border-slate-200 min-w-[170px]">Nama Lengkap</th>
                             @if($teachingClass->show_nickname_column)
                                 <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200">Nama Panggilan</th>
                             @endif

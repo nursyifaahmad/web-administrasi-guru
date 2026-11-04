@@ -219,39 +219,79 @@
         {{-- Konten Utama --}}
         <div class="flex-1 flex flex-col min-w-0">
             {{-- Topbar --}}
-            <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-4 sm:px-6 py-3">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="flex items-center gap-3">
-                        {{-- Tombol Buka Sidebar (Mobile) --}}
-                        <button type="button" @click="sidebarOpen = true" class="lg:hidden p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100" title="Buka Menu">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-                        </button>
-                        {{-- Tombol Kecilkan / Besarkan Sidebar (Desktop) --}}
-                        <button type="button"
-                                @click="toggleSidebarCollapse()"
-                                :title="sidebarCollapsed ? 'Besarkan Sidebar' : 'Kecilkan Sidebar'"
-                                class="hidden lg:inline-flex p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 4v16"/>
-                            </svg>
-                        </button>
-                        <div>
-                            <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">@yield('page_title', 'Dashboard Administrasi Guru')</h1>
-                            @hasSection('page_subtitle')
-                                <p class="text-xs text-slate-500">@yield('page_subtitle')</p>
-                            @endif
+            <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 sm:gap-3">
+                    <div class="flex items-center justify-between lg:justify-start gap-2 sm:gap-3 min-w-0">
+                        <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                            {{-- Tombol Buka Sidebar (Mobile) --}}
+                            <button type="button" @click="sidebarOpen = true" class="lg:hidden p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Buka Menu">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                            </button>
+                            {{-- Tombol Kecilkan / Besarkan Sidebar (Desktop) --}}
+                            <button type="button"
+                                    @click="toggleSidebarCollapse()"
+                                    :title="sidebarCollapsed ? 'Besarkan Sidebar' : 'Kecilkan Sidebar'"
+                                    class="hidden lg:inline-flex p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer shrink-0">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <rect x="3" y="4" width="18" height="16" rx="2" stroke-width="1.8"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 4v16"/>
+                                </svg>
+                            </button>
+                            <div class="min-w-0">
+                                <h1 class="text-sm sm:text-lg font-bold text-slate-900 leading-tight truncate">@yield('page_title', 'Dashboard Administrasi Guru')</h1>
+                                @hasSection('page_subtitle')
+                                    <p class="text-[11px] sm:text-xs text-slate-500 truncate">@yield('page_subtitle')</p>
+                                @endif
+                            </div>
+                        </div>
+
+                        {{-- Mobile-only right icons: Clock & Profile --}}
+                        <div class="flex lg:hidden items-center gap-1.5 shrink-0">
+                            {{-- Clock (Mobile compact) --}}
+                            <div x-data="{
+                                    now: new Date(),
+                                    timer: null,
+                                    init() {
+                                        this.updateNow();
+                                        this.timer = setInterval(() => { this.updateNow(); }, 1000);
+                                    },
+                                    destroy() {
+                                        if (this.timer) clearInterval(this.timer);
+                                    },
+                                    updateNow() {
+                                        this.now = new Date();
+                                    },
+                                    get timeFormatted() {
+                                        const pad = (n) => String(n).padStart(2, '0');
+                                        return `${pad(this.now.getHours())}:${pad(this.now.getMinutes())}:${pad(this.now.getSeconds())}`;
+                                    }
+                                 }"
+                                 title='Waktu Sistem Realtime (WIB)'
+                                 class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 select-none">
+                                <span class="relative flex h-1.5 w-1.5">
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                                </span>
+                                <span class="text-xs font-black font-mono tracking-tight text-slate-900" x-text="timeFormatted"></span>
+                            </div>
+
+                            <a href="{{ route('profile.edit') }}"
+                               class="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shrink-0"
+                               title="Profil & Tanda Tangan">
+                                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                            </a>
                         </div>
                     </div>
 
-                    <div class="flex flex-wrap items-center gap-2.5">
+                    {{-- Actions & Switchers: Desktop inline, Mobile secondary row or flex --}}
+                    <div class="flex flex-wrap lg:flex-nowrap items-center justify-between lg:justify-end gap-2 sm:gap-2.5">
                         {{-- Quick Class Switcher Dropdown bila sedang membuka suatu kelas --}}
                         @if(isset($teachingClass) && $quickSwitcherClasses->count() > 1)
-                            <div class="flex items-center gap-1.5">
-                                <span class="hidden sm:inline text-xs font-medium text-slate-500">Pindah Kelas:</span>
+                            <div class="flex items-center gap-1.5 flex-1 sm:flex-initial min-w-0">
+                                <span class="hidden sm:inline text-xs font-medium text-slate-500 shrink-0">Pindah Kelas:</span>
                                 <select data-prev-value="{{ route($currentSubMenu, $teachingClass) }}"
                                         onchange="window.handleGuardedSelectNavigate(this, 'href')"
-                                        class="text-xs font-semibold rounded-lg border-slate-300 bg-slate-50 py-1.5 pl-2.5 pr-7 text-slate-800 focus:border-emerald-500 focus:ring-emerald-500">
+                                        class="w-full sm:w-auto text-xs font-semibold rounded-lg border-slate-300 bg-slate-50 py-1.5 pl-2.5 pr-7 text-slate-800 focus:border-emerald-500 focus:ring-emerald-500 truncate">
                                     @foreach($quickSwitcherClasses as $qCls)
                                         <option value="{{ route($currentSubMenu, $qCls) }}" @selected($qCls->id === $teachingClass->id)>
                                             {{ $qCls->class_name }} — {{ $qCls->subject->name ?? '' }} {{ auth()->user()->isAdmin() ? '(' . strtok($qCls->teacher->name ?? '', ' ') . ')' : '' }}
@@ -262,12 +302,12 @@
                         @endif
 
                         {{-- Pemilih Tahun Ajaran & Semester --}}
-                        <form method="POST" action="{{ route('academic-year.switch') }}" data-skip-dirty-guard="1" class="flex items-center">
+                        <form method="POST" action="{{ route('academic-year.switch') }}" data-skip-dirty-guard="1" class="flex items-center flex-1 sm:flex-initial min-w-0">
                             @csrf
                             <select name="academic_year_id"
                                     data-prev-value="{{ $selectedAcademicYear->id }}"
                                     onchange="window.handleGuardedSelectNavigate(this, 'submit')"
-                                    class="text-xs font-semibold rounded-lg border border-emerald-200 bg-emerald-50/70 py-1.5 pl-2.5 pr-7 text-emerald-900 focus:border-emerald-500 focus:ring-emerald-500">
+                                    class="w-full sm:w-auto text-xs font-semibold rounded-lg border border-emerald-200 bg-emerald-50/70 py-1.5 pl-2.5 pr-7 text-emerald-900 focus:border-emerald-500 focus:ring-emerald-500 truncate">
                                 @foreach($globalAcademicYears as $ay)
                                     <option value="{{ $ay->id }}" @selected($ay->id === $selectedAcademicYear->id)>
                                         TA {{ $ay->year_name }} • {{ $ay->semester }} {{ $ay->is_active ? '(Aktif)' : '(Arsip)' }}
@@ -276,50 +316,53 @@
                             </select>
                         </form>
 
-                        <a href="{{ route('profile.edit') }}"
-                           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                            <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                            <span>Profil & TTD</span>
-                        </a>
+                        {{-- Desktop-only Profile & Clock --}}
+                        <div class="hidden lg:flex items-center gap-2.5 shrink-0">
+                            <a href="{{ route('profile.edit') }}"
+                               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                                <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                <span>Profil & TTD</span>
+                            </a>
 
-                        {{-- Widget Tanggal & Jam Realtime di Pojok Kanan Atas --}}
-                        <div x-data="{
-                                now: new Date(),
-                                timer: null,
-                                init() {
-                                    this.updateNow();
-                                    this.timer = setInterval(() => { this.updateNow(); }, 1000);
-                                },
-                                destroy() {
-                                    if (this.timer) clearInterval(this.timer);
-                                },
-                                updateNow() {
-                                    this.now = new Date();
-                                },
-                                get dayName() {
-                                    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-                                    return days[this.now.getDay()];
-                                },
-                                get dateFormatted() {
-                                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-                                    return `${this.dayName}, ${this.now.getDate()} ${months[this.now.getMonth()]} ${this.now.getFullYear()}`;
-                                },
-                                get timeFormatted() {
-                                    const pad = (n) => String(n).padStart(2, '0');
-                                    return `${pad(this.now.getHours())}:${pad(this.now.getMinutes())}:${pad(this.now.getSeconds())} WIB`;
-                                }
-                             }"
-                             title='Waktu Sistem Realtime (WIB)'
-                             class="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 rounded-xl border border-slate-200 bg-slate-50/90 text-slate-700 select-none shadow-2xs">
-                            <div class="flex items-center justify-center shrink-0">
-                                <span class="relative flex h-2 w-2">
-                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                                </span>
-                            </div>
-                            <div class="flex flex-col text-left leading-tight">
-                                <span class="text-[10px] font-semibold text-slate-500 truncate" x-text="dateFormatted"></span>
-                                <span class="text-xs font-black font-mono tracking-tight text-slate-900" x-text="timeFormatted"></span>
+                            {{-- Widget Tanggal & Jam Realtime di Pojok Kanan Atas (Desktop) --}}
+                            <div x-data="{
+                                    now: new Date(),
+                                    timer: null,
+                                    init() {
+                                        this.updateNow();
+                                        this.timer = setInterval(() => { this.updateNow(); }, 1000);
+                                    },
+                                    destroy() {
+                                        if (this.timer) clearInterval(this.timer);
+                                    },
+                                    updateNow() {
+                                        this.now = new Date();
+                                    },
+                                    get dayName() {
+                                        const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+                                        return days[this.now.getDay()];
+                                    },
+                                    get dateFormatted() {
+                                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                                        return `${this.dayName}, ${this.now.getDate()} ${months[this.now.getMonth()]} ${this.now.getFullYear()}`;
+                                    },
+                                    get timeFormatted() {
+                                        const pad = (n) => String(n).padStart(2, '0');
+                                        return `${pad(this.now.getHours())}:${pad(this.now.getMinutes())}:${pad(this.now.getSeconds())} WIB`;
+                                    }
+                                 }"
+                                 title='Waktu Sistem Realtime (WIB)'
+                                 class="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 rounded-xl border border-slate-200 bg-slate-50/90 text-slate-700 select-none shadow-2xs">
+                                <div class="flex items-center justify-center shrink-0">
+                                    <span class="relative flex h-2 w-2">
+                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </span>
+                                </div>
+                                <div class="flex flex-col text-left leading-tight">
+                                    <span class="text-[10px] font-semibold text-slate-500 truncate" x-text="dateFormatted"></span>
+                                    <span class="text-xs font-black font-mono tracking-tight text-slate-900" x-text="timeFormatted"></span>
+                                </div>
                             </div>
                         </div>
                     </div>

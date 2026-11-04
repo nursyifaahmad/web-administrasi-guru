@@ -26,13 +26,13 @@
             </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2.5">
+        <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
             {{-- Dropdown Pemilih Guru (Khusus Akun Admin) --}}
             @if(auth()->user()->isAdmin() && $allTeachers->count() > 1)
-                <form method="GET" action="{{ route('schedules.index') }}" class="flex items-center gap-2">
+                <form method="GET" action="{{ route('schedules.index') }}" class="flex items-center gap-2 w-full sm:w-auto">
                     <label class="text-xs font-semibold text-slate-600 hidden sm:inline">Pilih Guru:</label>
                     <select name="teacher_id" onchange="this.form.submit()"
-                            class="rounded-xl border border-slate-300 text-xs font-bold text-slate-800 px-3 py-2 bg-slate-50 focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full sm:w-auto rounded-xl border border-slate-300 text-xs font-bold text-slate-800 px-3 py-2 bg-slate-50 focus:ring-emerald-500 focus:border-emerald-500">
                         @foreach($allTeachers as $t)
                             <option value="{{ $t->id }}" @selected($t->id === $teacher->id)>
                                 {{ $t->name }} ({{ $t->nip ?: 'Non-NIP' }})
@@ -43,7 +43,7 @@
             @endif
 
             <button type="button" onclick="window.print()"
-                    class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 shadow-2xs transition">
+                    class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 shadow-2xs transition">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
                 <span>Cetak Jadwal Mingguan</span>
             </button>
@@ -94,17 +94,17 @@
                             </div>
                         </div>
 
-                        <div class="pt-2 border-t border-white/10 flex items-center gap-1.5 text-[11px]">
+                        <div class="pt-2 border-t border-white/10 grid grid-cols-3 gap-1.5 text-[11px]">
                             <a href="{{ route('journals.index', $cls) }}"
-                               class="flex-1 py-1.5 px-2 rounded-lg bg-white text-slate-900 font-bold hover:bg-emerald-50 text-center transition">
-                                📝 Isi Jurnal
+                               class="py-1.5 px-1 rounded-lg bg-white text-slate-900 font-bold hover:bg-emerald-50 text-center transition truncate">
+                                📝 Jurnal
                             </a>
                             <a href="{{ route('attendances.index', $cls) }}"
-                               class="flex-1 py-1.5 px-2 rounded-lg bg-emerald-500 text-slate-950 font-extrabold hover:bg-emerald-400 text-center transition">
+                               class="py-1.5 px-1 rounded-lg bg-emerald-500 text-slate-950 font-extrabold hover:bg-emerald-400 text-center transition truncate">
                                 📋 Absensi
                             </a>
                             <a href="{{ route('grades.index', $cls) }}"
-                               class="py-1.5 px-2 rounded-lg bg-white/20 text-white font-bold hover:bg-white/30 text-center transition">
+                               class="py-1.5 px-1 rounded-lg bg-white/20 text-white font-bold hover:bg-white/30 text-center transition truncate">
                                 📊 Nilai
                             </a>
                         </div>
@@ -186,7 +186,7 @@
                     </div>
 
                     {{-- Isi Kartu Kelas pada Hari Tersebut --}}
-                    <div class="p-2.5 space-y-2.5 flex-1 min-h-[160px]">
+                    <div class="p-2.5 space-y-2.5 flex-1 min-h-[70px] md:min-h-[160px]">
                         @forelse($dayClasses as $cls)
                             <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition space-y-2 group">
                                 <div class="flex items-start justify-between gap-1.5">
@@ -246,7 +246,7 @@
                                 </div>
                             </div>
                         @empty
-                            <div class="h-28 rounded-xl border border-dashed border-slate-200 flex flex-col items-center justify-center p-3 text-center text-slate-400">
+                            <div class="h-16 md:h-28 rounded-xl border border-dashed border-slate-200 flex flex-col items-center justify-center p-2 text-center text-slate-400">
                                 <span class="text-xs">Kosong</span>
                                 <span class="text-[10px] text-slate-400 mt-0.5">Tidak ada jadwal KBM</span>
                             </div>

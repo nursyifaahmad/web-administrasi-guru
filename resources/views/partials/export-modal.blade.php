@@ -1,7 +1,7 @@
 <div x-show="{{ $modalVar }}" x-cloak
      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
     <div @click.away="{{ $modalVar }} = false"
-         class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden"
+         class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden"
          x-data="{
             city: @js($globalSchool->default_city ?? 'Lemahabang'),
             print_date: @js(now()->toDateString()),
@@ -33,7 +33,7 @@
                 return base + '?' + params.toString();
             }
          }">
-        <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
             <div>
                 <h3 class="text-sm font-bold">{{ $modalTitle }}</h3>
                 <p class="text-[11px] text-slate-300">Dilengkapi Titimangsa, Wali Kelas + NIP, & Guru Mapel + NIP</p>
@@ -41,7 +41,7 @@
             <button type="button" @click="{{ $modalVar }} = false" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
         </div>
 
-        <div class="p-5 space-y-4 text-xs">
+        <div class="p-5 space-y-4 text-xs overflow-y-auto flex-1">
             @if(!empty($showMonthSelector))
             <div class="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
                 <div>
@@ -127,17 +127,17 @@
             </div>
         </div>
 
-        <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-end gap-2">
+        <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 shrink-0">
             <a :href="buildUrl(@js($pdfRoute), false)" target="_blank"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition">
+               class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition">
                 <span>Buka / Cetak PDF</span>
             </a>
             <a :href="buildUrl(@js($pdfRoute), true)" data-skip-dirty-guard="1"
-               class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition">
+               class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition">
                 <span>Unduh PDF</span>
             </a>
             <a :href="buildUrl(@js($excelRoute), false)" data-skip-dirty-guard="1"
-               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition">
+               class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition">
                 <span>Download Excel (.xlsx)</span>
             </a>
         </div>

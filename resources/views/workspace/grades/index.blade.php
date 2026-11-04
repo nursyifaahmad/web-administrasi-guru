@@ -67,18 +67,18 @@
                 @endif
             </div>
 
-            <div class="flex flex-wrap items-center gap-2 text-xs">
+            <div class="flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
                 <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
                     Belum disimpan (<span x-text="dirtyCount"></span> nilai / <span x-text="dirtyStudentCount"></span> murid)
                 </span>
                 <span x-show="savedMessage && !isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
 
                 <button type="button" @click="saveScores()" :disabled="saving" title="Pintasan keyboard: Ctrl + S"
-                        class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
+                        class="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition text-center">
                     <span x-text="saving ? 'Menyimpan...' : 'Simpan Nilai'"></span>
                 </button>
                 <button type="button" @click="openWeightsModal()"
-                        class="px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition">
+                        class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition text-center">
                     Atur Persentase Rumus NA
                 </button>
                 <button type="button" @click="importModal = true"
@@ -86,7 +86,7 @@
                     Import Excel
                 </button>
                 <button type="button" @click="openExportModal()"
-                        class="px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition">
+                        class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition text-center">
                     Cetak PDF & Excel
                 </button>
             </div>
@@ -131,7 +131,7 @@
                 <thead>
                     <tr class="bg-slate-100 text-slate-800 uppercase text-[11px] border-b border-slate-300">
                         <th rowspan="2" class="sticky left-0 z-20 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10">No</th>
-                        <th rowspan="2" class="sticky left-9 sm:left-10 z-20 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[195px]">Nama Lengkap</th>
+                        <th rowspan="2" class="sticky left-9 sm:left-10 z-20 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[195px] sticky-col-shadow">Nama Lengkap</th>
                         <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 w-12">L/P</th>
 
                         @if($phColumns->count() > 0)
@@ -229,13 +229,13 @@
                     <template x-for="(row, rIdx) in rows" :key="row.student_id">
                         <tr class="hover:bg-slate-50/80">
                             <td class="sticky left-0 z-10 bg-white px-2 py-1.5 text-center font-bold text-slate-600 border-r border-slate-200" x-text="row.no"></td>
-                            <td class="sticky left-9 sm:left-10 z-10 bg-white px-2.5 sm:px-3 py-1.5 font-bold text-slate-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[220px]" x-text="row.full_name"></td>
+                            <td class="sticky left-9 sm:left-10 z-10 bg-white px-2.5 sm:px-3 py-1.5 font-bold text-slate-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[220px] sticky-col-shadow" x-text="row.full_name"></td>
                             <td class="px-2 py-1.5 text-center font-semibold text-slate-700 border-r border-slate-200" x-text="row.gender"></td>
 
                             {{-- Input Dinamis PH --}}
                             <template x-for="colId in phColIds" :key="'ph-' + row.student_id + '-' + colId">
                                 <td class="p-0 border-r border-slate-200">
-                                    <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                    <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                            :id="`grade-${rIdx}-ph-${colId}`"
                                            x-model="row.dynamic_scores[colId]"
                                            @input="markDirty()"
@@ -262,7 +262,7 @@
                                     </div>
                                 </template>
                                 <template x-if="!isAutoAttendance">
-                                    <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                    <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                            :id="`grade-${rIdx}-att`"
                                            x-model="row.attendance_score"
                                            @input="markDirty()"
@@ -276,7 +276,7 @@
                             {{-- Input Dinamis NT --}}
                             <template x-for="colId in ntColIds" :key="'nt-' + row.student_id + '-' + colId">
                                 <td class="p-0 border-r border-slate-200">
-                                    <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                    <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                            :id="`grade-${rIdx}-nt-${colId}`"
                                            x-model="row.dynamic_scores[colId]"
                                            @input="markDirty()"
@@ -290,7 +290,7 @@
 
                             {{-- Input STS & SAS --}}
                             <td class="p-0 border-r border-slate-200">
-                                <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                        :id="`grade-${rIdx}-sts`"
                                        x-model="row.sts_score"
                                        @input="markDirty()"
@@ -300,7 +300,7 @@
                                        class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold bg-amber-50/15 focus:outline-none focus:ring-2 focus:ring-amber-500">
                             </td>
                             <td class="p-0 border-r border-slate-200">
-                                <input type="number" min="0" max="100" step="0.01" enterkeyhint="next"
+                                <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                        :id="`grade-${rIdx}-sas`"
                                        x-model="row.sas_score"
                                        @input="markDirty()"
@@ -601,10 +601,10 @@
                     </div>
                 @endif
 
-                <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                    <button type="button" @click="weightsModal = false" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>
+                <div class="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-slate-100 shrink-0">
+                    <button type="button" @click="weightsModal = false" class="w-full sm:w-auto px-4 py-2 rounded-xl border border-slate-300 font-semibold text-center">Batal</button>
                     <button type="submit" :disabled="Math.abs(totalW() - 100) >= 0.01"
-                            class="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-40">
+                            class="w-full sm:w-auto px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-40 text-center">
                         Simpan Rumus & Hitung Ulang NA
                     </button>
                 </div>

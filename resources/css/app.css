@@ -34,3 +34,31 @@ input.no-spinner::-webkit-inner-spin-button {
 input.no-spinner[type=number] {
     -moz-appearance: textfield;
 }
+
+/* Hide scrollbars for mobile swipe tab strips */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Shadow indicator on fixed left sticky columns during horizontal table scrolling */
+.sticky-col-shadow {
+    box-shadow: 3px 0 6px -2px rgba(15, 23, 42, 0.08);
+}
+
+/* Mobile optimizations: prevent iOS Safari auto-zoom on input focus */
+@media (max-width: 640px) {
+    input:not([type="checkbox"]):not([type="radio"]):not(.no-spinner):not([maxlength="1"]),
+    select,
+    textarea {
+        font-size: 16px;
+    }
+
+    table input.no-spinner,
+    table input[maxlength="1"] {
+        font-size: 12px !important;
+    }
+}

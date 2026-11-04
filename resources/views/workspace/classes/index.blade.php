@@ -44,7 +44,7 @@
         </form>
 
         <button type="button" @click="createClassModal = true"
-                class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-2xs transition">
+                class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-2xs transition">
             <span>+ Buat Kelas Administrasi Baru</span>
         </button>
     </div>
@@ -141,15 +141,15 @@
 
     {{-- Modal Buat Kelas Administrasi Baru --}}
     <div x-show="createClassModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-        <div @click.away="createClassModal = false" class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-            <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div @click.away="createClassModal = false" class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden">
+            <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
                 <div>
                     <h3 class="text-sm font-bold">Buat Buku Kelas Administrasi Baru</h3>
                     <p class="text-[11px] text-slate-300">Periode: {{ $selectedAcademicYear->full_label }}</p>
                 </div>
-                <button type="button" @click="createClassModal = false" class="text-slate-400 hover:text-white text-xl">&times;</button>
+                <button type="button" @click="createClassModal = false" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
             </div>
-            <form method="POST" action="{{ route('classes.store') }}" class="p-5 space-y-3.5 text-xs">
+            <form method="POST" action="{{ route('classes.store') }}" class="p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
                 @csrf
                 @if(auth()->user()->isAdmin())
                     <div>
@@ -281,9 +281,9 @@
                     @endif
                 </div>
 
-                <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                    <button type="button" @click="createClassModal = false" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>
-                    <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-2xs">Buat Kelas Sekarang</button>
+                <div class="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-slate-100 shrink-0">
+                    <button type="button" @click="createClassModal = false" class="w-full sm:w-auto px-4 py-2 rounded-xl border border-slate-300 font-semibold text-center">Batal</button>
+                    <button type="submit" class="w-full sm:w-auto px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-2xs text-center">Buat Kelas Sekarang</button>
                 </div>
             </form>
         </div>

@@ -17,30 +17,30 @@
 
     {{-- Toolbar Filter, Tambah Jurnal & Cetak PDF/Excel --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <form method="GET" action="{{ route('journals.index', $teachingClass) }}" class="flex flex-wrap items-center gap-2 text-xs">
-            <select name="month" onchange="this.form.submit()" class="rounded-xl border border-slate-300 px-3 py-2 font-semibold">
+        <form method="GET" action="{{ route('journals.index', $teachingClass) }}" class="flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
+            <select name="month" onchange="this.form.submit()" class="w-full sm:w-auto rounded-xl border border-slate-300 px-3 py-2 font-semibold">
                 <option value="">Semua Bulan (1 Semester)</option>
                 @foreach(\App\Support\IndonesianDate::MONTHS as $mNum => $mName)
                     <option value="{{ $mNum }}" @selected($filterMonth === $mNum)>{{ $mName }}</option>
                 @endforeach
             </select>
             <input type="number" name="year" value="{{ $filterYear }}" min="2020" max="2099"
-                   class="w-24 rounded-xl border border-slate-300 px-3 py-2 font-semibold">
+                   class="w-full sm:w-24 rounded-xl border border-slate-300 px-3 py-2 font-semibold">
             <input type="text" name="q" value="{{ $search }}" placeholder="Cari kegiatan / materi / catatan..."
-                   class="w-52 rounded-xl border border-slate-300 px-3 py-2">
-            <button type="submit" class="px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800">Filter</button>
+                   class="w-full sm:w-52 rounded-xl border border-slate-300 px-3 py-2">
+            <button type="submit" class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 text-center">Filter</button>
             @if($filterMonth || $search)
-                <a href="{{ route('journals.index', $teachingClass) }}" class="px-3 py-2 rounded-xl border border-slate-300 text-slate-600 font-semibold">Reset</a>
+                <a href="{{ route('journals.index', $teachingClass) }}" class="w-full sm:w-auto text-center px-3 py-2 rounded-xl border border-slate-300 text-slate-600 font-semibold">Reset</a>
             @endif
         </form>
 
-        <div class="flex flex-wrap items-center gap-2 text-xs">
+        <div class="flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
             <button type="button" @click="openCreate()"
-                    class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-2xs transition">
+                    class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-2xs transition">
                 <span>+ Tambah Jurnal Harian</span>
             </button>
             <button type="button" @click="exportModal = true"
-                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition">
+                    class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition">
                 <span>Cetak PDF & Download Excel</span>
             </button>
         </div>
@@ -55,11 +55,11 @@
                         <th rowspan="2" class="px-3 py-3 text-center border-r border-slate-200 w-12">No</th>
                         <th rowspan="2" class="px-4 py-3 border-r border-slate-200 w-36">Tanggal</th>
                         <th rowspan="2" class="px-3 py-3 text-center border-r border-slate-200 w-24">Jam Pelajaran Ke</th>
-                        <th rowspan="2" class="px-4 py-3 border-r border-slate-200">Kegiatan / Materi</th>
+                        <th rowspan="2" class="px-4 py-3 border-r border-slate-200 min-w-[220px]">Kegiatan / Materi</th>
                         <th colspan="2" class="px-3 py-2 text-center border-b border-r border-slate-200 w-40 bg-emerald-50/70 text-emerald-950">Jumlah Murid</th>
-                        <th rowspan="2" class="px-4 py-3 border-r border-slate-200 w-56">Catatan</th>
+                        <th rowspan="2" class="px-4 py-3 border-r border-slate-200 min-w-[140px] w-56">Catatan</th>
                         <th rowspan="2" class="px-3 py-3 text-center border-r border-slate-200 w-28">Paraf</th>
-                        <th rowspan="2" class="px-3 py-3 text-right w-36">Aksi</th>
+                        <th rowspan="2" class="px-3 py-3 text-right min-w-[140px] w-36">Aksi</th>
                     </tr>
                     <tr class="bg-emerald-50/40 text-slate-700 uppercase text-[10px] border-b border-slate-200">
                         <th class="px-2.5 py-2 text-center border-r border-slate-200 text-emerald-800">Hadir</th>
@@ -117,7 +117,7 @@
                                 @endif
                             </td>
                             <td class="px-3 py-3 text-right">
-                                <div class="inline-flex flex-wrap justify-end gap-1">
+                                <div class="inline-flex items-center justify-end gap-1 whitespace-nowrap">
                                     <form method="POST" action="{{ route('journals.resync', [$teachingClass, $journal]) }}" title="Tarik ulang jumlah Hadir/Tidak Hadir dari Menu Absensi">
                                         @csrf
                                         <button type="submit" class="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100">
@@ -277,9 +277,9 @@
                     </div>
                 </div>
 
-                <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                    <button type="button" @click="formModal = false" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>
-                    <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700">Simpan Jurnal</button>
+                <div class="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-slate-100 shrink-0">
+                    <button type="button" @click="formModal = false" class="w-full sm:w-auto px-4 py-2 rounded-xl border border-slate-300 font-semibold text-center">Batal</button>
+                    <button type="submit" class="w-full sm:w-auto px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 text-center">Simpan Jurnal</button>
                 </div>
             </form>
         </div>
