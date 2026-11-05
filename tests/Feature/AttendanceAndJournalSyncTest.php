@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\AcademicYear;
 use App\Models\ClassStudent;
 use App\Models\DailyJournal;
+use App\Models\SchoolScheduleItem;
+use App\Models\SchoolScheduleTeacher;
 use App\Models\Subject;
 use App\Models\TeachingClass;
 use App\Models\User;
@@ -313,5 +315,79 @@ class AttendanceAndJournalSyncTest extends TestCase
         // Modal dan rincian murid tidak hadir ada di dokumen
         $res->assertSee('absentModal', false);
         $res->assertSee('Rincian Murid Tidak Hadir', false);
+    }
+
+    public function test_journal_attendance_preview_includes_master_schedule_suggestion(): void
+    {
+        [$guru, $tClass, $students] = $this->createClassWithFiveStudents();
+        $year = $tClass->academicYear;
+
+        // Buat guru jadwal dengan kode 32
+        $schedTeacher = SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $year->id,
+            'code' => '32',
+            'name' => $guru->name,
+            'subject' => 'Matematika',
+            'user_id' => $guru->id,
+        ]);
+
+        // Tanggal 2026-11-05 adalah hari Kamis (day_of_week = 4)
+        // Tambahkan item jadwal untuk kelas 7A (VII-A) pada hari Kamis jam 1-2
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 4,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '07.40 - 08.10',
+            'class_name' => '7A',
+            'teacher_code' => '32',
+            'teacher_name' => $guru->name,
+            'user_id' => $guru->id,
+        ]);
+
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 4,
+            'shift' => 'pagi',
+            'period_order' => 2,
+            'time_range' => '08.10 - 08.40',
+            'class_name' => '7A',
+            'teacher_code' => '32',
+            'teacher_name' => $guru->name,
+            'user_id' => $guru->id,
+        ]);
+
+        // 1. Cek tanggal Kamis: harus mengembalikan saran jam '1 - 2' dan rentang '07.40 - 08.40'
+        $response = $this->actingAs($guru)->getJson(route('journals.attendance-preview', [
+            'teachingClass' => $tClass,
+            'date' => '2026-11-05',
+        ]));
+
+        $response->assertOk();
+        $response->assertJsonPath('schedule.found', true);
+        $response->assertJsonPath('schedule.lesson_hours', '1 - 2');
+        $response->assertJsonPath('schedule.time_range', '07.40 - 08.40');
+        $response->assertJsonPath('schedule.day_name', 'Kamis');
+        $response->assertJsonPath('schedule.source', 'master_schedule');
+
+        // 2. Cek hari Minggu: harus mengembalikan found = false
+        $responseSunday = $this->actingAs($guru)->getJson(route('journals.attendance-preview', [
+            'teachingClass' => $tClass,
+            'date' => '2026-11-08',
+        ]));
+
+        $responseSunday->assertOk();
+        $responseSunday->assertJsonPath('schedule.found', false);
+    }
+
+    public function test_journal_index_view_contains_auto_schedule_state_and_helper_badges(): void
+    {
+        [$guru, $tClass, $students] = $this->createClassWithFiveStudents();
+
+        $response = $this->actingAs($guru)->get(route('journals.index', $tClass));
+        $response->assertOk();
+        $response->assertSee('Otomatis Master Jadwal', false);
+        $response->assertSee('scheduleInfo', false);
+        $response->assertSee('Terapkan Jam Master', false);
     }
 }

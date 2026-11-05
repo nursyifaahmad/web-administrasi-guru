@@ -10,6 +10,7 @@ use App\Models\Subject;
 use App\Models\TeachingClass;
 use App\Models\User;
 use App\Support\IndonesianDate;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -39,6 +40,23 @@ class SchoolScheduleService
             return sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
         }
         return $start;
+    }
+
+    /**
+     * Normalisasi nama rombel / kelas menjadi kode ringkas (misal: "VII-A", "VII A", "7-A" -> "7A")
+     */
+    public static function normalizeClassName(?string $name): string
+    {
+        if (empty($name)) {
+            return '';
+        }
+        $upper = strtoupper(trim($name));
+        $upper = str_replace(['KELAS', 'RUANG', 'ROMBEL'], '', $upper);
+        $upper = str_replace([' ', '-', '_', '.'], '', $upper);
+        $upper = str_replace('VIII', '8', $upper);
+        $upper = str_replace('VII', '7', $upper);
+        $upper = str_replace('IX', '9', $upper);
+        return trim($upper);
     }
 
     public const RAW_WAKASEK_CSV = <<<'CSV'
@@ -997,6 +1015,195 @@ CSV;
             'teachers' => $teachers,
             'total_items' => $items->count(),
             'total_conflicts' => $items->where('is_conflict', true)->count(),
+        ];
+    }
+
+    /**
+     * Dapatkan saran jam pelajaran untuk suatu kelas & tanggal berdasarkan Master Jadwal Sekolah
+     */
+    public function getLessonHoursForClassDate(TeachingClass $teachingClass, string $date, ?User $user = null): array
+    {
+        try {
+            $carbon = Carbon::parse($date);
+        } catch (\Throwable $e) {
+            $carbon = now();
+        }
+
+        $dayOfWeek = (int) $carbon->dayOfWeekIso; // 1 = Senin, ..., 6 = Sabtu, 7 = Minggu
+        $dayName = self::DAYS_MAP[$dayOfWeek] ?? $carbon->locale('id')->isoFormat('dddd');
+
+        if ($dayOfWeek > 6) {
+            return [
+                'found' => false,
+                'lesson_hours' => null,
+                'time_range' => null,
+                'day_num' => $dayOfWeek,
+                'day_name' => $dayName,
+                'label' => 'Hari Libur (Minggu)',
+                'options' => [],
+                'source' => null,
+            ];
+        }
+
+        $teacherUser = $user ?: ($teachingClass->teacher ?: auth()->user());
+        $yearId = $teachingClass->academic_year_id ?: AcademicYear::active()?->id;
+
+        $normalizedClass = self::normalizeClassName($teachingClass->class_name);
+        $schoolClassId = $teachingClass->school_class_id;
+
+        // 1. Cari kode guru dari SchoolScheduleTeacher jika ada
+        $teacherCode = null;
+        if ($yearId && $teacherUser) {
+            $scheduleTeacher = SchoolScheduleTeacher::query()
+                ->where('academic_year_id', $yearId)
+                ->where('user_id', $teacherUser->id)
+                ->first();
+
+            if (! $scheduleTeacher) {
+                $cleanU = self::cleanAlphaString($teacherUser->name);
+                $pureU = self::cleanAlphaString(explode(',', $teacherUser->name)[0]);
+
+                $scheduleTeacher = SchoolScheduleTeacher::query()
+                    ->where('academic_year_id', $yearId)
+                    ->get()
+                    ->first(function ($t) use ($cleanU, $pureU) {
+                        $cleanT = self::cleanAlphaString($t->name);
+                        $pureT = self::cleanAlphaString(explode(',', $t->name)[0]);
+                        return $cleanT === $cleanU || $pureT === $pureU || str_contains($cleanT, $cleanU) || str_contains($cleanU, $cleanT);
+                    });
+            }
+            $teacherCode = $scheduleTeacher?->code;
+        }
+
+        // 2. Query item jadwal dari school_schedule_items
+        $items = collect();
+        if ($yearId) {
+            $query = SchoolScheduleItem::query()
+                ->where('academic_year_id', $yearId)
+                ->where('day_of_week', $dayOfWeek)
+                ->where('period_order', '>', 0); // KBM saja, bukan pembiasaan/istirahat
+
+            // Cocokkan kelas
+            $query->where(function ($q) use ($schoolClassId, $normalizedClass) {
+                if ($schoolClassId) {
+                    $q->where('school_class_id', $schoolClassId);
+                }
+                if ($normalizedClass !== '') {
+                    $q->orWhere('class_name', $normalizedClass);
+                }
+            });
+
+            // Cocokkan guru
+            if ($teacherUser || $teacherCode) {
+                $query->where(function ($q) use ($teacherUser, $teacherCode) {
+                    if ($teacherUser) {
+                        $q->where('user_id', $teacherUser->id);
+                    }
+                    if ($teacherCode) {
+                        $q->orWhere('teacher_code', $teacherCode);
+                    }
+                });
+            }
+
+            $items = $query->orderBy('period_order')->get();
+        }
+
+        // 3. Jika ditemukan di tabel school_schedule_items
+        if ($items->isNotEmpty()) {
+            $periods = $items->pluck('period_order')->sort()->values();
+            $times = $items->pluck('time_range')->filter()->values();
+
+            // Bentuk blok periode berurutan (misal [1, 2] -> "1 - 2", [1, 2, 7, 8] -> ["1 - 2", "7 - 8"])
+            $blocks = [];
+            $currentBlock = [];
+            foreach ($periods as $p) {
+                if (empty($currentBlock)) {
+                    $currentBlock[] = $p;
+                } elseif ($p === end($currentBlock) + 1) {
+                    $currentBlock[] = $p;
+                } else {
+                    $blocks[] = $currentBlock;
+                    $currentBlock = [$p];
+                }
+            }
+            if (! empty($currentBlock)) {
+                $blocks[] = $currentBlock;
+            }
+
+            $blockStrings = array_map(function ($b) {
+                return count($b) > 1 ? ($b[0] . ' - ' . end($b)) : (string) $b[0];
+            }, $blocks);
+
+            $primaryHours = implode(', ', $blockStrings);
+
+            // Rentang waktu total (mulai jam pertama s.d. selesai jam terakhir)
+            $startTime = '';
+            $endTime = '';
+            if ($times->isNotEmpty()) {
+                $firstTime = $times->first();
+                $lastTime = $times->last();
+                $startTime = trim(explode('-', $firstTime)[0] ?? '');
+                $endTime = trim(explode('-', $lastTime)[1] ?? '');
+            }
+            $timeRangeTotal = ($startTime && $endTime) ? "{$startTime} - {$endTime}" : ($times->first() ?? '');
+
+            // Opsi pilihan jika lebih dari 1 blok
+            $options = [];
+            if (count($blockStrings) > 1) {
+                foreach ($blockStrings as $bStr) {
+                    $options[] = $bStr;
+                }
+                $options[] = $primaryHours; // Pilihan gabungan seluruh jam
+            } else {
+                $options[] = $primaryHours;
+            }
+
+            return [
+                'found' => true,
+                'lesson_hours' => $primaryHours,
+                'time_range' => $timeRangeTotal,
+                'day_num' => $dayOfWeek,
+                'day_name' => $dayName,
+                'label' => "Jam {$primaryHours}" . ($timeRangeTotal ? " ({$timeRangeTotal})" : ''),
+                'options' => array_values(array_unique($options)),
+                'source' => 'master_schedule',
+            ];
+        }
+
+        // 4. Fallback: coba ekstrak dari schedule_info pada TeachingClass jika ada
+        // Contoh format: "Senin Jam 1-2 (07.40 - 08.40) & Kamis Jam 7-8 (10.55 - 11.55)"
+        if (! empty($teachingClass->schedule_info)) {
+            $info = $teachingClass->schedule_info;
+            if (stripos($info, $dayName) !== false) {
+                if (preg_match('/' . preg_quote($dayName, '/') . '\s*(?:Jam\s*)?([0-9\s\-]+)(?:\(([0-9\.\s\-:]+)\))?/i', $info, $match)) {
+                    $rawHours = trim($match[1]);
+                    $rawHours = preg_replace('/\s*-\s*/', ' - ', $rawHours);
+                    $rawTimes = trim($match[2] ?? '');
+
+                    return [
+                        'found' => true,
+                        'lesson_hours' => $rawHours,
+                        'time_range' => $rawTimes ?: null,
+                        'day_num' => $dayOfWeek,
+                        'day_name' => $dayName,
+                        'label' => "Jam {$rawHours}" . ($rawTimes ? " ({$rawTimes})" : ''),
+                        'options' => [$rawHours],
+                        'source' => 'schedule_info',
+                    ];
+                }
+            }
+        }
+
+        // 5. Tidak ditemukan jadwal untuk hari ini pada kelas ini
+        return [
+            'found' => false,
+            'lesson_hours' => null,
+            'time_range' => null,
+            'day_num' => $dayOfWeek,
+            'day_name' => $dayName,
+            'label' => "Tidak ada jadwal KBM pada hari {$dayName} di Master Jadwal",
+            'options' => [],
+            'source' => null,
         ];
     }
 }

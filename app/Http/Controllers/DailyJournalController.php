@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\DailyJournal;
 use App\Models\TeachingClass;
 use App\Services\AttendanceJournalSyncService;
+use App\Services\SchoolScheduleService;
 use App\Support\IndonesianDate;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +16,7 @@ use Illuminate\View\View;
 
 class DailyJournalController extends Controller
 {
-    public function index(Request $request, TeachingClass $teachingClass): View
+    public function index(Request $request, TeachingClass $teachingClass, SchoolScheduleService $scheduleService): View
     {
         $this->authorizeClassAccess($request->user(), $teachingClass);
         $teachingClass->load(['subject.kktps', 'teacher', 'academicYear']);
@@ -40,6 +41,12 @@ class DailyJournalController extends Controller
             });
         }
 
+        $todaySchedule = $scheduleService->getLessonHoursForClassDate(
+            $teachingClass,
+            now()->toDateString(),
+            $request->user()
+        );
+
         return view('workspace.journals.index', [
             'teachingClass' => $teachingClass,
             'journals' => $query->get(),
@@ -47,18 +54,25 @@ class DailyJournalController extends Controller
             'filterMonth' => $filterMonth,
             'filterYear' => $filterYear,
             'search' => $search,
+            'todaySchedule' => $todaySchedule,
         ]);
     }
 
     public function attendancePreview(
         Request $request,
         TeachingClass $teachingClass,
-        AttendanceJournalSyncService $syncService
+        AttendanceJournalSyncService $syncService,
+        SchoolScheduleService $scheduleService
     ): JsonResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         $date = $request->string('date')->trim()->toString() ?: now()->toDateString();
         $summary = $syncService->summarizeForDate($teachingClass, $date);
+        $summary['schedule'] = $scheduleService->getLessonHoursForClassDate(
+            $teachingClass,
+            $date,
+            $request->user()
+        );
 
         return response()->json($summary);
     }

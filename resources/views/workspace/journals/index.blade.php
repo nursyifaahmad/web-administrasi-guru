@@ -12,6 +12,7 @@
         previewUrl: @js(route('journals.attendance-preview', $teachingClass)),
         absentStudentsUrl: @js(route('journals.absent-students', $teachingClass)),
         todayDate: @js(now()->toDateString()),
+        todaySchedule: @js($todaySchedule ?? null),
         hasProfileSig: @js(!empty($teachingClass->teacher?->signature_data) || !empty(auth()->user()->signature_data))
      })">
 
@@ -184,9 +185,50 @@
                                class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold">
                     </div>
                     <div>
-                        <label class="block font-bold text-slate-700 mb-1">Jam Pelajaran Ke *</label>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block font-bold text-slate-700">Jam Pelajaran Ke *</label>
+                            <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                Otomatis Master Jadwal
+                            </span>
+                        </div>
                         <input type="text" name="lesson_hours" x-model="form.lesson_hours" required placeholder="Contoh: 1 - 2 atau 3 - 4"
-                               class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
+                               class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold text-indigo-700">
+
+                        {{-- Indikator Master Jadwal Sekolah --}}
+                        <template x-if="scheduleInfo && scheduleInfo.found">
+                            <div class="mt-1.5 space-y-1">
+                                <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
+                                        <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                        <span x-text="'Master: ' + (scheduleInfo.label || ('Jam ' + scheduleInfo.lesson_hours))"></span>
+                                    </span>
+                                    <template x-if="isEdit && form.lesson_hours !== scheduleInfo.lesson_hours">
+                                        <button type="button" @click="form.lesson_hours = scheduleInfo.lesson_hours"
+                                                class="px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] border border-indigo-200 transition cursor-pointer">
+                                            Terapkan Jam Master
+                                        </button>
+                                    </template>
+                                </div>
+                                <template x-if="scheduleInfo.options && scheduleInfo.options.length > 1">
+                                    <div class="flex flex-wrap items-center gap-1 text-[10px] text-slate-500 pt-0.5">
+                                        <span>Pilih Sesi:</span>
+                                        <template x-for="opt in scheduleInfo.options" :key="opt">
+                                            <button type="button" @click="form.lesson_hours = opt"
+                                                    :class="form.lesson_hours === opt ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold'"
+                                                    class="px-2 py-0.5 rounded-md text-[10px] transition cursor-pointer"
+                                                    x-text="'Jam ' + opt">
+                                            </button>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="scheduleInfo && !scheduleInfo.found">
+                            <div class="mt-1.5 flex items-center gap-1 text-[11px] text-slate-500">
+                                <svg class="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <span x-text="scheduleInfo.label || 'Tidak ada jadwal KBM master pada hari ini (isi manual jika jam tambahan/pengganti)'"></span>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
@@ -457,9 +499,12 @@ function journalWorkspace(cfg) {
         canvasData: '',
         syncedRecorded: 0,
         syncMessage: 'Memeriksa data Absensi pada tanggal terpilih...',
+        scheduleInfo: cfg.todaySchedule || null,
         form: {
             journal_date: cfg.todayDate,
-            lesson_hours: '1 - 2',
+            lesson_hours: (cfg.todaySchedule && cfg.todaySchedule.found && cfg.todaySchedule.lesson_hours)
+                ? cfg.todaySchedule.lesson_hours
+                : '1 - 2',
             activity_material: '',
             present_count: 0,
             absent_count: 0,
@@ -496,9 +541,13 @@ function journalWorkspace(cfg) {
         },
         openCreate() {
             this.isEdit = false;
+            const defaultHours = (cfg.todaySchedule && cfg.todaySchedule.found && cfg.todaySchedule.lesson_hours)
+                ? cfg.todaySchedule.lesson_hours
+                : '1 - 2';
+
             this.form = {
                 journal_date: cfg.todayDate,
-                lesson_hours: '1 - 2',
+                lesson_hours: defaultHours,
                 activity_material: '',
                 present_count: 0,
                 absent_count: 0,
@@ -507,6 +556,7 @@ function journalWorkspace(cfg) {
                 has_signature: false,
                 update_url: '',
             };
+            this.scheduleInfo = cfg.todaySchedule || null;
             this.syncMessage = 'Memeriksa data Absensi pada tanggal terpilih...';
             this.formModal = true;
             this.fetchAttendanceForDate();
@@ -527,6 +577,7 @@ function journalWorkspace(cfg) {
                 has_signature: item.has_signature,
                 update_url: item.update_url,
             };
+            this.scheduleInfo = null;
             this.syncMessage = (item.present_count > 0 || item.absent_count > 0)
                 ? 'Tersinkronisasi otomatis dengan data Absensi.'
                 : 'Belum ada isian Absensi pada tanggal ini. Angka kehadiran otomatis tersinkronisasi begitu Anda mengisi data di menu Absensi.';
@@ -551,6 +602,14 @@ function journalWorkspace(cfg) {
                 this.syncedRecorded = data.total_recorded || 0;
                 this.form.present_count = data.present_count || 0;
                 this.form.absent_count = data.absent_count || 0;
+
+                if (data.schedule) {
+                    this.scheduleInfo = data.schedule;
+                    if (!this.isEdit && data.schedule.found && data.schedule.lesson_hours) {
+                        this.form.lesson_hours = data.schedule.lesson_hours;
+                    }
+                }
+
                 if (data.total_recorded > 0) {
                     this.syncMessage = `Tersinkronisasi otomatis dengan menu Absensi (${data.total_recorded} murid): Hadir ${data.present_count} (termasuk Dispen ${data.dispen_count}), Tidak Hadir ${data.absent_count} (${data.breakdown || 'Lengkap'}).`;
                 } else {
