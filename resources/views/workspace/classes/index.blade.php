@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('title', 'Daftar Kelas Administrasi')
-@section('page_title', 'Portofolio Buku Administrasi Kelas (' . $classes->count() . ' Kelas)')
+@section('page_title', 'Portofolio Buku Administrasi Kelas')
 
 @section('content')
 <div class="space-y-5"
