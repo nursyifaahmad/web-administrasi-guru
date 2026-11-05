@@ -29,6 +29,15 @@ class MasterScheduleController extends Controller
             $academicYear = AcademicYear::query()->first();
         }
 
+        // Jika data jadwal masih kosong, muat template resmi Wakasek secara otomatis
+        if ($academicYear) {
+            $itemCount = \App\Models\SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->count();
+            if ($itemCount === 0) {
+                $this->scheduleService->importFromWakasekCsv($academicYear);
+                $this->scheduleService->syncToTeachingClasses($academicYear);
+            }
+        }
+
         $activeTab = $request->query('tab', 'my_schedule'); // 'my_schedule', 'school_matrix', 'piket'
         $activeDay = (int) ($request->query('day') ?: 1);
         if ($activeDay < 1 || $activeDay > 6) {

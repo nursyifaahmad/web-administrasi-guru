@@ -228,6 +228,37 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertSee('Guru Piket & Wali Kelas');
     }
 
+    public function test_ahmad_nursyifa_auto_matched_to_code_32_and_views_schedule(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        // Buat akun Ahmad Nursyifa, S.Kom.
+        $ahmad = User::query()->create([
+            'name' => 'Ahmad Nursyifa, S.Kom.',
+            'email' => 'ahmad@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'password' => bcrypt('password'),
+            'is_active' => true,
+        ]);
+
+        $service = app(SchoolScheduleService::class);
+        $service->importFromWakasekCsv($year);
+
+        // Akses Jadwal Utama oleh Ahmad Nursyifa
+        $response = $this->actingAs($ahmad)->get(route('schedules.main.index'));
+        $response->assertOk();
+        $response->assertSee('Ahmad Nursyifa, S.Kom.');
+        $response->assertSee('Kode Guru: 32');
+        $response->assertDontSee('Total: 0 Jam Pelajaran');
+
+        // Pastikan record SchoolScheduleTeacher otomatis terhubung ke akunnya
+        $this->assertDatabaseHas('school_schedule_teachers', [
+            'academic_year_id' => $year->id,
+            'code' => '32',
+            'user_id' => $ahmad->id,
+        ]);
+    }
+
     public function test_admin_can_export_master_schedule(): void
     {
         [$admin, $guru, $year] = $this->createEnvironment();

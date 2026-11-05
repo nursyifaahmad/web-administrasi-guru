@@ -33,6 +33,15 @@ class SchoolScheduleController extends Controller
             $academicYear = AcademicYear::query()->first();
         }
 
+        // Jika data jadwal masih kosong, muat template resmi Wakasek secara otomatis
+        if ($academicYear) {
+            $itemCount = SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->count();
+            if ($itemCount === 0) {
+                $this->scheduleService->importFromWakasekCsv($academicYear);
+                $this->scheduleService->syncToTeachingClasses($academicYear);
+            }
+        }
+
         $activeDay = (int) ($request->query('day') ?: 1); // 1 = Senin s.d. 6 = Sabtu
         if ($activeDay < 1 || $activeDay > 6) {
             $activeDay = 1;

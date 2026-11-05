@@ -15,6 +15,14 @@ use Illuminate\Support\Facades\DB;
 
 class SchoolScheduleService
 {
+    public static function cleanAlphaString(?string $str): string
+    {
+        if (empty($str)) {
+            return '';
+        }
+        return strtolower(preg_replace('/[^a-zA-Z]/', '', $str));
+    }
+
     public const RAW_WAKASEK_CSV = <<<'CSV'
 JADWAL PELAJARAN SELAMA PERBAIKAN RUANG KELAS,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 SEMESTER GANJIL,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
@@ -155,23 +163,29 @@ CSV;
         DB::transaction(function () use ($academicYear, $teachersData, $homeroomMap, $piketMap, $users, $subjects, $lines) {
             // Simpan / update guru jadwal
             foreach ($teachersData as $code => $t) {
-                $matchedUser = $users->first(function ($u) use ($t) {
-                    $cleanU = strtolower(preg_replace('/[^a-z]/', '', $u->name));
-                    $cleanT = strtolower(preg_replace('/[^a-z]/', '', $t['name']));
-                    return str_contains($cleanU, $cleanT) || str_contains($cleanT, $cleanU);
+                $cleanT = self::cleanAlphaString($t['name']);
+                $pureT = self::cleanAlphaString(explode(',', $t['name'])[0]);
+
+                $matchedUser = $users->first(function ($u) use ($cleanT, $pureT) {
+                    $cleanU = self::cleanAlphaString($u->name);
+                    $pureU = self::cleanAlphaString(explode(',', $u->name)[0]);
+                    return $cleanU === $cleanT
+                        || $pureU === $pureT
+                        || str_contains($cleanU, $cleanT)
+                        || str_contains($cleanT, $cleanU)
+                        || (strlen($pureU) >= 4 && (str_contains($pureT, $pureU) || str_contains($pureU, $pureT)));
                 });
 
                 $matchedSubject = $subjects->first(function ($s) use ($t) {
-                    $cleanS = strtolower(preg_replace('/[^a-z]/', '', $s->name));
-                    $cleanT = strtolower(preg_replace('/[^a-z]/', '', $t['subject']));
-                    return str_contains($cleanS, $cleanT) || str_contains($cleanT, $cleanS);
+                    $cleanS = self::cleanAlphaString($s->name);
+                    $cleanSubj = self::cleanAlphaString($t['subject']);
+                    return str_contains($cleanS, $cleanSubj) || str_contains($cleanSubj, $cleanS);
                 });
 
                 // Cek penugasan wali kelas
                 $assignedWk = null;
                 foreach ($homeroomMap as $cName => $wName) {
-                    $cleanW = strtolower(preg_replace('/[^a-z]/', '', $wName));
-                    $cleanT = strtolower(preg_replace('/[^a-z]/', '', $t['name']));
+                    $cleanW = self::cleanAlphaString($wName);
                     if (str_contains($cleanW, $cleanT) || str_contains($cleanT, $cleanW)) {
                         $assignedWk = $cName;
                         break;
@@ -181,8 +195,7 @@ CSV;
                 // Cek guru piket
                 $assignedPiket = null;
                 foreach ($piketMap as $dayName => $pName) {
-                    $cleanP = strtolower(preg_replace('/[^a-z]/', '', $pName));
-                    $cleanT = strtolower(preg_replace('/[^a-z]/', '', $t['name']));
+                    $cleanP = self::cleanAlphaString($pName);
                     if (str_contains($cleanP, $cleanT) || str_contains($cleanT, $cleanP)) {
                         $assignedPiket = $dayName;
                         break;
@@ -686,10 +699,16 @@ CSV;
                 } elseif ($tRecord?->user_id) {
                     $user = $users->find($tRecord->user_id);
                 } elseif ($tRecord) {
-                    $cleanT = strtolower(preg_replace('/[^a-z]/', '', $tRecord->name));
-                    $user = $users->first(function ($u) use ($cleanT) {
-                        $cleanU = strtolower(preg_replace('/[^a-z]/', '', $u->name));
-                        return str_contains($cleanU, $cleanT) || str_contains($cleanT, $cleanU);
+                    $cleanT = self::cleanAlphaString($tRecord->name);
+                    $pureT = self::cleanAlphaString(explode(',', $tRecord->name)[0]);
+                    $user = $users->first(function ($u) use ($cleanT, $pureT) {
+                        $cleanU = self::cleanAlphaString($u->name);
+                        $pureU = self::cleanAlphaString(explode(',', $u->name)[0]);
+                        return $cleanU === $cleanT
+                            || $pureU === $pureT
+                            || str_contains($cleanU, $cleanT)
+                            || str_contains($cleanT, $cleanU)
+                            || (strlen($pureU) >= 4 && (str_contains($pureT, $pureU) || str_contains($pureU, $pureT)));
                     });
                 }
 
@@ -716,9 +735,9 @@ CSV;
                 $subj = null;
                 $subjectText = $first->subject_name ?: ($tRecord?->subject ?: '');
                 if ($subjectText !== '') {
-                    $cleanSubj = strtolower(preg_replace('/[^a-z]/', '', $subjectText));
+                    $cleanSubj = self::cleanAlphaString($subjectText);
                     $subj = $subjects->first(function ($s) use ($cleanSubj) {
-                        $cleanName = strtolower(preg_replace('/[^a-z]/', '', $s->name));
+                        $cleanName = self::cleanAlphaString($s->name);
                         return str_contains($cleanName, $cleanSubj) || str_contains($cleanSubj, $cleanName);
                     });
                 }
@@ -813,15 +832,46 @@ CSV;
             return [];
         }
 
-        // Cari kode guru yang cocok dengan user ini
+        // 1. Cari kode guru yang sudah tertaut langsung via user_id
         $scheduleTeacher = SchoolScheduleTeacher::query()
             ->where('academic_year_id', $year->id)
-            ->where(function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-                $cleanU = strtolower(preg_replace('/[^a-z]/', '', $user->name));
-                $q->orWhereRaw("LOWER(REPLACE(name, ' ', '')) LIKE ?", ["%{$cleanU}%"]);
-            })
+            ->where('user_id', $user->id)
             ->first();
+
+        // 2. Jika belum tertaut user_id, cocokkan via nama akun guru dengan nama di jadwal
+        if (! $scheduleTeacher) {
+            $allTeachers = SchoolScheduleTeacher::query()
+                ->where('academic_year_id', $year->id)
+                ->get();
+
+            $cleanU = self::cleanAlphaString($user->name);
+            $pureNameU = self::cleanAlphaString(explode(',', $user->name)[0]);
+
+            $scheduleTeacher = $allTeachers->first(function ($t) use ($cleanU, $pureNameU) {
+                $cleanT = self::cleanAlphaString($t->name);
+                $pureNameT = self::cleanAlphaString(explode(',', $t->name)[0]);
+
+                if ($cleanT === $cleanU || $pureNameT === $pureNameU) {
+                    return true;
+                }
+
+                if (strlen($pureNameU) >= 4 && (str_contains($pureNameT, $pureNameU) || str_contains($pureNameU, $pureNameT))) {
+                    return true;
+                }
+
+                return str_contains($cleanT, $cleanU) || str_contains($cleanU, $cleanT);
+            });
+
+            // Tautkan user_id ke guru dan seluruh slot jadwal terkait secara otomatis
+            if ($scheduleTeacher) {
+                $scheduleTeacher->update(['user_id' => $user->id]);
+                SchoolScheduleItem::query()
+                    ->where('academic_year_id', $year->id)
+                    ->where('teacher_code', $scheduleTeacher->code)
+                    ->whereNull('user_id')
+                    ->update(['user_id' => $user->id]);
+            }
+        }
 
         $query = SchoolScheduleItem::query()
             ->where('academic_year_id', $year->id);
