@@ -6,12 +6,14 @@ use App\Http\Controllers\Admin\KktpSubjectController;
 use App\Http\Controllers\Admin\SchoolAndYearController;
 use App\Http\Controllers\Admin\SchoolClassController;
 use App\Http\Controllers\Admin\SchoolEventController;
+use App\Http\Controllers\Admin\SchoolScheduleController;
 use App\Http\Controllers\Admin\TeacherAccountController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DailyJournalController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\GradebookController;
+use App\Http\Controllers\MasterScheduleController;
 use App\Http\Controllers\TeachingClassController;
 use App\Http\Controllers\TeachingScheduleController;
 use Illuminate\Support\Facades\Auth;
@@ -90,7 +92,20 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::get('/backup/{filename}/download', [DatabaseBackupController::class, 'download'])->name('backup.download');
         Route::post('/backup/restore', [DatabaseBackupController::class, 'restore'])->name('backup.restore');
         Route::delete('/backup/{filename}', [DatabaseBackupController::class, 'destroy'])->name('backup.destroy');
+
+        // Master Jadwal Pelajaran (Wakasek Kurikulum & Admin)
+        Route::get('/jadwal-master', [SchoolScheduleController::class, 'index'])->name('schedules.master.index');
+        Route::post('/jadwal-master/create-scratch', [SchoolScheduleController::class, 'createScratch'])->name('schedules.master.scratch');
+        Route::post('/jadwal-master/load-wakasek', [SchoolScheduleController::class, 'loadWakasekTemplate'])->name('schedules.master.load-wakasek');
+        Route::put('/jadwal-master/item/{item}', [SchoolScheduleController::class, 'updateCell'])->name('schedules.master.update-cell');
+        Route::post('/jadwal-master/swap', [SchoolScheduleController::class, 'swapCells'])->name('schedules.master.swap');
+        Route::post('/jadwal-master/sync-classes', [SchoolScheduleController::class, 'syncClasses'])->name('schedules.master.sync-classes');
+        Route::delete('/jadwal-master/clear', [SchoolScheduleController::class, 'clearSchedule'])->name('schedules.master.clear');
+        Route::get('/jadwal-master/export', [SchoolScheduleController::class, 'export'])->name('schedules.master.export');
     });
+
+    // Menu Baru: Jadwal Utama (Guru & Admin)
+    Route::get('/jadwal-utama', [MasterScheduleController::class, 'index'])->name('schedules.main.index');
 
     // Ruang Kerja Kelas Administrasi (Guru 1..15+ Kelas & Kontrol Admin)
     Route::get('/jadwal-mengajar', [TeachingScheduleController::class, 'index'])->name('schedules.index');

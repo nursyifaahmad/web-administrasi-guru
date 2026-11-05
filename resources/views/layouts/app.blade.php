@@ -137,6 +137,13 @@
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Backup &amp; Restore DB</span>
                         </a>
+                        <a href="{{ route('admin.schedules.master.index') }}"
+                           title="Master Jadwal Pelajaran (Wakasek Kurikulum)"
+                           :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
+                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('admin.schedules.master.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Master Jadwal Sekolah</span>
+                        </a>
                     </div>
                 </div>
                 @endif
@@ -148,6 +155,13 @@
                         <span class="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400">{{ $quickSwitcherClasses->count() }}</span>
                     </div>
                     <div class="space-y-1">
+                        <a href="{{ route('schedules.main.index') }}"
+                           title="Jadwal Utama Sekolah (Jadwal Saya & Matriks 21 Rombel)"
+                           :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
+                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('schedules.main.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Jadwal Utama</span>
+                        </a>
                         <a href="{{ route('classes.index') }}"
                            title="Daftar Kelas Administrasi ({{ $quickSwitcherClasses->count() }})"
                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
