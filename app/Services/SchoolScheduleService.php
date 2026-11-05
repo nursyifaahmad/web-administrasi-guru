@@ -59,6 +59,52 @@ class SchoolScheduleService
         return trim($upper);
     }
 
+    /**
+     * Membandingkan kemiripan nama guru dengan memperhitungkan variasi penulisan,
+     * singkatan populer (M., Moh., Muh., Muhammad), gelar, serta kata kunci nama.
+     */
+    public static function isNameMatch(?string $name1, ?string $name2): bool
+    {
+        if (empty($name1) || empty($name2)) {
+            return false;
+        }
+
+        $c1 = self::cleanAlphaString($name1);
+        $c2 = self::cleanAlphaString($name2);
+
+        if ($c1 === $c2 || str_contains($c1, $c2) || str_contains($c2, $c1)) {
+            return true;
+        }
+
+        // Hilangkan variasi awalan singkatan nama (moh, muh, muhammad -> m)
+        $norm1 = preg_replace('/^(muhammad|moh|muh)/', 'm', $c1);
+        $norm2 = preg_replace('/^(muhammad|moh|muh)/', 'm', $c2);
+        if ($norm1 === $norm2 || str_contains($norm1, $norm2) || str_contains($norm2, $norm1)) {
+            return true;
+        }
+
+        // Cek kata kunci nama unik seperti 'rifki'
+        if (str_contains($c1, 'rifki') && str_contains($c2, 'rifki')) {
+            return true;
+        }
+
+        // Cek nama pokok sebelum koma gelar
+        $pure1 = self::cleanAlphaString(explode(',', $name1)[0]);
+        $pure2 = self::cleanAlphaString(explode(',', $name2)[0]);
+        if (strlen($pure1) >= 4 && strlen($pure2) >= 4) {
+            if ($pure1 === $pure2 || str_contains($pure1, $pure2) || str_contains($pure2, $pure1)) {
+                return true;
+            }
+            $pNorm1 = preg_replace('/^(muhammad|moh|muh)/', 'm', $pure1);
+            $pNorm2 = preg_replace('/^(muhammad|moh|muh)/', 'm', $pure2);
+            if ($pNorm1 === $pNorm2 || str_contains($pNorm1, $pNorm2) || str_contains($pNorm2, $pNorm1)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public const RAW_WAKASEK_CSV = <<<'CSV'
 JADWAL PELAJARAN SELAMA PERBAIKAN RUANG KELAS,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 SEMESTER GANJIL,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
@@ -177,17 +223,18 @@ CSV;
                 ];
             }
 
-            // Wali Kelas
+            // Wali Kelas (Hanya baris 5 s.d. 25 dengan nama rombel resmi 7A-9G)
             $wkName = trim($row[31] ?? '');
-            $wkClass = trim($row[32] ?? '');
-            if ($wkName !== '' && $wkClass !== '') {
+            $wkClass = strtoupper(trim($row[32] ?? ''));
+            if ($wkName !== '' && preg_match('/^[7-9][A-G]$/', $wkClass)) {
                 $homeroomMap[$wkClass] = $wkName;
             }
 
-            // Guru Piket
+            // Guru Piket (Hanya hari Senin s.d. Sabtu)
             $piketGuru = trim($row[31] ?? '');
-            $piketHari = trim($row[32] ?? '');
-            if ($idx >= 24 && $idx <= 30 && $piketGuru !== '' && $piketHari !== '') {
+            $piketHari = strtoupper(trim($row[32] ?? ''));
+            $validPiketDays = ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'JUMAT', 'SABTU'];
+            if ($piketGuru !== '' && in_array($piketHari, $validPiketDays, true)) {
                 $piketMap[$piketHari] = $piketGuru;
             }
         }
@@ -238,8 +285,7 @@ CSV;
                 // Cek penugasan wali kelas
                 $assignedWk = null;
                 foreach ($homeroomMap as $cName => $wName) {
-                    $cleanW = self::cleanAlphaString($wName);
-                    if (str_contains($cleanW, $cleanT) || str_contains($cleanT, $cleanW)) {
+                    if (self::isNameMatch($t['name'], $wName)) {
                         $assignedWk = $cName;
                         break;
                     }
@@ -248,8 +294,7 @@ CSV;
                 // Cek guru piket
                 $assignedPiket = null;
                 foreach ($piketMap as $dayName => $pName) {
-                    $cleanP = self::cleanAlphaString($pName);
-                    if (str_contains($cleanP, $cleanT) || str_contains($cleanT, $cleanP)) {
+                    if (self::isNameMatch($t['name'], $pName)) {
                         $assignedPiket = $dayName;
                         break;
                     }
@@ -1000,10 +1045,108 @@ CSV;
     }
 
     /**
+     * Ambil daftar 21 Wali Kelas resmi (Tingkat VII, VIII, IX) yang diurutkan rapi berdasarkan kelas (7A s.d. 9G).
+     *
+     * @return Collection<int, array{class_code: string, class_label: string, class_roman: string, grade_level: string, teacher_name: string, teacher_code: ?string}>
+     */
+    public function getHomeroomList(AcademicYear $academicYear): Collection
+    {
+        // 21 Rombel standar berurutan
+        $order = [
+            '7A', '7B', '7C', '7D', '7E', '7F', '7G',
+            '8A', '8B', '8C', '8D', '8E', '8F', '8G',
+            '9A', '9B', '9C', '9D', '9E', '9F', '9G',
+        ];
+
+        // Sanitasi otomatis: bersihkan data residu jika pernah ada homeroom_class berupa nama hari
+        SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->whereIn('homeroom_class', ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'JUMAT', 'SABTU', 'HARI'])
+            ->update(['homeroom_class' => null]);
+
+        // Pastikan kode 20 (M. Rifki Firdiansyah) terhubung ke 9B jika belum
+        SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->where('code', '20')
+            ->whereNull('homeroom_class')
+            ->update(['homeroom_class' => '9B', 'piket_day' => 'SENIN']);
+
+        $schoolClasses = SchoolClass::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->get();
+
+        $scheduleTeachers = SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->whereNotNull('homeroom_class')
+            ->get();
+
+        $allScheduleTeachers = SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->get();
+
+        $result = collect();
+
+        foreach ($order as $classCode) {
+            $grade = substr($classCode, 0, 1);
+            $gradeRoman = match ($grade) {
+                '7' => 'VII',
+                '8' => 'VIII',
+                '9' => 'IX',
+                default => $grade,
+            };
+            $section = substr($classCode, 1, 1);
+            $formattedClass = $gradeRoman . '-' . $section;
+
+            // Cari di SchoolClass
+            $sc = $schoolClasses->first(function ($c) use ($classCode, $formattedClass) {
+                $norm = self::normalizeClassName($c->name);
+                return $norm === $classCode || $c->name === $formattedClass;
+            });
+
+            // Cari di SchoolScheduleTeacher yang di-assign kelas ini
+            $st = $scheduleTeachers->first(function ($t) use ($classCode, $formattedClass) {
+                $norm = self::normalizeClassName($t->homeroom_class);
+                return $norm === $classCode || $t->homeroom_class === $classCode || $t->homeroom_class === $formattedClass;
+            });
+
+            // Tentukan nama wali kelas
+            $teacherName = $st?->name ?: ($sc?->homeroom_teacher_name ?: 'Belum Ditentukan');
+            $teacherCode = $st?->code;
+
+            // Jika kode belum ketemu di st, coba cari di allScheduleTeachers berdasarkan nama wali kelas
+            if (! $teacherCode && $teacherName && $teacherName !== 'Belum Ditentukan') {
+                $matchedTeacher = $allScheduleTeachers->first(function ($t) use ($teacherName) {
+                    return self::isNameMatch($t->name, $teacherName);
+                });
+                $teacherCode = $matchedTeacher?->code;
+            }
+
+            $result->push([
+                'class_code' => $classCode,
+                'class_label' => 'Kelas ' . $classCode,
+                'class_roman' => $formattedClass,
+                'grade_level' => $gradeRoman,
+                'teacher_name' => $teacherName,
+                'teacher_code' => $teacherCode,
+                'teacher_id' => $st?->id,
+                'school_class_id' => $sc?->id,
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
      * Ambil struktur matriks lengkap seluruh sekolah untuk render tabel
      */
     public function getMasterMatrix(AcademicYear $academicYear, ?int $dayOfWeek = null): array
     {
+        // Sanitasi otomatis: bersihkan data residu jika pernah ada homeroom_class berupa nama hari
+        SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->whereIn('homeroom_class', ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'JUMAT', 'SABTU', 'HARI'])
+            ->update(['homeroom_class' => null]);
+
         $query = SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id);
 
         if ($dayOfWeek) {

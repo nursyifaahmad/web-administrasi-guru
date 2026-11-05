@@ -432,4 +432,57 @@ class SchoolScheduleMasterTest extends TestCase
         $responseAdminTeaching->assertSee('Akses Cepat Kelas (Ganjil):');
         $responseAdminTeaching->assertSee('VIII-B');
     }
+
+    public function test_homeroom_list_is_sorted_by_class_and_does_not_contain_piket_day_as_class(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        /** @var SchoolScheduleService $service */
+        $service = app(SchoolScheduleService::class);
+        $service->importFromWakasekCsv($year);
+
+        // 1. Verifikasi database: Bu Teti bukan wali kelas, melainkan guru piket hari Rabu
+        $tetiList = SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $year->id)
+            ->whereIn('code', ['24a', '24b'])
+            ->get();
+        $this->assertNotEmpty($tetiList);
+        foreach ($tetiList as $teti) {
+            $this->assertNull($teti->homeroom_class, 'Bu Teti tidak boleh memiliki homeroom_class RABU');
+            $this->assertSame('RABU', $teti->piket_day, 'Bu Teti harus berstatus guru piket hari RABU');
+        }
+
+        // 2. Verifikasi database: Pak Moh. Rifki Firdiansyah wali kelas 9B dan piket Senin
+        $rifki = SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $year->id)
+            ->where('code', '20')
+            ->first();
+        $this->assertNotNull($rifki);
+        $this->assertSame('9B', $rifki->homeroom_class);
+        $this->assertSame('SENIN', $rifki->piket_day);
+
+        // 3. Verifikasi getHomeroomList terurut rapi 21 kelas
+        $homeroomList = $service->getHomeroomList($year);
+        $this->assertCount(21, $homeroomList);
+
+        $expectedClasses = [
+            '7A', '7B', '7C', '7D', '7E', '7F', '7G',
+            '8A', '8B', '8C', '8D', '8E', '8F', '8G',
+            '9A', '9B', '9C', '9D', '9E', '9F', '9G',
+        ];
+        $actualClasses = $homeroomList->pluck('class_code')->all();
+        $this->assertSame($expectedClasses, $actualClasses);
+
+        // Pastikan tidak ada "RABU" di daftar wali kelas
+        $this->assertNotContains('RABU', $actualClasses);
+
+        // 4. Verifikasi UI Master Jadwal Tab Piket
+        $response = $this->actingAs($guru)->get(route('schedules.main.index', ['tab' => 'piket']));
+        $response->assertOk();
+        $response->assertSee('Daftar 21 Wali Kelas (Tingkat VII, VIII, IX)');
+        $response->assertSee('Kelas 7A');
+        $response->assertSee('Kelas 9G');
+        $response->assertDontSee('Kelas RABU');
+        $response->assertSee('TETI OKTAVIANI, S.Pd'); // Tampil di bagian Jadwal Guru Piket Hari RABU
+    }
 }

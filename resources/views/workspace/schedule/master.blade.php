@@ -391,15 +391,19 @@
                 <span>Daftar 21 Wali Kelas (Tingkat VII, VIII, IX)</span>
             </h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                @foreach($allTeachers->whereNotNull('homeroom_class') as $t)
+                @foreach(($homeroomList ?? collect()) as $item)
                     <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
                         <div class="min-w-0">
                             <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-extrabold text-[10px]">
-                                Kelas {{ $t->homeroom_class }}
+                                {{ $item['class_label'] }}
                             </span>
-                            <div class="text-xs font-bold text-slate-900 mt-1 truncate">{{ $t->name }}</div>
+                            <div class="text-xs font-bold text-slate-900 mt-1 truncate" title="{{ $item['teacher_name'] }}">
+                                {{ $item['teacher_name'] }}
+                            </div>
                         </div>
-                        <span class="text-[11px] text-slate-500 font-medium">Kode {{ $t->code }}</span>
+                        @if(!empty($item['teacher_code']))
+                            <span class="text-[11px] text-slate-500 font-medium shrink-0">Kode {{ $item['teacher_code'] }}</span>
+                        @endif
                     </div>
                 @endforeach
             </div>

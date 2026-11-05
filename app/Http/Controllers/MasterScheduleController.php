@@ -51,6 +51,9 @@ class MasterScheduleController extends Controller
         // Ambil matriks seluruh sekolah
         $matrixData = $this->scheduleService->getMasterMatrix($academicYear, $activeDay);
 
+        // Ambil daftar 21 wali kelas resmi yang diurutkan rapi per rombel
+        $homeroomList = $this->scheduleService->getHomeroomList($academicYear);
+
         // Ambil daftar guru piket & wali kelas
         $allTeachers = SchoolScheduleTeacher::query()
             ->where('academic_year_id', $academicYear->id)
@@ -70,6 +73,7 @@ class MasterScheduleController extends Controller
             'mySchedule' => $mySchedule,
             'matrixData' => $matrixData,
             'allTeachers' => $allTeachers,
+            'homeroomList' => $homeroomList,
             'todayDayOfWeek' => $todayDayOfWeek,
             'school' => $school,
         ]);
