@@ -2,7 +2,6 @@
 
 @section('title', 'Daftar Kelas Administrasi')
 @section('page_title', 'Portofolio Buku Administrasi Kelas (' . $classes->count() . ' Kelas)')
-@section('page_subtitle', 'Kelola hingga 15+ kelas ajar per semester secara mandiri — lengkap dengan Jurnal Harian, Absensi, dan Daftar Nilai.')
 
 @section('content')
 <div class="space-y-5"
