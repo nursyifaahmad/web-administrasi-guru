@@ -80,6 +80,18 @@
 
     {{-- TAB 1: JADWAL MENGAJAR SAYA --}}
     <div x-show="tab === 'my_schedule'" class="space-y-5">
+        @if(!empty($mySchedule['is_admin']) && ($mySchedule['total_hours'] ?? 0) === 0)
+            <div class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                <div class="flex items-center gap-2.5">
+                    <svg class="w-5 h-5 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Akun Anda berstatus <strong>Administrator Sekolah / Wakasek</strong> (tidak memiliki jadwal KBM mengajar pribadi di kelas). Silakan buka tab <strong>Matriks 21 Rombel Sekolah</strong> untuk memantau dan mengelola seluruh jadwal rombel.</span>
+                </div>
+                <button type="button" @click="tab = 'school_matrix'" class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition cursor-pointer">
+                    Buka Matriks 21 Rombel &rarr;
+                </button>
+            </div>
+        @endif
+
         <div class="flex items-center justify-between">
             <h3 class="text-sm font-extrabold text-slate-900">Jadwal Mingguan Saya (Senin s.d. Sabtu)</h3>
             <span class="text-xs text-slate-500 font-medium">Total: <strong>{{ $mySchedule['total_hours'] ?? 0 }} Jam Pelajaran</strong> / Minggu</span>

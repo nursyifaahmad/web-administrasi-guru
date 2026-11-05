@@ -38,7 +38,8 @@ class MasterScheduleController extends Controller
             }
         }
 
-        $activeTab = $request->query('tab', 'my_schedule'); // 'my_schedule', 'school_matrix', 'piket'
+        $defaultTab = $user->isAdmin() ? 'school_matrix' : 'my_schedule';
+        $activeTab = $request->query('tab', $defaultTab); // 'my_schedule', 'school_matrix', 'piket'
         $activeDay = (int) ($request->query('day') ?: 1);
         if ($activeDay < 1 || $activeDay > 6) {
             $activeDay = 1;

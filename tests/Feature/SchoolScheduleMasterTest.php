@@ -259,6 +259,35 @@ class SchoolScheduleMasterTest extends TestCase
         ]);
     }
 
+    public function test_admin_schedule_shows_zero_personal_hours_and_defaults_to_matrix_tab(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        // Admin bernama "Administrator Sekolah"
+        $admin->update(['name' => 'Administrator Sekolah']);
+
+        $service = app(SchoolScheduleService::class);
+        $service->importFromWakasekCsv($year);
+
+        // Akses Jadwal Utama oleh Admin
+        $response = $this->actingAs($admin)->get(route('schedules.main.index'));
+        $response->assertOk();
+
+        // 1. Tab default untuk admin harus Matriks 21 Rombel
+        $response->assertSee("tab: 'school_matrix'", false);
+
+        // 2. Total jam pribadi admin HARUS 0 Jam Pelajaran, BUKAN 738 jam!
+        $response->assertSee('Total: <strong>0 Jam Pelajaran</strong>', false);
+        $response->assertDontSee('Total: <strong>738 Jam Pelajaran</strong>', false);
+
+        // 3. Admin tidak boleh otomatis ditautkan ke Kode Guru 1
+        $this->assertDatabaseMissing('school_schedule_teachers', [
+            'academic_year_id' => $year->id,
+            'code' => '1',
+            'user_id' => $admin->id,
+        ]);
+    }
+
     public function test_master_matrix_is_ordered_chronologically_by_time(): void
     {
         [$admin, $guru, $year] = $this->createEnvironment();

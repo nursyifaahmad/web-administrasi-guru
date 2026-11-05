@@ -192,8 +192,13 @@ CSV;
             }
         }
 
-        // Hubungkan kode guru ke akun users bila ada kecocokan nama
-        $users = User::query()->get();
+        // Hubungkan kode guru ke akun users bila ada kecocokan nama (hanya role guru)
+        $users = User::query()
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->where('role', 'guru')->orWhereNull('role');
+            })
+            ->get();
         $subjects = Subject::query()->get();
 
         DB::transaction(function () use ($academicYear, $teachersData, $homeroomMap, $piketMap, $users, $subjects, $lines) {
@@ -202,15 +207,27 @@ CSV;
                 $cleanT = self::cleanAlphaString($t['name']);
                 $pureT = self::cleanAlphaString(explode(',', $t['name'])[0]);
 
-                $matchedUser = $users->first(function ($u) use ($cleanT, $pureT) {
-                    $cleanU = self::cleanAlphaString($u->name);
-                    $pureU = self::cleanAlphaString(explode(',', $u->name)[0]);
-                    return $cleanU === $cleanT
-                        || $pureU === $pureT
-                        || str_contains($cleanU, $cleanT)
-                        || str_contains($cleanT, $cleanU)
-                        || (strlen($pureU) >= 4 && (str_contains($pureT, $pureU) || str_contains($pureU, $pureT)));
-                });
+                $matchedUser = null;
+                if (strlen($cleanT) >= 4 && strlen($pureT) >= 4) {
+                    $matchedUser = $users->first(function ($u) use ($cleanT, $pureT) {
+                        if ($u->isAdmin()) {
+                            return false;
+                        }
+                        $cleanU = self::cleanAlphaString($u->name);
+                        $pureU = self::cleanAlphaString(explode(',', $u->name)[0]);
+
+                        if (strlen($cleanU) < 4 || strlen($pureU) < 4) {
+                            return false;
+                        }
+
+                        if ($cleanU === $cleanT || $pureU === $pureT) {
+                            return true;
+                        }
+
+                        return (strlen($pureU) >= 4 && strlen($pureT) >= 4)
+                            && ($pureU === $pureT || str_contains($pureT, $pureU) || str_contains($pureU, $pureT));
+                    });
+                }
 
                 $matchedSubject = $subjects->first(function ($s) use ($t) {
                     $cleanS = self::cleanAlphaString($s->name);
@@ -874,8 +891,35 @@ CSV;
             ->where('user_id', $user->id)
             ->first();
 
-        // 2. Jika belum tertaut user_id, cocokkan via nama akun guru dengan nama di jadwal
-        if (! $scheduleTeacher) {
+        // 2. Jika akun adalah admin dan belum tertaut kode guru mengajar secara eksplisit:
+        // Admin tidak memiliki jadwal KBM pribadi di kelas -> tampilkan 0 jam
+        if ($user->isAdmin() && ! $scheduleTeacher) {
+            $emptyByDay = [];
+            for ($d = 1; $d <= 6; $d++) {
+                $emptyByDay[$d] = [
+                    'day_num' => $d,
+                    'day_name' => self::DAYS_MAP[$d] ?? 'Hari ' . $d,
+                    'items' => collect(),
+                    'count' => 0,
+                ];
+            }
+
+            return [
+                'teacher' => [
+                    'code' => '-',
+                    'name' => $user->name,
+                    'subject' => $user->default_subject ?? 'Administrator Sekolah',
+                    'homeroom_class' => '-',
+                    'piket_day' => '-',
+                ],
+                'by_day' => $emptyByDay,
+                'total_hours' => 0,
+                'is_admin' => true,
+            ];
+        }
+
+        // 3. Jika guru (non-admin) belum tertaut user_id, cocokkan via nama akun guru dengan nama di jadwal
+        if (! $scheduleTeacher && ! $user->isAdmin()) {
             $allTeachers = SchoolScheduleTeacher::query()
                 ->where('academic_year_id', $year->id)
                 ->get();
@@ -883,20 +927,23 @@ CSV;
             $cleanU = self::cleanAlphaString($user->name);
             $pureNameU = self::cleanAlphaString(explode(',', $user->name)[0]);
 
-            $scheduleTeacher = $allTeachers->first(function ($t) use ($cleanU, $pureNameU) {
-                $cleanT = self::cleanAlphaString($t->name);
-                $pureNameT = self::cleanAlphaString(explode(',', $t->name)[0]);
+            if (strlen($cleanU) >= 4 && strlen($pureNameU) >= 4) {
+                $scheduleTeacher = $allTeachers->first(function ($t) use ($cleanU, $pureNameU) {
+                    $cleanT = self::cleanAlphaString($t->name);
+                    $pureNameT = self::cleanAlphaString(explode(',', $t->name)[0]);
 
-                if ($cleanT === $cleanU || $pureNameT === $pureNameU) {
-                    return true;
-                }
+                    if (strlen($cleanT) < 4 || strlen($pureNameT) < 4) {
+                        return false;
+                    }
 
-                if (strlen($pureNameU) >= 4 && (str_contains($pureNameT, $pureNameU) || str_contains($pureNameU, $pureNameT))) {
-                    return true;
-                }
+                    if ($cleanT === $cleanU || $pureNameT === $pureNameU) {
+                        return true;
+                    }
 
-                return str_contains($cleanT, $cleanU) || str_contains($cleanU, $cleanT);
-            });
+                    return (strlen($pureNameU) >= 4 && strlen($pureNameT) >= 4)
+                        && ($pureNameT === $pureNameU || str_contains($pureNameT, $pureNameU) || str_contains($pureNameU, $pureNameT));
+                });
+            }
 
             // Tautkan user_id ke guru dan seluruh slot jadwal terkait secara otomatis
             if ($scheduleTeacher) {
@@ -904,7 +951,6 @@ CSV;
                 SchoolScheduleItem::query()
                     ->where('academic_year_id', $year->id)
                     ->where('teacher_code', $scheduleTeacher->code)
-                    ->whereNull('user_id')
                     ->update(['user_id' => $user->id]);
             }
         }
@@ -913,10 +959,7 @@ CSV;
             ->where('academic_year_id', $year->id);
 
         if ($scheduleTeacher) {
-            $query->where(function ($q) use ($user, $scheduleTeacher) {
-                $q->where('user_id', $user->id)
-                    ->orWhere('teacher_code', $scheduleTeacher->code);
-            });
+            $query->where('teacher_code', $scheduleTeacher->code);
         } else {
             $query->where('user_id', $user->id);
         }
