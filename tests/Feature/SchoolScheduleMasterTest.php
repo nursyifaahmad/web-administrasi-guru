@@ -259,6 +259,54 @@ class SchoolScheduleMasterTest extends TestCase
         ]);
     }
 
+    public function test_master_matrix_is_ordered_chronologically_by_time(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        $service = app(SchoolScheduleService::class);
+        $service->importFromWakasekCsv($year);
+
+        $matrix = $service->getMasterMatrix($year, 1); // Senin
+        $pagiSlots = $matrix['matrix_by_day'][1]['pagi_slots'];
+
+        // Ambil daftar time_range terurut
+        $timeRanges = $pagiSlots->pluck('time_range')->values()->all();
+
+        // 1. Baris pertama harus upacara bendera (07.00 - 07.40)
+        $this->assertEquals('07.00 - 07.40', $timeRanges[0]);
+
+        // 2. Cari index Jam 4 (09.10 - 09.40), Istirahat (09.40 - 10.10), dan Jam 5 (10.10 - 10.40)
+        $idxJam4 = array_search('09.10 - 09.40', $timeRanges);
+        $idxIstirahat = array_search('09.40 - 10.10', $timeRanges);
+        $idxJam5 = array_search('10.10 - 10.40', $timeRanges);
+
+        $this->assertNotFalse($idxJam4);
+        $this->assertNotFalse($idxIstirahat);
+        $this->assertNotFalse($idxJam5);
+
+        // Istirahat HARUS berada di tengah antara Jam 4 dan Jam 5, BUKAN di paling atas
+        $this->assertGreaterThan($idxJam4, $idxIstirahat, 'Istirahat harus berada setelah Jam 4');
+        $this->assertLessThan($idxJam5, $idxIstirahat, 'Istirahat harus berada sebelum Jam 5');
+    }
+
+    public function test_matrix_view_contains_teacher_detail_interactive_attributes(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        $service = app(SchoolScheduleService::class);
+        $service->importFromWakasekCsv($year);
+
+        $response = $this->actingAs($guru)->get(route('schedules.main.index', [
+            'tab' => 'school_matrix',
+            'day' => 1,
+        ]));
+
+        $response->assertOk();
+        $response->assertSee('openTeacherDetail');
+        $response->assertSee('KODE GURU');
+        $response->assertSee('detailModalOpen');
+    }
+
     public function test_admin_can_export_master_schedule(): void
     {
         [$admin, $guru, $year] = $this->createEnvironment();

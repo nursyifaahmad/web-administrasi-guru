@@ -23,6 +23,24 @@ class SchoolScheduleService
         return strtolower(preg_replace('/[^a-zA-Z]/', '', $str));
     }
 
+    /**
+     * Konversi string waktu seperti "07.40 - 08.10" menjadi format jam mulai "07:40"
+     * untuk keperluan pengurutan kronologis
+     */
+    public static function extractStartTime(?string $timeRange): string
+    {
+        if (empty($timeRange)) {
+            return '99:99';
+        }
+        $parts = explode('-', $timeRange);
+        $start = trim($parts[0] ?? '');
+        $start = str_replace('.', ':', $start);
+        if (preg_match('/^(\d{1,2}):(\d{2})$/', $start, $m)) {
+            return sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
+        }
+        return $start;
+    }
+
     public const RAW_WAKASEK_CSV = <<<'CSV'
 JADWAL PELAJARAN SELAMA PERBAIKAN RUANG KELAS,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 SEMESTER GANJIL,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
@@ -38,7 +56,7 @@ SENIN,0,07.00 - 07.40,UPACARA BENDERA,,,,,,,UPACARA BENDERA,,,,,,,SENIN,1,12.15 
 ,5,10.10 - 10.40,7,2,26,30,10,9,18,31,21,6,17,12,19,5,,6,15.15 - 15.45,25,14A,24B,15,16,28,22,7,"WATI'AH, S.Pd",MATEMATIKA,7,"ISMAIL, S.Pd. I",7G
 ,6,10.40 - 11.10,4,7,2,10,32,8,9,13,18,20,27,17,19,21,,7,15.45 - 16.15,25,14A,24B,15,16,28,22,8,"SUSILAWATI,S.Pd.",MATEMATIKA,8,"SUSILAWATI,S.Pd.",8A
 ,7,11.10 - 11.40,4,7,2,10,32,8,9,13,24A,20,27,17,19,21,,,,,,,,,,,9,"LINLIN SUHERLINA, SE",IPS,9,"INTAN PUTRI R,S.Pd.",8B
-,0,07.00 - 07.30,SHOLAT DHUHA,,,,,,,SHOLAT DHUHA,,,,,,,,1,12.00 - 12.30,11,24B,30,21,15,34,7,10,"TRI MULYANI, S.Pd",B. INGGRIS,10,"SOETAN ASRUL SANI,S.Pd.",8C
+SELASA,0,07.00 - 07.30,SHOLAT DHUHA,,,,,,,SHOLAT DHUHA,,,,,,,,1,12.00 - 12.30,11,24B,30,21,15,34,7,10,"TRI MULYANI, S.Pd",B. INGGRIS,10,"SOETAN ASRUL SANI,S.Pd.",8C
 SELASA,1,07.30 - 08.00,3,3,10,9,4,31,27,20,13,19,29,17,28,11,SELASA,2,12.30 - 13.00,11,24B,30,21,15,34,7,11,"ADITYA SRI RUMAWAS, S.Pd",IPA,11,"AHMAD NASHIH,S.Pd.",8D
 ,2,08.00 - 08.30,3,3,10,9,4,31,27,20,13,19,29,17,28,11,,3,13.00 - 13.30,11,25,29,23,28,15,21,12,"MUHAMMAD IRFAN, S.Pd",B. INGGRIS,12,"AFNITA PUSPITASARI, S.Pd.",8E
 ,3,08.30 - 09.00,3,3,26,18,4,10,9,20,19,24A,27,13,12,23,,4,13.30 - 14.00,22,25,29,23,28,15,17,13,"SURYATI, S.Pd",B. CIREBON,13,"LAELATUL NURJANAH, S.E",8F
@@ -885,13 +903,15 @@ CSV;
             $query->where('user_id', $user->id);
         }
 
-        $items = $query->orderBy('day_of_week')
-            ->orderBy('period_order')
-            ->get();
+        $items = $query->get()->sortBy(function ($item) {
+            return ($item->day_of_week * 10000) + (int) str_replace(':', '', self::extractStartTime($item->time_range));
+        })->values();
 
         $byDay = [];
         for ($d = 1; $d <= 6; $d++) {
-            $dayItems = $items->where('day_of_week', $d)->values();
+            $dayItems = $items->where('day_of_week', $d)->sortBy(function ($item) {
+                return self::extractStartTime($item->time_range);
+            })->values();
             $byDay[$d] = [
                 'day_num' => $d,
                 'day_name' => self::DAYS_MAP[$d] ?? 'Hari ' . $d,
@@ -941,11 +961,12 @@ CSV;
                 return [
                     'period_order' => $first->period_order,
                     'time_range' => $first->time_range,
+                    'start_time' => self::extractStartTime($first->time_range),
                     'is_activity' => $first->isCommonActivity(),
                     'activity_name' => $first->isCommonActivity() ? $first->teacher_code : null,
                     'classes' => $byClass,
                 ];
-            })->values();
+            })->sortBy('start_time')->values();
 
             // Shift Siang (Kelas 8)
             $siangItems = $dayItems->where('shift', 'siang');
@@ -955,11 +976,12 @@ CSV;
                 return [
                     'period_order' => $first->period_order,
                     'time_range' => $first->time_range,
+                    'start_time' => self::extractStartTime($first->time_range),
                     'is_activity' => $first->isCommonActivity(),
                     'activity_name' => $first->isCommonActivity() ? $first->teacher_code : null,
                     'classes' => $byClass,
                 ];
-            })->values();
+            })->sortBy('start_time')->values();
 
             $matrixByDay[$d] = [
                 'day_num' => $d,
