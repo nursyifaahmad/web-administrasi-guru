@@ -265,11 +265,27 @@ class TeachingClassController extends Controller
 
     public function destroy(Request $request, TeachingClass $teachingClass): RedirectResponse
     {
-        $this->authorizeClassAccess($request->user(), $teachingClass);
+        $user = $request->user();
+
+        // 1. Larang keras Admin menghapus Buku Administrasi Guru
+        abort_if(
+            $user->isAdmin(),
+            403,
+            'Akses ditolak. Administrator tidak memiliki wewenang untuk menghapus Buku Administrasi Guru. Hanya guru pengampu bersangkutan yang berhak menghapus buku kelas ini.'
+        );
+
+        // 2. Pastikan hanya guru pemilik sah kelas ini yang berhak menghapus
+        abort_unless(
+            (int) $teachingClass->teacher_id === (int) $user->id,
+            403,
+            'Anda tidak memiliki izin untuk menghapus buku administrasi guru ini.'
+        );
+
         $name = $teachingClass->class_name;
+        $subjectName = $teachingClass->subject?->name ?? '';
         $teachingClass->delete();
 
-        return redirect()->route('classes.index')->with('success', "Kelas Administrasi {$name} berhasil dihapus.");
+        return redirect()->route('classes.index')->with('success', "Buku Administrasi Kelas {$name} ({$subjectName}) berhasil dihapus.");
     }
 
     public function students(Request $request, TeachingClass $teachingClass): View

@@ -105,34 +105,53 @@
             </form>
         </div>
 
-        {{-- Area Bahaya: Hapus Buku Kelas --}}
-        <div class="bg-rose-50/70 rounded-2xl border border-rose-200 p-5 md:p-6 space-y-3">
-            <div class="flex items-start gap-3">
-                <div class="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                </div>
-                <div class="space-y-1">
-                    <h3 class="text-sm font-bold text-rose-950">Hapus Buku Kelas Ini</h3>
-                    <p class="text-xs text-rose-700 leading-relaxed">
-                        Tindakan ini akan menghapus buku administrasi <strong>Kelas {{ $teachingClass->class_name }} ({{ $teachingClass->subject->name }})</strong> milik Anda beserta seluruh catatan Jurnal Harian, Absensi, dan Daftar Nilainya.
-                    </p>
-                    <p class="text-[11px] text-rose-600 font-medium">
-                        * Data Master Rombel & seluruh murid sekolah tetap aman dan tidak akan terhapus.
-                    </p>
+        {{-- Area Bahaya / Proteksi: Hapus Buku Kelas --}}
+        @if(auth()->user()->isAdmin())
+            <div class="bg-amber-50/80 rounded-2xl border border-amber-200 p-5 md:p-6 space-y-2 shadow-2xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="text-sm font-bold text-amber-950">Proteksi Buku Administrasi Guru (Terkunci untuk Admin)</h3>
+                        <p class="text-xs text-amber-800 leading-relaxed">
+                            Sebagai <strong>Administrator Sekolah</strong>, Anda dapat melihat dan membantu pengelolaan identitas rombel, namun <strong>tidak dapat menghapus</strong> Buku Administrasi Guru ini demi melindungi integritas seluruh rekam jejak penilaian, absensi, dan jurnal harian guru pengampu.
+                        </p>
+                        <p class="text-[11px] text-amber-700 font-semibold">
+                            * Penghapusan buku kelas hanya dapat dilakukan secara mandiri oleh guru pengampu: <strong>{{ $teachingClass->teacher?->name ?? 'Guru Pengampu' }}</strong>.
+                        </p>
+                    </div>
                 </div>
             </div>
+        @elseif((int) $teachingClass->teacher_id === (int) auth()->id())
+            <div class="bg-rose-50/70 rounded-2xl border border-rose-200 p-5 md:p-6 space-y-3">
+                <div class="flex items-start gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="text-sm font-bold text-rose-950">Hapus Buku Kelas Ini</h3>
+                        <p class="text-xs text-rose-700 leading-relaxed">
+                            Tindakan ini akan menghapus buku administrasi <strong>Kelas {{ $teachingClass->class_name }} ({{ $teachingClass->subject->name }})</strong> milik Anda beserta seluruh catatan Jurnal Harian, Absensi, dan Daftar Nilainya.
+                        </p>
+                        <p class="text-[11px] text-rose-600 font-medium">
+                            * Data Master Rombel & seluruh murid sekolah tetap aman dan tidak akan terhapus.
+                        </p>
+                    </div>
+                </div>
 
-            <div class="pt-2 flex justify-end">
-                <form method="POST" action="{{ route('classes.destroy', $teachingClass) }}"
-                      onsubmit="return confirm('Apakah Anda yakin ingin MENGHAPUS seluruh buku kelas administrasi {{ $teachingClass->class_name }} ({{ $teachingClass->subject->name }}) beserta Jurnal, Absensi, dan Nilainya?\n\n(Data rombel dan nama murid di sekolah tetap aman).')">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 shadow-2xs transition">
-                        Hapus Buku Kelas
-                    </button>
-                </form>
+                <div class="pt-2 flex justify-end">
+                    <form method="POST" action="{{ route('classes.destroy', $teachingClass) }}"
+                          onsubmit="return confirm('Apakah Anda yakin ingin MENGHAPUS seluruh buku kelas administrasi {{ $teachingClass->class_name }} ({{ $teachingClass->subject->name }}) beserta Jurnal, Absensi, dan Nilainya?\n\n(Data rombel dan nama murid di sekolah tetap aman).')">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 shadow-2xs transition cursor-pointer">
+                            Hapus Buku Kelas
+                        </button>
+                    </form>
+                </div>
             </div>
-        </div>
+        @endif
     </div>
 
     {{-- Kolom Kanan: Informasi Rombel & Wali Kelas Terpusat --}}

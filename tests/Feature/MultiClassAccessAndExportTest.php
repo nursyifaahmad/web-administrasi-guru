@@ -397,4 +397,203 @@ class MultiClassAccessAndExportTest extends TestCase
         $this->actingAs($guruMtk)->get(route('exports.attendance-recap.excel', $classMtk))
             ->assertOk();
     }
+
+    public function test_admin_cannot_delete_teacher_administration_book_and_gets_403(): void
+    {
+        $admin = User::query()->create([
+            'name' => 'Admin Utama',
+            'email' => 'admin.sec@uji.sch.id',
+            'nip' => '19800002',
+            'role' => 'admin',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $guru = User::query()->create([
+            'name' => 'Guru Pengampu, S.Pd.',
+            'email' => 'guru.sec@uji.sch.id',
+            'nip' => '19920510 201903 1 099',
+            'role' => 'guru',
+            'password' => 'secret123',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'IPA',
+            'name' => 'Ilmu Pengetahuan Alam',
+            'default_kktp' => 75,
+        ]);
+
+        $teachingClass = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-A',
+            'homeroom_teacher_name' => 'Wali Kelas VII-A, S.Pd.',
+        ]);
+
+        // Admin mencoba menghapus buku administrasi guru -> harus ditolak 403 Forbidden!
+        $response = $this->actingAs($admin)->delete(route('classes.destroy', $teachingClass));
+        $response->assertStatus(403);
+
+        // Pastikan buku kelas tetap aman dan ada di database
+        $this->assertDatabaseHas('teaching_classes', [
+            'id' => $teachingClass->id,
+        ]);
+    }
+
+    public function test_other_teacher_cannot_delete_another_teachers_book_and_gets_403(): void
+    {
+        $guruA = User::query()->create([
+            'name' => 'Guru A, S.Pd.',
+            'email' => 'guruA@uji.sch.id',
+            'nip' => '19920510 201903 1 011',
+            'role' => 'guru',
+            'password' => 'secret123',
+            'is_active' => true,
+        ]);
+
+        $guruB = User::query()->create([
+            'name' => 'Guru B, S.Pd.',
+            'email' => 'guruB@uji.sch.id',
+            'nip' => '19920510 201903 1 022',
+            'role' => 'guru',
+            'password' => 'secret123',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'IPS',
+            'name' => 'Ilmu Pengetahuan Sosial',
+            'default_kktp' => 75,
+        ]);
+
+        $classA = TeachingClass::query()->create([
+            'teacher_id' => $guruA->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-B',
+            'homeroom_teacher_name' => 'Wali Kelas VII-B, S.Pd.',
+        ]);
+
+        // Guru B mencoba menghapus kelas Guru A -> harus ditolak 403
+        $response = $this->actingAs($guruB)->delete(route('classes.destroy', $classA));
+        $response->assertStatus(403);
+
+        $this->assertDatabaseHas('teaching_classes', [
+            'id' => $classA->id,
+        ]);
+    }
+
+    public function test_owner_teacher_can_delete_own_administration_book(): void
+    {
+        $guru = User::query()->create([
+            'name' => 'Guru Asli, S.Pd.',
+            'email' => 'guru.asli@uji.sch.id',
+            'nip' => '19920510 201903 1 033',
+            'role' => 'guru',
+            'password' => 'secret123',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'MTK',
+            'name' => 'Matematika',
+            'default_kktp' => 75,
+        ]);
+
+        $teachingClass = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VIII',
+            'class_name' => 'VIII-A',
+            'homeroom_teacher_name' => 'Wali Kelas VIII-A, S.Pd.',
+        ]);
+
+        // Guru pemilik menghapus kelas miliknya -> berhasil redirect
+        $response = $this->actingAs($guru)->delete(route('classes.destroy', $teachingClass));
+        $response->assertRedirect(route('classes.index'));
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('teaching_classes', [
+            'id' => $teachingClass->id,
+        ]);
+    }
+
+    public function test_admin_sees_locked_protection_badge_in_settings_view(): void
+    {
+        $admin = User::query()->create([
+            'name' => 'Admin Sekolah',
+            'email' => 'admin.view@uji.sch.id',
+            'nip' => '19800003',
+            'role' => 'admin',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $guru = User::query()->create([
+            'name' => 'Guru Pengampu Asli, S.Pd.',
+            'email' => 'guru.view@uji.sch.id',
+            'nip' => '19920510 201903 1 044',
+            'role' => 'guru',
+            'password' => 'secret123',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'PAI',
+            'name' => 'Pendidikan Agama Islam',
+            'default_kktp' => 78,
+        ]);
+
+        $teachingClass = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'IX',
+            'class_name' => 'IX-A',
+            'homeroom_teacher_name' => 'Wali Kelas IX-A, S.Pd.',
+        ]);
+
+        // Admin membuka pengaturan kelas:
+        // Harus melihat badge Proteksi Terkunci dan TIDAK ADA tombol hapus
+        $responseAdmin = $this->actingAs($admin)->get(route('classes.settings', $teachingClass));
+        $responseAdmin->assertOk();
+        $responseAdmin->assertSee('Proteksi Buku Administrasi Guru (Terkunci untuk Admin)');
+        $responseAdmin->assertDontSee('Hapus Buku Kelas');
+
+        // Guru pemilik membuka pengaturan kelas:
+        // Harus melihat tombol Hapus Buku Kelas
+        $responseGuru = $this->actingAs($guru)->get(route('classes.settings', $teachingClass));
+        $responseGuru->assertOk();
+        $responseGuru->assertSee('Hapus Buku Kelas');
+        $responseGuru->assertDontSee('Proteksi Buku Administrasi Guru (Terkunci untuk Admin)');
+    }
 }
