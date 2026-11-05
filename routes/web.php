@@ -143,6 +143,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
 
     // Menu 3: Nilai
     Route::get('/kelas/{teachingClass}/nilai', [GradebookController::class, 'index'])->name('grades.index');
+    Route::patch('/kelas/{teachingClass}/nilai/toggle-admin-access', [GradebookController::class, 'toggleAdminAccess'])->name('grades.toggle-admin-access');
     Route::post('/kelas/{teachingClass}/nilai/bulk-save', [GradebookController::class, 'bulkSaveScores'])->name('grades.bulk-save');
     Route::post('/kelas/{teachingClass}/nilai/columns', [GradebookController::class, 'addColumn'])->name('grades.columns.store');
     Route::put('/kelas/{teachingClass}/nilai/columns/{column}', [GradebookController::class, 'updateColumn'])->name('grades.columns.update');

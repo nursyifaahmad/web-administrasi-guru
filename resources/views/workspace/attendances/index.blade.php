@@ -11,8 +11,27 @@
     $monthName = \App\Support\IndonesianDate::monthName($month);
 @endphp
 
+@if(auth()->user()->isAdmin())
+    <div class="mb-4 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 shadow-2xs flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs">
+            👁️
+        </div>
+        <div class="flex-1 min-w-0">
+            <h3 class="text-sm font-bold text-sky-950 flex items-center gap-2">
+                Mode Monitoring Supervisi (Hanya Lihat)
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
+                    Admin / Wakasek
+                </span>
+            </h3>
+            <p class="text-xs text-sky-800 mt-0.5 leading-relaxed">
+                Anda sedang memantau absensi peserta didik kelas ini. Pengisian, pengubahan, dan impor kehadiran hanya dapat dilakukan oleh guru pengampu (<strong>{{ $teachingClass->teacher->name }}</strong>).
+            </p>
+        </div>
+    </div>
+@endif
+
 <div class="space-y-4"
-     :class="(isMonthly && (isDirty || saving || justSaved)) ? 'pb-24' : ''"
+     :class="(isMonthly && !isAdmin && (isDirty || saving || justSaved)) ? 'pb-24' : ''"
      x-data="attendanceSpreadsheet({
         students: @js($alpineStudents),
         initialCells: @js($alpineCells),
@@ -26,6 +45,7 @@
         saveUrl: @js(route('attendances.bulk-save', $teachingClass)),
         csrf: @js(csrf_token()),
         daysMeta: @js($alpineDaysMeta),
+        isAdmin: @js(auth()->user()->isAdmin()),
      })">
 
     {{-- Sub-tab Bulanan vs Rekap Semester + Pemilih Bulan & Ekspor --}}
@@ -71,31 +91,33 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
-            @if($tab === 'monthly')
-                <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
-                    Belum disimpan (<span x-text="dirtyCount"></span> perubahan)
-                </span>
-                <span x-show="savedMessage && !isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
+            @if(! auth()->user()->isAdmin())
+                @if($tab === 'monthly')
+                    <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
+                        Belum disimpan (<span x-text="dirtyCount"></span> perubahan)
+                    </span>
+                    <span x-show="savedMessage && !isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
 
-                <button type="button" @click="saveAll()" :disabled="saving" title="Pintasan keyboard: Ctrl + S"
-                        class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
-                    <span x-text="saving ? 'Menyimpan...' : 'Simpan Absensi (Ctrl+S)'"></span>
-                </button>
-                <button type="button" @click="nicknameModal = true"
-                        class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
-                        title="Atur nama panggilan peserta didik kelas ini">
-                    ✏️ Atur Panggilan
-                </button>
-                <button type="button" @click="importModal = true"
-                        class="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold hover:bg-indigo-100">
-                    Import Excel
-                </button>
-            @else
-                <button type="button" @click="nicknameModal = true"
-                        class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
-                        title="Atur nama panggilan peserta didik kelas ini">
-                    ✏️ Atur Panggilan
-                </button>
+                    <button type="button" @click="saveAll()" :disabled="saving" title="Pintasan keyboard: Ctrl + S"
+                            class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
+                        <span x-text="saving ? 'Menyimpan...' : 'Simpan Absensi (Ctrl+S)'"></span>
+                    </button>
+                    <button type="button" @click="nicknameModal = true"
+                            class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
+                            title="Atur nama panggilan peserta didik kelas ini">
+                        ✏️ Atur Panggilan
+                    </button>
+                    <button type="button" @click="importModal = true"
+                            class="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold hover:bg-indigo-100">
+                        Import Excel
+                    </button>
+                @else
+                    <button type="button" @click="nicknameModal = true"
+                            class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
+                            title="Atur nama panggilan peserta didik kelas ini">
+                        ✏️ Atur Panggilan
+                    </button>
+                @endif
             @endif
             <button type="button" @click="openExportModal()"
                     class="w-full sm:w-auto inline-flex items-center justify-center px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition">
@@ -105,52 +127,54 @@
     </div>
 
     @if($tab === 'monthly')
-        {{-- Panduan Kode & Mode Sentuh Cepat HP (Tap-to-Fill) --}}
-        <div class="bg-slate-900 text-slate-200 rounded-2xl px-4 py-3 text-xs space-y-2.5">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 whitespace-nowrap">
-                    <span class="font-bold text-white shrink-0 pr-1">Mode HP:</span>
-                    <button type="button" @click="tapStamp = null"
-                            class="shrink-0 px-2.5 py-1 rounded-lg font-bold transition border"
-                            :class="tapStamp === null ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-slate-300 border-slate-700'">
-                        Ketik Keyboard
-                    </button>
-                    <button type="button" @click="tapStamp = '.'"
-                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                            :class="tapStamp === '.' ? 'bg-emerald-500 text-white border-emerald-400 ring-2 ring-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'">
-                        Tap "." Hadir
-                    </button>
-                    <button type="button" @click="tapStamp = 'd'"
-                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                            :class="tapStamp === 'd' ? 'bg-sky-500 text-white border-sky-400 ring-2 ring-sky-300' : 'bg-sky-500/20 text-sky-300 border-sky-400/30'">
-                        Tap "d" Dispen
-                    </button>
-                    <button type="button" @click="tapStamp = 's'"
-                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                            :class="tapStamp === 's' ? 'bg-amber-500 text-white border-amber-400 ring-2 ring-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-400/30'">
-                        Tap "s" Sakit
-                    </button>
-                    <button type="button" @click="tapStamp = 'i'"
-                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                            :class="tapStamp === 'i' ? 'bg-purple-500 text-white border-purple-400 ring-2 ring-purple-300' : 'bg-purple-500/20 text-purple-300 border-purple-400/30'">
-                        Tap "i" Izin
-                    </button>
-                    <button type="button" @click="tapStamp = 'a'"
-                            class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                            :class="tapStamp === 'a' ? 'bg-rose-500 text-white border-rose-400 ring-2 ring-rose-300' : 'bg-rose-500/20 text-rose-300 border-rose-400/30'">
-                        Tap "a" Alfa
-                    </button>
-                    <button type="button" @click="tapStamp = ''"
-                            class="shrink-0 px-2.5 py-1 rounded-lg font-bold transition border"
-                            :class="tapStamp === '' ? 'bg-slate-600 text-white border-slate-400 ring-2 ring-slate-300' : 'bg-slate-800 text-slate-300 border-slate-700'">
-                        Tap Hapus
-                    </button>
-                </div>
-                <div class="text-[11px] text-slate-400">
-                    Tip: Di HP, pilih tombol <strong>Tap</strong> di atas lalu sentuh kotak tanggal murid tanpa perlu membuka keyboard!
+        @if(! auth()->user()->isAdmin())
+            {{-- Panduan Kode & Mode Sentuh Cepat HP (Tap-to-Fill) --}}
+            <div class="bg-slate-900 text-slate-200 rounded-2xl px-4 py-3 text-xs space-y-2.5">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 whitespace-nowrap">
+                        <span class="font-bold text-white shrink-0 pr-1">Mode HP:</span>
+                        <button type="button" @click="tapStamp = null"
+                                class="shrink-0 px-2.5 py-1 rounded-lg font-bold transition border"
+                                :class="tapStamp === null ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-slate-300 border-slate-700'">
+                            Ketik Keyboard
+                        </button>
+                        <button type="button" @click="tapStamp = '.'"
+                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
+                                :class="tapStamp === '.' ? 'bg-emerald-500 text-white border-emerald-400 ring-2 ring-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'">
+                            Tap "." Hadir
+                        </button>
+                        <button type="button" @click="tapStamp = 'd'"
+                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
+                                :class="tapStamp === 'd' ? 'bg-sky-500 text-white border-sky-400 ring-2 ring-sky-300' : 'bg-sky-500/20 text-sky-300 border-sky-400/30'">
+                            Tap "d" Dispen
+                        </button>
+                        <button type="button" @click="tapStamp = 's'"
+                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
+                                :class="tapStamp === 's' ? 'bg-amber-500 text-white border-amber-400 ring-2 ring-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-400/30'">
+                            Tap "s" Sakit
+                        </button>
+                        <button type="button" @click="tapStamp = 'i'"
+                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
+                                :class="tapStamp === 'i' ? 'bg-purple-500 text-white border-purple-400 ring-2 ring-purple-300' : 'bg-purple-500/20 text-purple-300 border-purple-400/30'">
+                            Tap "i" Izin
+                        </button>
+                        <button type="button" @click="tapStamp = 'a'"
+                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
+                                :class="tapStamp === 'a' ? 'bg-rose-500 text-white border-rose-400 ring-2 ring-rose-300' : 'bg-rose-500/20 text-rose-300 border-rose-400/30'">
+                            Tap "a" Alfa
+                        </button>
+                        <button type="button" @click="tapStamp = ''"
+                                class="shrink-0 px-2.5 py-1 rounded-lg font-bold transition border"
+                                :class="tapStamp === '' ? 'bg-slate-600 text-white border-slate-400 ring-2 ring-slate-300' : 'bg-slate-800 text-slate-300 border-slate-700'">
+                            Tap Hapus
+                        </button>
+                    </div>
+                    <div class="text-[11px] text-slate-400">
+                        Tip: Di HP, pilih tombol <strong>Tap</strong> di atas lalu sentuh kotak tanggal murid tanpa perlu membuka keyboard!
+                    </div>
                 </div>
             </div>
-        </div>
+        @endif
 
         {{-- Spreadsheet Matriks Bulanan --}}
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
@@ -179,13 +203,15 @@
                                 <th class="p-0 border-r border-slate-200 w-7 min-w-[28px] text-center"
                                     :class="isHoliday(d) ? 'bg-rose-50/80 text-rose-700' : ''">
                                     <div class="relative" x-data="{ menu: false }">
-                                        <button type="button" @click="menu = !menu"
+                                        <button type="button" @click="if (!isAdmin) menu = !menu"
                                                 class="w-full py-0.5 flex flex-col items-center justify-center transition leading-tight select-none"
                                                 :class="{
-                                                    'hover:bg-rose-100': isHoliday(d),
-                                                    'hover:bg-emerald-100 hover:text-emerald-900': !isHoliday(d),
+                                                    'hover:bg-rose-100': !isAdmin && isHoliday(d),
+                                                    'hover:bg-emerald-100 hover:text-emerald-900': !isAdmin && !isHoliday(d),
                                                     'bg-emerald-50 text-emerald-800': columnHasData(d) && !isHoliday(d),
-                                                    'bg-rose-100/70 font-bold': columnHasData(d) && isHoliday(d)
+                                                    'bg-rose-100/70 font-bold': columnHasData(d) && isHoliday(d),
+                                                    'cursor-default': isAdmin,
+                                                    'cursor-pointer': !isAdmin
                                                 }"
                                                 :title="getEventTitle(d) ? (getDayName(d) + ' ' + d + ': ' + getEventTitle(d)) : (getDayName(d) + ' ' + d)">
                                             <span class="text-[8.5px] uppercase tracking-tighter"
@@ -250,16 +276,17 @@
                                                autocomplete="off"
                                                autocorrect="off"
                                                spellcheck="false"
-                                               :readonly="tapStamp !== null"
+                                               :readonly="isAdmin || tapStamp !== null"
+                                               :disabled="isAdmin"
                                                :placeholder="isHoliday(d) ? '-' : ''"
                                                :id="`att-${rIdx}-${d}`"
                                                :value="getCell(st.id, d)"
-                                               @focus="if(tapStamp === null) $el.select()"
-                                               @click="onCellTap(st.id, d)"
+                                               @focus="if(!isAdmin && tapStamp === null) $el.select()"
+                                               @click="if(!isAdmin) onCellTap(st.id, d)"
                                                @keydown="handleKey($event, st.id, rIdx, d)"
                                                @input="handleInput($event, st.id, d)"
-                                               class="w-7 h-8 sm:h-7 text-center text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:z-20 relative cursor-pointer placeholder:text-rose-300 placeholder:font-normal"
-                                               :class="cellColorClass(getCell(st.id, d), isHoliday(d))">
+                                               class="w-7 h-8 sm:h-7 text-center text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:z-20 relative placeholder:text-rose-300 placeholder:font-normal"
+                                               :class="[cellColorClass(getCell(st.id, d), isHoliday(d)), isAdmin ? 'cursor-default pointer-events-none select-none' : 'cursor-pointer']">
                                     </td>
                                 </template>
 
@@ -309,50 +336,52 @@
             @endif
         </div>
 
-        {{-- Kartu & Tombol Simpan Panjang di Bawah Tabel Absensi --}}
-        <div x-show="students.length > 0"
-             class="rounded-2xl border p-4 shadow-2xs transition"
-             :class="isDirty ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-200/70' : 'bg-white border-slate-200'">
-            <div class="flex flex-wrap items-center justify-between gap-2 text-xs mb-3">
-                <div class="flex items-center gap-2">
-                    <template x-if="isDirty">
-                        <span class="inline-flex items-center gap-2 font-bold text-amber-950">
-                            <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
-                            <span>Ada <strong x-text="dirtyCount"></strong> kotak tanggal diubah &amp; belum disimpan.</span>
-                        </span>
-                    </template>
-                    <template x-if="!isDirty">
-                        <span class="inline-flex items-center gap-1.5 font-semibold text-emerald-800">
-                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                            <span x-text="savedMessage || 'Seluruh data absensi pada tabel ini sudah tersimpan'"></span>
-                        </span>
-                    </template>
+        @if(! auth()->user()->isAdmin())
+            {{-- Kartu & Tombol Simpan Panjang di Bawah Tabel Absensi --}}
+            <div x-show="students.length > 0"
+                 class="rounded-2xl border p-4 shadow-2xs transition"
+                 :class="isDirty ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-200/70' : 'bg-white border-slate-200'">
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs mb-3">
+                    <div class="flex items-center gap-2">
+                        <template x-if="isDirty">
+                            <span class="inline-flex items-center gap-2 font-bold text-amber-950">
+                                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                <span>Ada <strong x-text="dirtyCount"></strong> kotak tanggal diubah &amp; belum disimpan.</span>
+                            </span>
+                        </template>
+                        <template x-if="!isDirty">
+                            <span class="inline-flex items-center gap-1.5 font-semibold text-emerald-800">
+                                <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <span x-text="savedMessage || 'Seluruh data absensi pada tabel ini sudah tersimpan'"></span>
+                            </span>
+                        </template>
+                    </div>
+                    <span class="text-[11px] text-slate-500">
+                        Otomatis menyinkronkan <strong>Jurnal Harian</strong> &amp; <strong>Nilai Kehadiran</strong> &bull; Pintasan: <kbd class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300 font-bold text-slate-700">Ctrl + S</kbd>
+                    </span>
                 </div>
-                <span class="text-[11px] text-slate-500">
-                    Otomatis menyinkronkan <strong>Jurnal Harian</strong> &amp; <strong>Nilai Kehadiran</strong> &bull; Pintasan: <kbd class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300 font-bold text-slate-700">Ctrl + S</kbd>
-                </span>
-            </div>
 
-            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                <button type="button"
-                        @click="saveAll()"
-                        :disabled="saving"
-                        class="flex-1 py-3.5 px-6 rounded-xl text-sm font-extrabold text-white shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                        :class="isDirty ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400/50' : 'bg-emerald-600 hover:bg-emerald-700'">
-                    <svg x-show="!saving" class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 13l4 4L19 7"/></svg>
-                    <svg x-show="saving" x-cloak class="w-5 h-5 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
-                    <span x-text="saving ? 'Sedang Menyimpan Absensi & Sinkronisasi Jurnal...' : (isDirty ? `Simpan Perubahan Absensi Bulan ${monthLabel} (${dirtyCount} perubahan)` : `Simpan Seluruh Data Absensi Bulan ${monthLabel}`)"></span>
-                </button>
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                    <button type="button"
+                            @click="saveAll()"
+                            :disabled="saving"
+                            class="flex-1 py-3.5 px-6 rounded-xl text-sm font-extrabold text-white shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                            :class="isDirty ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400/50' : 'bg-emerald-600 hover:bg-emerald-700'">
+                        <svg x-show="!saving" class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 13l4 4L19 7"/></svg>
+                        <svg x-show="saving" x-cloak class="w-5 h-5 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                        <span x-text="saving ? 'Sedang Menyimpan Absensi & Sinkronisasi Jurnal...' : (isDirty ? `Simpan Perubahan Absensi Bulan ${monthLabel} (${dirtyCount} perubahan)` : `Simpan Seluruh Data Absensi Bulan ${monthLabel}`)"></span>
+                    </button>
 
-                <button type="button"
-                        x-show="isDirty && !saving"
-                        x-cloak
-                        @click="revertChanges()"
-                        class="px-4 py-3.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 text-xs font-bold transition cursor-pointer">
-                    Urungkan Perubahan
-                </button>
+                    <button type="button"
+                            x-show="isDirty && !saving"
+                            x-cloak
+                            @click="revertChanges()"
+                            class="px-4 py-3.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 text-xs font-bold transition cursor-pointer">
+                        Urungkan Perubahan
+                    </button>
+                </div>
             </div>
-        </div>
+        @endif
     @else
         {{-- Tampilan Rekapitulasi 1 Semester Penuh --}}
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
@@ -412,36 +441,38 @@
         </div>
     @endif
 
-    {{-- Modal Import Excel Absensi --}}
-    <div x-show="importModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-        <div @click.away="importModal = false" class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
-            <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
-                <h3 class="text-sm font-bold">Import Absensi Bulan {{ $monthName }} {{ $year }}</h3>
-                <button type="button" @click="importModal = false" class="text-slate-400 hover:text-white text-xl">&times;</button>
+    @if(! auth()->user()->isAdmin())
+        {{-- Modal Import Excel Absensi --}}
+        <div x-show="importModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div @click.away="importModal = false" class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
+                <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+                    <h3 class="text-sm font-bold">Import Absensi Bulan {{ $monthName }} {{ $year }}</h3>
+                    <button type="button" @click="importModal = false" class="text-slate-400 hover:text-white text-xl">&times;</button>
+                </div>
+                <form method="POST" action="{{ route('attendances.import', $teachingClass) }}" enctype="multipart/form-data" class="p-5 space-y-4 text-xs">
+                    @csrf
+                    <input type="hidden" name="month" value="{{ $month }}">
+                    <input type="hidden" name="year" value="{{ $year }}">
+                    <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 flex items-center justify-between gap-2">
+                        <span>Unduh template Excel absensi bulan ini:</span>
+                        <a href="{{ route('attendances.template', [$teachingClass, 'month' => $month, 'year' => $year]) }}"
+                           data-skip-dirty-guard="1"
+                           class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 shrink-0">
+                            Unduh Template
+                        </a>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">File Excel (.xlsx / .xls / .csv) *</label>
+                        <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required class="w-full text-xs">
+                    </div>
+                    <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                        <button type="button" @click="importModal = false" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>
+                        <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700">Import & Sinkronkan</button>
+                    </div>
+                </form>
             </div>
-            <form method="POST" action="{{ route('attendances.import', $teachingClass) }}" enctype="multipart/form-data" class="p-5 space-y-4 text-xs">
-                @csrf
-                <input type="hidden" name="month" value="{{ $month }}">
-                <input type="hidden" name="year" value="{{ $year }}">
-                <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 flex items-center justify-between gap-2">
-                    <span>Unduh template Excel absensi bulan ini:</span>
-                    <a href="{{ route('attendances.template', [$teachingClass, 'month' => $month, 'year' => $year]) }}"
-                       data-skip-dirty-guard="1"
-                       class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 shrink-0">
-                        Unduh Template
-                    </a>
-                </div>
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">File Excel (.xlsx / .xls / .csv) *</label>
-                    <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required class="w-full text-xs">
-                </div>
-                <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                    <button type="button" @click="importModal = false" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>
-                    <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700">Import & Sinkronkan</button>
-                </div>
-            </form>
         </div>
-    </div>
+    @endif
 
     {{-- Modal Cetak PDF & Download Excel Absensi --}}
     @include('partials.export-modal', [
@@ -459,10 +490,12 @@
         'extraParams' => ['month' => $month, 'year' => $year],
     ])
 
-    @include('partials.nickname-modal', [
-        'teachingClass' => $teachingClass,
-        'students' => $teachingClass->activeStudents()->get(),
-    ])
+    @if(! auth()->user()->isAdmin())
+        @include('partials.nickname-modal', [
+            'teachingClass' => $teachingClass,
+            'students' => $teachingClass->activeStudents()->get(),
+        ])
+    @endif
 </div>
 
 @push('scripts')
@@ -479,6 +512,7 @@ function attendanceSpreadsheet(cfg) {
         isMonthly: Boolean(cfg.isMonthly),
         hasTeachingDays: Boolean(cfg.hasTeachingDays),
         filterTeachingDays: Boolean(cfg.filterTeachingDays),
+        isAdmin: Boolean(cfg.isAdmin),
         tapStamp: null,
         isDirty: false,
         dirtyCount: 0,
@@ -500,19 +534,21 @@ function attendanceSpreadsheet(cfg) {
 
         init() {
             this.savedSnapshot = this.cloneCells(this.cells);
-            window.__workspaceDirty = false;
-            window.__workspaceDirtyLabel = 'Absensi Peserta Didik';
-            window.__workspaceSaveFn = () => this.saveAll();
+            if (!this.isAdmin) {
+                window.__workspaceDirty = false;
+                window.__workspaceDirtyLabel = 'Absensi Peserta Didik';
+                window.__workspaceSaveFn = () => this.saveAll();
 
-            if (this.isMonthly) {
-                window.addEventListener('keydown', (e) => {
-                    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
-                        e.preventDefault();
-                        if (!this.saving) {
-                            this.saveAll();
+                if (this.isMonthly) {
+                    window.addEventListener('keydown', (e) => {
+                        if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
+                            e.preventDefault();
+                            if (!this.saving) {
+                                this.saveAll();
+                            }
                         }
-                    }
-                });
+                    });
+                }
             }
         },
 
@@ -521,6 +557,11 @@ function attendanceSpreadsheet(cfg) {
         },
 
         recalculateDirty() {
+            if (this.isAdmin) {
+                this.dirtyCount = 0;
+                this.isDirty = false;
+                return;
+            }
             let count = 0;
             for (let i = 0; i < this.students.length; i++) {
                 const sid = String(this.students[i].id);
@@ -540,7 +581,7 @@ function attendanceSpreadsheet(cfg) {
         },
 
         revertChanges() {
-            if (!this.isDirty) return;
+            if (this.isAdmin || !this.isDirty) return;
             if (!window.confirm(`Batalkan ${this.dirtyCount} perubahan absensi yang belum disimpan dan kembalikan ke data tersimpan terakhir?`)) {
                 return;
             }
@@ -550,7 +591,7 @@ function attendanceSpreadsheet(cfg) {
         },
 
         async openExportModal() {
-            if (this.isMonthly && this.isDirty) {
+            if (!this.isAdmin && this.isMonthly && this.isDirty) {
                 const saveNow = window.confirm(
                     `Ada ${this.dirtyCount} perubahan absensi yang belum disimpan.\n\n` +
                     `Klik "OK" untuk MENYIMPAN absensi sekarang lalu membuka Cetak PDF & Excel, atau klik "Batal" untuk kembali ke tabel.`
@@ -563,6 +604,7 @@ function attendanceSpreadsheet(cfg) {
         },
 
         onCellTap(studentId, day) {
+            if (this.isAdmin) return;
             if (this.tapStamp !== null) {
                 this.setCell(studentId, day, this.tapStamp);
             }
@@ -573,6 +615,7 @@ function attendanceSpreadsheet(cfg) {
             return row ? (row[day] || '') : '';
         },
         setCell(studentId, day, val) {
+            if (this.isAdmin) return;
             const key = String(studentId);
             if (!this.cells[key]) this.cells[key] = {};
             this.cells[key][day] = val;
@@ -596,6 +639,7 @@ function attendanceSpreadsheet(cfg) {
             return this.daysMeta[day]?.event_title || '';
         },
         fillDay(day, statusVal) {
+            if (this.isAdmin) return;
             if (statusVal === '.' && this.isHoliday(day)) {
                 const title = this.getEventTitle(day);
                 const reason = this.isSunday(day) ? 'Hari Minggu (Libur)' : ('Agenda Libur: ' + title);
@@ -644,6 +688,7 @@ function attendanceSpreadsheet(cfg) {
             };
         },
         focusCell(rIdx, day) {
+            if (this.isAdmin) return;
             if (rIdx < 0 || rIdx >= this.students.length || day < 1 || day > this.daysInMonth) return;
             const el = document.getElementById(`att-${rIdx}-${day}`);
             if (el) {
@@ -652,6 +697,10 @@ function attendanceSpreadsheet(cfg) {
             }
         },
         handleKey(e, studentId, rIdx, day) {
+            if (this.isAdmin) {
+                e.preventDefault();
+                return;
+            }
             const k = e.key;
             if (k === 'ArrowDown' || k === 'Enter') {
                 e.preventDefault();
@@ -681,6 +730,10 @@ function attendanceSpreadsheet(cfg) {
             }
         },
         handleInput(e, studentId, day) {
+            if (this.isAdmin) {
+                e.preventDefault();
+                return;
+            }
             const raw = (e.target.value || '').trim().toLowerCase();
             if (['.', 's', 'i', 'a', 'd', ''].includes(raw)) {
                 this.setCell(studentId, day, raw);
@@ -689,7 +742,7 @@ function attendanceSpreadsheet(cfg) {
             }
         },
         async saveAll() {
-            if (this.saving) return false;
+            if (this.isAdmin || this.saving) return false;
             this.saving = true;
             this.savedMessage = '';
             try {

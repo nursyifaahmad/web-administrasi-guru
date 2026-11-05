@@ -18,6 +18,28 @@ use Illuminate\View\View;
 
 class GradebookController extends Controller
 {
+    public function toggleAdminAccess(Request $request, TeachingClass $teachingClass): RedirectResponse
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_unless(
+            (int) $teachingClass->teacher_id === (int) $request->user()->id,
+            403,
+            'Hanya guru pengampu yang berhak mengubah izin akses nilai untuk Administrator.'
+        );
+
+        $newStatus = ! (bool) $teachingClass->is_grade_shared_with_admin;
+        $teachingClass->update([
+            'is_grade_shared_with_admin' => $newStatus,
+        ]);
+
+        $msg = $newStatus
+            ? 'Izin akses detail nilai untuk Administrator/Wakasek berhasil DIBUKA (Mode Hanya Lihat).'
+            : 'Izin akses detail nilai untuk Administrator/Wakasek berhasil DIKUNCI (Privat).';
+
+        return back()->with('success', $msg);
+    }
+
     public function index(
         Request $request,
         TeachingClass $teachingClass,
@@ -26,6 +48,8 @@ class GradebookController extends Controller
     ): View {
         $user = $request->user();
         $this->authorizeClassAccess($user, $teachingClass);
+
+        $isGradeLockedForAdmin = $user->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin;
 
         $gradebook = $gradeService->buildGradebookData($teachingClass, $attendanceService);
 
@@ -43,19 +67,21 @@ class GradebookController extends Controller
         }
 
         $alpineRows = [];
-        foreach ($gradebook['rows'] as $r) {
-            $st = $r['student'];
-            $alpineRows[] = [
-                'student_id' => $st->id,
-                'no' => $r['no'],
-                'full_name' => $st->full_name,
-                'gender' => $st->gender,
-                'dynamic_scores' => $r['dynamic_scores'],
-                'attendance_score' => $r['attendance_score'],
-                'sts_score' => $r['sts_score'],
-                'sas_score' => $r['sas_score'],
-                'attendance_ref' => $r['attendance_ref'],
-            ];
+        if (! $isGradeLockedForAdmin) {
+            foreach ($gradebook['rows'] as $r) {
+                $st = $r['student'];
+                $alpineRows[] = [
+                    'student_id' => $st->id,
+                    'no' => $r['no'],
+                    'full_name' => $st->full_name,
+                    'gender' => $st->gender,
+                    'dynamic_scores' => $r['dynamic_scores'],
+                    'attendance_score' => $r['attendance_score'],
+                    'sts_score' => $r['sts_score'],
+                    'sas_score' => $r['sas_score'],
+                    'attendance_ref' => $r['attendance_ref'],
+                ];
+            }
         }
 
         return view('workspace.grades.index', [
@@ -63,6 +89,8 @@ class GradebookController extends Controller
             'gradebook' => $gradebook,
             'alpineRows' => $alpineRows,
             'siblingClasses' => $siblingClassesQuery->get(),
+            'isGradeLockedForAdmin' => $isGradeLockedForAdmin,
+            'isAdminReadOnly' => $user->isAdmin(),
         ]);
     }
 
@@ -73,6 +101,13 @@ class GradebookController extends Controller
         AttendanceJournalSyncService $attendanceService
     ): JsonResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+        );
+
         $teachingClass->ensureDefaultsInitialized();
 
         $validated = $request->validate([
@@ -183,6 +218,12 @@ class GradebookController extends Controller
     ): RedirectResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+        );
+
         $validated = $request->validate([
             'type' => ['required', Rule::in(['PH', 'NT'])],
             'label' => ['nullable', 'string', 'max:50'],
@@ -214,6 +255,12 @@ class GradebookController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
         abort_unless((int) $column->teaching_class_id === (int) $teachingClass->id, 404);
 
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+        );
+
         $validated = $request->validate([
             'label' => ['required', 'string', 'max:50'],
             'topic_note' => ['nullable', 'string', 'max:120'],
@@ -235,6 +282,12 @@ class GradebookController extends Controller
     ): RedirectResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
         abort_unless((int) $column->teaching_class_id === (int) $teachingClass->id, 404);
+
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+        );
 
         $deletedId = (string) $column->id;
         $label = $column->label;
@@ -263,6 +316,13 @@ class GradebookController extends Controller
     ): RedirectResponse {
         $user = $request->user();
         $this->authorizeClassAccess($user, $teachingClass);
+
+        abort_if(
+            $user->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+        );
+
         $teachingClass->ensureDefaultsInitialized();
 
         $validated = $request->validate([
@@ -337,6 +397,12 @@ class GradebookController extends Controller
     ) {
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
+        abort_if(
+            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            403,
+            'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
+        );
+
         return $excelService->downloadGradeTemplate($teachingClass);
     }
 
@@ -346,6 +412,12 @@ class GradebookController extends Controller
         ExcelExportImportService $excelService
     ): RedirectResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+        );
 
         $request->validate([
             'excel_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],

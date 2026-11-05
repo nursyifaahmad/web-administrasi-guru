@@ -160,6 +160,12 @@ class DailyJournalController extends Controller
     ): RedirectResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian, tidak dapat menambah catatan jurnal guru.'
+        );
+
         $validated = $request->validate([
             'journal_date' => ['required', 'date'],
             'lesson_hours' => ['required', 'string', 'max:50'],
@@ -205,6 +211,13 @@ class DailyJournalController extends Controller
         AttendanceJournalSyncService $syncService
     ): RedirectResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian, tidak dapat mengubah catatan jurnal guru.'
+        );
+
         abort_unless((int) $journal->teaching_class_id === (int) $teachingClass->id, 404);
 
         $validated = $request->validate([
@@ -253,6 +266,13 @@ class DailyJournalController extends Controller
         AttendanceJournalSyncService $syncService
     ): RedirectResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian.'
+        );
+
         abort_unless((int) $journal->teaching_class_id === (int) $teachingClass->id, 404);
 
         $summary = $syncService->syncJournalForDate($teachingClass, $journal->journal_date->toDateString(), true);
@@ -266,6 +286,13 @@ class DailyJournalController extends Controller
     public function destroy(Request $request, TeachingClass $teachingClass, DailyJournal $journal): RedirectResponse
     {
         $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian, tidak dapat menghapus catatan jurnal guru.'
+        );
+
         abort_unless((int) $journal->teaching_class_id === (int) $teachingClass->id, 404);
 
         $journal->delete();

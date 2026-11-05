@@ -7,6 +7,97 @@
 @section('content')
 @include('partials.class-workspace-tabs')
 
+@if(! auth()->user()->isAdmin())
+    {{-- Panel Hak Akses Supervisi Nilai untuk Administrator / Wakasek (Khusus Guru Pengampu) --}}
+    <div class="mb-4 rounded-2xl border p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 {{ $teachingClass->is_grade_shared_with_admin ? 'bg-emerald-50/70 border-emerald-200' : 'bg-slate-50 border-slate-200' }}">
+        <div class="flex items-start sm:items-center gap-3">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs {{ $teachingClass->is_grade_shared_with_admin ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-white' }}">
+                {{ $teachingClass->is_grade_shared_with_admin ? '🔓' : '🔒' }}
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-slate-900">Hak Akses Supervisi Nilai untuk Admin / Wakasek</span>
+                    @if($teachingClass->is_grade_shared_with_admin)
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            Diizinkan (Hanya Lihat)
+                        </span>
+                    @else
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                            Terkunci (Privat Guru)
+                        </span>
+                    @endif
+                </div>
+                <p class="text-[11px] text-slate-600 mt-0.5">
+                    @if($teachingClass->is_grade_shared_with_admin)
+                        Admin / Wakasek dapat melihat daftar nilai kelas ini dalam mode <em>Hanya Lihat (Read-Only)</em> untuk keperluan supervisi akademik atau cetak rapor.
+                    @else
+                        Secara default rincian nilai siswa bersifat privat dan hanya dapat diakses oleh Anda. Klik tombol di samping jika ingin memberi izin pantau kepada Admin/Wakasek.
+                    @endif
+                </p>
+            </div>
+        </div>
+        <form method="POST" action="{{ route('grades.toggle-admin-access', $teachingClass) }}" class="shrink-0">
+            @csrf
+            @method('PATCH')
+            @if($teachingClass->is_grade_shared_with_admin)
+                <button type="submit" class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer">
+                    <span>🔒 Kunci Kembali (Jadikan Privat)</span>
+                </button>
+            @else
+                <button type="submit" class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer">
+                    <span>🔓 Beri Izin Akses ke Admin / Wakasek</span>
+                </button>
+            @endif
+        </form>
+    </div>
+@endif
+
+@if($isGradeLockedForAdmin)
+    {{-- Tampilan Terkunci Khusus Admin / Wakasek saat Belum Diizinkan Guru --}}
+    <div class="rounded-2xl border border-amber-200 bg-white p-8 sm:p-12 text-center shadow-2xs max-w-2xl mx-auto my-8 space-y-4">
+        <div class="w-16 h-16 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-3xl mx-auto shadow-2xs">
+            🔒
+        </div>
+        <div class="space-y-1.5">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                Memerlukan Izin Guru Pengampu
+            </span>
+            <h2 class="text-lg font-bold text-slate-900">Buku Nilai Detail Terkunci</h2>
+            <p class="text-xs text-slate-600 max-w-lg mx-auto leading-relaxed">
+                Guru pengampu (<strong>{{ $teachingClass->teacher->name }}</strong>) belum memberikan izin akses supervisi nilai kelas ini kepada Administrator/Wakasek. Rincian nilai siswa bersifat privat demi menjaga independensi penilaian guru sebelum difinalisasi.
+            </p>
+        </div>
+        <div class="pt-2 flex flex-wrap items-center justify-center gap-2 text-xs">
+            <a href="{{ route('attendances.index', $teachingClass) }}" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition">
+                Pantau Absensi Siswa
+            </a>
+            <a href="{{ route('journals.index', $teachingClass) }}" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition">
+                Pantau Jurnal Harian
+            </a>
+        </div>
+    </div>
+@else
+
+@if(auth()->user()->isAdmin())
+    {{-- Banner Mode Supervisi Nilai untuk Admin --}}
+    <div class="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-2xs flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs">
+            🔓
+        </div>
+        <div class="flex-1 min-w-0">
+            <h3 class="text-sm font-bold text-emerald-950 flex items-center gap-2">
+                Mode Supervisi Nilai (Hanya Lihat &mdash; Izin Diberikan Guru)
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    Admin / Wakasek
+                </span>
+            </h3>
+            <p class="text-xs text-emerald-800 mt-0.5 leading-relaxed">
+                Guru pengampu (<strong>{{ $teachingClass->teacher->name }}</strong>) telah membuka akses supervisi untuk buku nilai kelas ini. Anda dapat melihat seluruh rincian nilai siswa dan mencetak/mengekspor laporan (mode baca saja).
+            </p>
+        </div>
+    </div>
+@endif
+
 @php
     $w = $gradebook['weight'];
     $phColumns = $gradebook['ph_columns'];
@@ -17,7 +108,7 @@
 @endphp
 
 <div class="space-y-4"
-     :class="(isDirty || saving || justSaved) ? 'pb-24' : ''"
+     :class="(!isAdminReadOnly && (isDirty || saving || justSaved)) ? 'pb-24' : ''"
      x-data="gradebookSpreadsheet({
         rows: @js($alpineRows),
         phColIds: @js($phColumns->pluck('id')->map(fn($id) => (string)$id)->values()),
@@ -33,6 +124,7 @@
         isAutoAttendance: @js($isAutoAtt),
         sickLeaveTolerance: @js($tolValue),
         kktp: @js($kktp),
+        isAdminReadOnly: @js($isAdminReadOnly),
         saveUrl: @js(route('grades.bulk-save', $teachingClass)),
         csrf: @js(csrf_token())
      })">
@@ -53,40 +145,54 @@
                     <strong>SAS {{ rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.') }}%</strong> = 100%
                 </div>
                 @if($isAutoAtt)
-                    <button type="button" @click="openWeightsModal()"
-                            class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold hover:bg-emerald-100 transition"
-                            title="Klik untuk mengubah mode atau batas toleransi Sakit/Izin">
-                        Kehadiran: Otomatis Absensi (Toleransi S+I: {{ $tolValue }}x)
-                    </button>
+                    @if(! auth()->user()->isAdmin())
+                        <button type="button" @click="openWeightsModal()"
+                                class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold hover:bg-emerald-100 transition cursor-pointer"
+                                title="Klik untuk mengubah mode atau batas toleransi Sakit/Izin">
+                            Kehadiran: Otomatis Absensi (Toleransi S+I: {{ $tolValue }}x)
+                        </button>
+                    @else
+                        <span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                            Kehadiran: Otomatis Absensi (Toleransi S+I: {{ $tolValue }}x)
+                        </span>
+                    @endif
                 @else
-                    <button type="button" @click="openWeightsModal()"
-                            class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-bold hover:bg-amber-100 transition"
-                            title="Klik untuk mengaktifkan Nilai Kehadiran otomatis dengan toleransi Sakit/Izin">
-                        Kehadiran: Input Manual
-                    </button>
+                    @if(! auth()->user()->isAdmin())
+                        <button type="button" @click="openWeightsModal()"
+                                class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-bold hover:bg-amber-100 transition cursor-pointer"
+                                title="Klik untuk mengaktifkan Nilai Kehadiran otomatis dengan toleransi Sakit/Izin">
+                            Kehadiran: Input Manual
+                        </button>
+                    @else
+                        <span class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-bold">
+                            Kehadiran: Input Manual
+                        </span>
+                    @endif
                 @endif
             </div>
 
             <div class="flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
-                <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
-                    Belum disimpan (<span x-text="dirtyCount"></span> nilai / <span x-text="dirtyStudentCount"></span> murid)
-                </span>
-                <span x-show="savedMessage && !isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
+                @if(! auth()->user()->isAdmin())
+                    <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
+                        Belum disimpan (<span x-text="dirtyCount"></span> nilai / <span x-text="dirtyStudentCount"></span> murid)
+                    </span>
+                    <span x-show="savedMessage && !isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold text-[11px]" x-text="savedMessage"></span>
 
-                <button type="button" @click="saveScores()" :disabled="saving" title="Pintasan keyboard: Ctrl + S"
-                        class="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition text-center">
-                    <span x-text="saving ? 'Menyimpan...' : 'Simpan Nilai'"></span>
-                </button>
-                <button type="button" @click="openWeightsModal()"
-                        class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition text-center">
-                    Atur Persentase Rumus NA
-                </button>
-                <button type="button" @click="importModal = true"
-                        class="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold hover:bg-indigo-100">
-                    Import Excel
-                </button>
+                    <button type="button" @click="saveScores()" :disabled="saving" title="Pintasan keyboard: Ctrl + S"
+                            class="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition text-center cursor-pointer">
+                        <span x-text="saving ? 'Menyimpan...' : 'Simpan Nilai'"></span>
+                    </button>
+                    <button type="button" @click="openWeightsModal()"
+                            class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition text-center cursor-pointer">
+                        Atur Persentase Rumus NA
+                    </button>
+                    <button type="button" @click="importModal = true"
+                            class="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold hover:bg-indigo-100 cursor-pointer">
+                        Import Excel
+                    </button>
+                @endif
                 <button type="button" @click="openExportModal()"
-                        class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition text-center">
+                        class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-2xs transition text-center cursor-pointer">
                     Cetak PDF & Excel
                 </button>
             </div>
@@ -95,23 +201,30 @@
         {{-- Baris Kontrol Kolom Dinamis PH & NT + Statistik Real-time --}}
         <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div class="flex flex-wrap items-center gap-2">
-                <form method="POST" action="{{ route('grades.columns.store', $teachingClass) }}" data-skip-dirty-guard="1" @submit.prevent="submitColumnAdd($event)">
-                    @csrf
-                    <input type="hidden" name="type" value="PH">
-                    <button type="submit"
-                            class="px-3 py-1.5 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 font-bold hover:bg-sky-100">
-                        + Tambah Kolom PH ({{ $phColumns->count() }})
-                    </button>
-                </form>
-                <form method="POST" action="{{ route('grades.columns.store', $teachingClass) }}" data-skip-dirty-guard="1" @submit.prevent="submitColumnAdd($event)">
-                    @csrf
-                    <input type="hidden" name="type" value="NT">
-                    <button type="submit"
-                            class="px-3 py-1.5 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 font-bold hover:bg-purple-100">
-                        + Tambah Kolom NT ({{ $ntColumns->count() }})
-                    </button>
-                </form>
-                <span class="text-[11px] text-slate-500">Klik judul kolom <strong>PH / NT</strong> untuk ubah/hapus &bull; Tekan <strong>Enter</strong> / <strong>&darr;</strong> saat isi nilai untuk pindah ke murid berikutnya.</span>
+                @if(! auth()->user()->isAdmin())
+                    <form method="POST" action="{{ route('grades.columns.store', $teachingClass) }}" data-skip-dirty-guard="1" @submit.prevent="submitColumnAdd($event)">
+                        @csrf
+                        <input type="hidden" name="type" value="PH">
+                        <button type="submit"
+                                class="px-3 py-1.5 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 font-bold hover:bg-sky-100 cursor-pointer">
+                            + Tambah Kolom PH ({{ $phColumns->count() }})
+                        </button>
+                    </form>
+                    <form method="POST" action="{{ route('grades.columns.store', $teachingClass) }}" data-skip-dirty-guard="1" @submit.prevent="submitColumnAdd($event)">
+                        @csrf
+                        <input type="hidden" name="type" value="NT">
+                        <button type="submit"
+                                class="px-3 py-1.5 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 font-bold hover:bg-purple-100 cursor-pointer">
+                            + Tambah Kolom NT ({{ $ntColumns->count() }})
+                        </button>
+                    </form>
+                    <span class="text-[11px] text-slate-500">Klik judul kolom <strong>PH / NT</strong> untuk ubah/hapus &bull; Tekan <strong>Enter</strong> / <strong>&darr;</strong> saat isi nilai untuk pindah ke murid berikutnya.</span>
+                @else
+                    <span class="text-[11px] text-slate-600 font-semibold flex items-center gap-1.5">
+                        <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        Mode Supervisi Akademik: Seluruh nilai siswa ditampilkan dalam mode Hanya Baca (Read-Only).
+                    </span>
+                @endif
             </div>
 
             <div class="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-600">
@@ -175,45 +288,63 @@
                     <tr class="bg-slate-50 text-slate-700 text-[11px] border-b border-slate-300">
                         @foreach($phColumns as $col)
                             <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-sky-50/50 min-w-[68px]">
-                                <button type="button"
-                                        @click="openEditCol(@js([
-                                            'label' => $col->label,
-                                            'topic_note' => $col->topic_note,
-                                            'type' => 'PH',
-                                            'update_url' => route('grades.columns.update', [$teachingClass, $col]),
-                                            'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
-                                        ]))"
-                                        class="w-full hover:text-sky-700 group" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
-                                    <div class="font-extrabold flex items-center justify-center gap-0.5">
-                                        <span>{{ $col->label }}</span>
-                                        <span class="text-[10px] text-slate-400 group-hover:text-sky-600">&#9998;</span>
+                                @if(! auth()->user()->isAdmin())
+                                    <button type="button"
+                                            @click="openEditCol(@js([
+                                                'label' => $col->label,
+                                                'topic_note' => $col->topic_note,
+                                                'type' => 'PH',
+                                                'update_url' => route('grades.columns.update', [$teachingClass, $col]),
+                                                'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
+                                            ]))"
+                                            class="w-full hover:text-sky-700 group cursor-pointer" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
+                                        <div class="font-extrabold flex items-center justify-center gap-0.5">
+                                            <span>{{ $col->label }}</span>
+                                            <span class="text-[10px] text-slate-400 group-hover:text-sky-600">&#9998;</span>
+                                        </div>
+                                        @if($col->topic_note)
+                                            <div class="text-[9px] font-normal text-slate-500 truncate max-w-[72px] mx-auto">{{ $col->topic_note }}</div>
+                                        @endif
+                                    </button>
+                                @else
+                                    <div class="w-full py-0.5" title="{{ $col->topic_note ?: $col->label }}">
+                                        <div class="font-extrabold text-slate-800">{{ $col->label }}</div>
+                                        @if($col->topic_note)
+                                            <div class="text-[9px] font-normal text-slate-500 truncate max-w-[72px] mx-auto">{{ $col->topic_note }}</div>
+                                        @endif
                                     </div>
-                                    @if($col->topic_note)
-                                        <div class="text-[9px] font-normal text-slate-500 truncate max-w-[72px] mx-auto">{{ $col->topic_note }}</div>
-                                    @endif
-                                </button>
+                                @endif
                             </th>
                         @endforeach
 
                         @foreach($ntColumns as $col)
                             <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-purple-50/50 min-w-[68px]">
-                                <button type="button"
-                                        @click="openEditCol(@js([
-                                            'label' => $col->label,
-                                            'topic_note' => $col->topic_note,
-                                            'type' => 'NT',
-                                            'update_url' => route('grades.columns.update', [$teachingClass, $col]),
-                                            'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
-                                        ]))"
-                                        class="w-full hover:text-purple-700 group" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
-                                    <div class="font-extrabold flex items-center justify-center gap-0.5">
-                                        <span>{{ $col->label }}</span>
-                                        <span class="text-[10px] text-slate-400 group-hover:text-purple-600">&#9998;</span>
+                                @if(! auth()->user()->isAdmin())
+                                    <button type="button"
+                                            @click="openEditCol(@js([
+                                                'label' => $col->label,
+                                                'topic_note' => $col->topic_note,
+                                                'type' => 'NT',
+                                                'update_url' => route('grades.columns.update', [$teachingClass, $col]),
+                                                'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
+                                            ]))"
+                                            class="w-full hover:text-purple-700 group cursor-pointer" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
+                                        <div class="font-extrabold flex items-center justify-center gap-0.5">
+                                            <span>{{ $col->label }}</span>
+                                            <span class="text-[10px] text-slate-400 group-hover:text-purple-600">&#9998;</span>
+                                        </div>
+                                        @if($col->topic_note)
+                                            <div class="text-[9px] font-normal text-slate-500 truncate max-w-[72px] mx-auto">{{ $col->topic_note }}</div>
+                                        @endif
+                                    </button>
+                                @else
+                                    <div class="w-full py-0.5" title="{{ $col->topic_note ?: $col->label }}">
+                                        <div class="font-extrabold text-slate-800">{{ $col->label }}</div>
+                                        @if($col->topic_note)
+                                            <div class="text-[9px] font-normal text-slate-500 truncate max-w-[72px] mx-auto">{{ $col->topic_note }}</div>
+                                        @endif
                                     </div>
-                                    @if($col->topic_note)
-                                        <div class="text-[9px] font-normal text-slate-500 truncate max-w-[72px] mx-auto">{{ $col->topic_note }}</div>
-                                    @endif
-                                </button>
+                                @endif
                             </th>
                         @endforeach
                     </tr>
@@ -238,12 +369,17 @@
                                     <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                            :id="`grade-${rIdx}-ph-${colId}`"
                                            x-model="row.dynamic_scores[colId]"
+                                           :readonly="isAdminReadOnly"
+                                           :disabled="isAdminReadOnly"
                                            @input="markDirty()"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, `ph-${colId}`)"
                                            placeholder="0"
                                            class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                           :class="(row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '') ? 'bg-amber-50/35 text-slate-500' : 'bg-white text-slate-900'">
+                                           :class="[
+                                               isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
+                                               (!isAdminReadOnly && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly ? 'bg-white text-slate-900' : '')
+                                           ]">
                                 </td>
                             </template>
 
@@ -265,11 +401,14 @@
                                     <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                            :id="`grade-${rIdx}-att`"
                                            x-model="row.attendance_score"
+                                           :readonly="isAdminReadOnly"
+                                           :disabled="isAdminReadOnly"
                                            @input="markDirty()"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, 'att')"
                                            placeholder="0"
-                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-bold text-emerald-900 bg-emerald-50/25 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                           :class="isAdminReadOnly ? 'pointer-events-none cursor-default bg-emerald-50/40 select-none' : 'bg-emerald-50/25'">
                                 </template>
                             </td>
 
@@ -279,12 +418,17 @@
                                     <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                            :id="`grade-${rIdx}-nt-${colId}`"
                                            x-model="row.dynamic_scores[colId]"
+                                           :readonly="isAdminReadOnly"
+                                           :disabled="isAdminReadOnly"
                                            @input="markDirty()"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, `nt-${colId}`)"
                                            placeholder="0"
                                            class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                           :class="(row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '') ? 'bg-amber-50/35 text-slate-500' : 'bg-white text-slate-900'">
+                                           :class="[
+                                               isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
+                                               (!isAdminReadOnly && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly ? 'bg-white text-slate-900' : '')
+                                           ]">
                                 </td>
                             </template>
 
@@ -293,21 +437,27 @@
                                 <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                        :id="`grade-${rIdx}-sts`"
                                        x-model="row.sts_score"
+                                       :readonly="isAdminReadOnly"
+                                       :disabled="isAdminReadOnly"
                                        @input="markDirty()"
                                        @focus="selectInput($event)"
                                        @keydown="handleGradeKey($event, rIdx, 'sts')"
                                        placeholder="0"
-                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold bg-amber-50/15 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                       :class="isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : 'bg-amber-50/15'">
                             </td>
                             <td class="p-0 border-r border-slate-200">
                                 <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
                                        :id="`grade-${rIdx}-sas`"
                                        x-model="row.sas_score"
+                                       :readonly="isAdminReadOnly"
+                                       :disabled="isAdminReadOnly"
                                        @input="markDirty()"
                                        @focus="selectInput($event)"
                                        @keydown="handleGradeKey($event, rIdx, 'sas')"
                                        placeholder="0"
-                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold bg-amber-50/15 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                       :class="isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : 'bg-amber-50/15'">
                             </td>
 
                             {{-- Nilai Akhir (NA) Real-time --}}
@@ -329,6 +479,7 @@
         </div>
     </div>
 
+    @if(! auth()->user()->isAdmin())
     {{-- Kartu & Tombol Simpan Panjang di Bawah Tabel Daftar Nilai --}}
     <div x-show="rows.length > 0"
          class="rounded-2xl border p-4 shadow-2xs transition"
@@ -640,6 +791,7 @@
             </form>
         </div>
     </div>
+    @endif
 
     {{-- Modal Cetak PDF & Download Excel Daftar Nilai --}}
     @include('partials.export-modal', [
@@ -650,6 +802,7 @@
         'defaultOrientation' => 'landscape',
     ])
 </div>
+@endif
 
 @push('scripts')
 <script>
@@ -663,6 +816,7 @@ function gradebookSpreadsheet(cfg) {
         isAutoAttendance: Boolean(cfg.isAutoAttendance),
         sickLeaveTolerance: Number(cfg.sickLeaveTolerance || 0),
         kktp: cfg.kktp,
+        isAdminReadOnly: Boolean(cfg.isAdminReadOnly),
         isDirty: false,
         dirtyCount: 0,
         dirtyStudentCount: 0,
@@ -677,19 +831,21 @@ function gradebookSpreadsheet(cfg) {
 
         init() {
             this.savedSnapshot = this.cloneRows(this.rows);
-            window.__gradeDirty = false;
-            window.__workspaceDirty = false;
-            window.__workspaceDirtyLabel = 'Daftar Nilai Peserta Didik';
-            window.__workspaceSaveFn = () => this.saveScores();
+            if (!this.isAdminReadOnly) {
+                window.__gradeDirty = false;
+                window.__workspaceDirty = false;
+                window.__workspaceDirtyLabel = 'Daftar Nilai Peserta Didik';
+                window.__workspaceSaveFn = () => this.saveScores();
 
-            window.addEventListener('keydown', (e) => {
-                if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
-                    e.preventDefault();
-                    if (!this.saving) {
-                        this.saveScores();
+                window.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
+                        e.preventDefault();
+                        if (!this.saving) {
+                            this.saveScores();
+                        }
                     }
-                }
-            });
+                });
+            }
         },
 
         cloneRows(src) {
@@ -703,6 +859,12 @@ function gradebookSpreadsheet(cfg) {
         },
 
         recalculateDirty() {
+            if (this.isAdminReadOnly) {
+                this.dirtyCount = 0;
+                this.dirtyStudentCount = 0;
+                this.isDirty = false;
+                return;
+            }
             const origMap = {};
             for (let i = 0; i < this.savedSnapshot.length; i++) {
                 origMap[String(this.savedSnapshot[i].student_id)] = this.savedSnapshot[i];
@@ -756,13 +918,14 @@ function gradebookSpreadsheet(cfg) {
         },
 
         markDirty() {
+            if (this.isAdminReadOnly) return;
             this.justSaved = false;
             this.savedMessage = '';
             this.recalculateDirty();
         },
 
         revertChanges() {
-            if (!this.isDirty) return;
+            if (this.isAdminReadOnly || !this.isDirty) return;
             if (!window.confirm(`Batalkan ${this.dirtyCount} perubahan nilai pada ${this.dirtyStudentCount} murid dan kembalikan ke nilai tersimpan terakhir?`)) {
                 return;
             }
@@ -782,7 +945,9 @@ function gradebookSpreadsheet(cfg) {
         },
 
         async openExportModal() {
-            if (!(await this.ensureSavedBeforeAction('membuka Cetak PDF & Excel'))) return;
+            if (!this.isAdminReadOnly) {
+                if (!(await this.ensureSavedBeforeAction('membuka Cetak PDF & Excel'))) return;
+            }
             this.exportModal = true;
         },
 
@@ -891,7 +1056,7 @@ function gradebookSpreadsheet(cfg) {
             };
         },
         async saveScores() {
-            if (this.saving) return false;
+            if (this.isAdminReadOnly || this.saving) return false;
             this.saving = true;
             this.savedMessage = '';
             try {

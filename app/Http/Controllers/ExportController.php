@@ -73,6 +73,13 @@ class ExportController extends Controller
     public function gradebookPdf(Request $request, TeachingClass $teachingClass, PdfExportService $pdfService)
     {
         $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_if(
+            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            403,
+            'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
+        );
+
         $pdf = $pdfService->generateGradebookPdf($teachingClass, $request->all());
         $safeClass = preg_replace('/[^A-Za-z0-9\-_]/', '_', $teachingClass->class_name);
 
@@ -85,12 +92,25 @@ class ExportController extends Controller
     {
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
+        abort_if(
+            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            403,
+            'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
+        );
+
         return $excelService->exportGradebook($teachingClass, $request->all());
     }
 
     public function bundlePdf(Request $request, TeachingClass $teachingClass, PdfExportService $pdfService)
     {
         $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_if(
+            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            403,
+            'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
+        );
+
         $month = max(1, min(12, $request->integer('month') ?: (int) now()->month));
         $year = max(2020, min(2099, $request->integer('year') ?: (int) now()->year));
 
@@ -105,6 +125,13 @@ class ExportController extends Controller
     public function bundleExcel(Request $request, TeachingClass $teachingClass, ExcelExportImportService $excelService)
     {
         $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_if(
+            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            403,
+            'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
+        );
+
         $month = max(1, min(12, $request->integer('month') ?: (int) now()->month));
         $year = max(2020, min(2099, $request->integer('year') ?: (int) now()->year));
 

@@ -67,6 +67,12 @@ class AttendanceController extends Controller
     ): JsonResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) absensi, tidak dapat mengubah data absensi guru.'
+        );
+
         $validated = $request->validate([
             'year' => ['required', 'integer', 'min:2020', 'max:2099'],
             'month' => ['required', 'integer', 'min:1', 'max:12'],
@@ -179,6 +185,12 @@ class AttendanceController extends Controller
         ExcelExportImportService $excelService
     ): RedirectResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_if(
+            $request->user()->isAdmin(),
+            403,
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) absensi, tidak dapat mengimpor data absensi guru.'
+        );
 
         $validated = $request->validate([
             'year' => ['required', 'integer', 'min:2020', 'max:2099'],
