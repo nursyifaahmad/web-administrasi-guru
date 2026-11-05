@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 set -e
+trap 'echo "===> [ERROR] Script entrypoint gagal pada baris $LINENO saat perintah: $BASH_COMMAND" >&2' ERR
 
 cd /var/www/html
+
+if [ -d .env ]; then
+    echo "===> [ERROR FATAL] .env terdeteksi sebagai FOLDER/DIREKTORI!" >&2
+    echo "     Penyebab: 'docker compose up' dijalankan saat file .env belum ada di host." >&2
+    echo "     Solusi di terminal host/server:" >&2
+    echo "       1) docker compose down" >&2
+    echo "       2) rm -rf .env" >&2
+    echo "       3) cp .env.docker.example .env" >&2
+    echo "       4) docker compose up -d" >&2
+    exit 1
+fi
 
 echo "==> [1/6] Menyiapkan direktori storage & cache..."
 mkdir -p \
@@ -85,7 +97,7 @@ if [ "${AUTO_SEED:-true}" = "true" ]; then
         $app = require "bootstrap/app.php";
         $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
         echo App\Models\User::count();
-    ')
+    ' 2>/dev/null || echo "0")
     if [ "${USER_COUNT:-0}" = "0" ]; then
         echo "    Database masih kosong -> menjalankan DatabaseSeeder..."
         php artisan db:seed --force --ansi

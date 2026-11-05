@@ -726,6 +726,10 @@ CSV;
                     $subj = $subjects->first();
                 }
 
+                if (! $subj) {
+                    continue;
+                }
+
                 // Hari mengajar unik
                 $days = $classItems->pluck('day_of_week')->unique()->sort()->values()->all();
 

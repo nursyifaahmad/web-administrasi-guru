@@ -12,16 +12,20 @@ return new class extends Migration
             return;
         }
 
-        $year = AcademicYear::query()->where('is_active', true)->first()
-            ?? AcademicYear::query()->firstOrCreate(
-                ['year_name' => '2026/2027', 'semester' => 'Ganjil'],
-                ['is_active' => true, 'start_date' => '2026-07-13', 'end_date' => '2026-12-19']
-            );
+        try {
+            $year = AcademicYear::query()->where('is_active', true)->first()
+                ?? AcademicYear::query()->firstOrCreate(
+                    ['year_name' => '2026/2027', 'semester' => 'Ganjil'],
+                    ['is_active' => true, 'start_date' => '2026-07-13', 'end_date' => '2026-12-19']
+                );
 
-        if ($year) {
-            $service = new SchoolScheduleService();
-            $service->importFromWakasekCsv($year);
-            $service->syncToTeachingClasses($year);
+            if ($year) {
+                $service = new SchoolScheduleService();
+                $service->importFromWakasekCsv($year);
+                $service->syncToTeachingClasses($year);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Auto-populate wakasek schedule migration skipped/errored: ' . $e->getMessage());
         }
     }
 
