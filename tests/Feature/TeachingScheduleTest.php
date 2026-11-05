@@ -211,7 +211,7 @@ class TeachingScheduleTest extends TestCase
         $res->assertSee('Kelas VII-E');
     }
 
-    public function test_sidebar_includes_jadwal_mengajar_menu(): void
+    public function test_sidebar_includes_jadwal_hari_ini_menu(): void
     {
         $env = $this->setupScheduleEnvironment();
         $guru = $env['guru'];
@@ -220,7 +220,7 @@ class TeachingScheduleTest extends TestCase
 
         $res->assertOk();
         $res->assertSee(route('schedules.index'));
-        $res->assertSee('Jadwal Mengajar');
+        $res->assertSee('Jadwal Hari Ini');
     }
 
     public function test_teaching_schedule_and_classes_list_eager_load_students_added_via_admin_rombel(): void
