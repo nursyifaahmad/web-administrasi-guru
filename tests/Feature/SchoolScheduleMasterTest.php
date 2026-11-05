@@ -353,4 +353,29 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertSee('SMP NEGERI 2 LEMAHABANG');
         $response->assertSee('Jadwal Pelajaran Sekolah');
     }
+
+    public function test_sidebar_highlights_only_active_schedule_menu_without_green_collision(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        // 1. Saat membuka Jadwal Utama (schedules.main.index):
+        $responseMain = $this->actingAs($guru)->get(route('schedules.main.index'));
+        $responseMain->assertOk();
+        $contentMain = $responseMain->getContent();
+
+        // Jadwal Utama harus aktif (bg-emerald-600)
+        $this->assertMatchesRegularExpression('/href="[^"]*jadwal-utama"[^>]*class="[^"]*bg-emerald-600/', $contentMain);
+        // Jadwal Hari Ini TIDAK BOLEH aktif (harus text-slate-300, tidak boleh bg-emerald-600)
+        $this->assertMatchesRegularExpression('/href="[^"]*jadwal-mengajar"[^>]*class="[^"]*text-slate-300/', $contentMain);
+
+        // 2. Saat membuka Jadwal Hari Ini (schedules.index):
+        $responseToday = $this->actingAs($guru)->get(route('schedules.index'));
+        $responseToday->assertOk();
+        $contentToday = $responseToday->getContent();
+
+        // Jadwal Hari Ini harus aktif (bg-emerald-600)
+        $this->assertMatchesRegularExpression('/href="[^"]*jadwal-mengajar"[^>]*class="[^"]*bg-emerald-600/', $contentToday);
+        // Jadwal Utama TIDAK BOLEH aktif (harus text-slate-300, tidak boleh bg-emerald-600)
+        $this->assertMatchesRegularExpression('/href="[^"]*jadwal-utama"[^>]*class="[^"]*text-slate-300/', $contentToday);
+    }
 }

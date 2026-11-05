@@ -172,7 +172,7 @@
                         <a href="{{ route('schedules.index') }}"
                            title="Jadwal Hari Ini"
                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
-                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('schedules.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('schedules.index') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Jadwal Hari Ini</span>
                         </a>
