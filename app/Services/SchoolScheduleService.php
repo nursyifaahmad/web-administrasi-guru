@@ -830,7 +830,7 @@ CSV;
                 $scheduleInfoStr = implode(' • ', $scheduleParts);
 
                 // Cari atau buat TeachingClass
-                $teachingClass = TeachingClass::query()
+                $teachingClassQuery = TeachingClass::query()
                     ->where('academic_year_id', $academicYear->id)
                     ->where('teacher_id', $user->id)
                     ->where(function ($q) use ($sc, $formattedClassName) {
@@ -839,8 +839,13 @@ CSV;
                         } else {
                             $q->where('class_name', $formattedClassName);
                         }
-                    })
-                    ->first();
+                    });
+
+                if ($subj) {
+                    $teachingClassQuery->where('subject_id', $subj->id);
+                }
+
+                $teachingClass = $teachingClassQuery->first();
 
                 if (! $teachingClass) {
                     TeachingClass::query()->create([
