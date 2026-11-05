@@ -152,7 +152,11 @@
                     <div class="px-3 mb-2 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400"
                          :class="sidebarCollapsed ? 'lg:hidden' : ''">
                         <span>Buku Administrasi Kelas</span>
-                        <span class="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400">{{ $quickSwitcherClasses->count() }}</span>
+                        @if(auth()->user()->isAdmin())
+                            <span class="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 font-semibold" title="Total Seluruh Buku Kelas KBM di Sekolah">{{ $totalSchoolClassesCount ?? 0 }}</span>
+                        @else
+                            <span class="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400">{{ $quickSwitcherClasses->count() }}</span>
+                        @endif
                     </div>
                     <div class="space-y-1">
                         <a href="{{ route('schedules.main.index') }}"
@@ -163,7 +167,7 @@
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Jadwal Utama</span>
                         </a>
                         <a href="{{ route('classes.index') }}"
-                           title="Daftar Kelas Administrasi ({{ $quickSwitcherClasses->count() }})"
+                           title="Daftar Kelas Administrasi {{ auth()->user()->isAdmin() ? '(Total ' . ($totalSchoolClassesCount ?? 0) . ' Kelas)' : '(' . $quickSwitcherClasses->count() . ')' }}"
                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
                            class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('classes.index') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
@@ -214,6 +218,22 @@
                                 </a>
                             @endforeach
                         </div>
+                    </div>
+                    @elseif(auth()->user()->isAdmin())
+                    <div class="mt-3 pt-3 border-t border-slate-800/80 px-1" :class="sidebarCollapsed ? 'lg:hidden' : ''">
+                        <a href="{{ route('classes.index') }}"
+                           class="group flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600 transition">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                </div>
+                                <div class="text-left truncate">
+                                    <p class="text-xs font-semibold text-slate-200 truncate group-hover:text-emerald-300">Cari &amp; Filter Buku Guru</p>
+                                    <p class="text-[10px] text-slate-400 truncate">Total {{ $totalSchoolClassesCount ?? 0 }} buku kelas KBM</p>
+                                </div>
+                            </div>
+                            <svg class="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 group-hover:text-emerald-300 transition shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </a>
                     </div>
                     @endif
                 </div>

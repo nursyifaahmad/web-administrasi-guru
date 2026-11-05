@@ -378,4 +378,58 @@ class SchoolScheduleMasterTest extends TestCase
         // Jadwal Utama TIDAK BOLEH aktif (harus text-slate-300, tidak boleh bg-emerald-600)
         $this->assertMatchesRegularExpression('/href="[^"]*jadwal-utama"[^>]*class="[^"]*text-slate-300/', $contentToday);
     }
+
+    public function test_admin_sidebar_does_not_render_other_teachers_classes_and_shows_supervision_card(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        $subject = \App\Models\Subject::query()->create([
+            'code' => 'MTK',
+            'name' => 'Matematika',
+            'default_kktp' => 75,
+        ]);
+
+        $classGuru = \App\Models\TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-A',
+            'homeroom_teacher_name' => 'Wali Kelas VII-A, S.Pd.',
+        ]);
+
+        // 1. Admin mengakses portal:
+        // Admin dengan 0 kelas mengajar tidak boleh melihat daftar kelas guru di sidebar
+        $responseAdmin = $this->actingAs($admin)->get(route('admin.dashboard'));
+        $responseAdmin->assertOk();
+
+        // Admin melihat pintasan supervisi dan TIDAK melihat daftar akses cepat guru lain di sidebar
+        $responseAdmin->assertSee('Filter Buku Guru');
+        $responseAdmin->assertDontSee('Akses Cepat Kelas (Ganjil):');
+
+        // 2. Guru mengakses portal:
+        // Guru melihat akses cepat kelas miliknya sendiri
+        $responseGuru = $this->actingAs($guru)->get(route('classes.index'));
+        $responseGuru->assertOk();
+
+        $responseGuru->assertSee('Akses Cepat Kelas (Ganjil):');
+        $responseGuru->assertSee('VII-A');
+
+        // 3. Admin yang merangkap guru (memiliki kelas sendiri):
+        $classAdmin = \App\Models\TeachingClass::query()->create([
+            'teacher_id' => $admin->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VIII',
+            'class_name' => 'VIII-B',
+            'homeroom_teacher_name' => 'Wali Kelas VIII-B, S.Pd.',
+        ]);
+
+        $responseAdminTeaching = $this->actingAs($admin)->get(route('classes.index'));
+        $responseAdminTeaching->assertOk();
+
+        // Admin yang mengajar hanya melihat kelas miliknya (VIII-B) di akses cepat
+        $responseAdminTeaching->assertSee('Akses Cepat Kelas (Ganjil):');
+        $responseAdminTeaching->assertSee('VIII-B');
+    }
 }

@@ -39,18 +39,23 @@ class ShareWorkspaceContext
             ?? AcademicYear::active();
 
         $quickSwitcherClasses = collect();
+        $totalSchoolClassesCount = 0;
+
         if ($user) {
-            $classQuery = TeachingClass::query()
+            // Quick switcher hanya memuat kelas yang diampu oleh pengguna (guru atau admin yang mengajar)
+            $quickSwitcherClasses = TeachingClass::query()
                 ->with(['subject', 'teacher'])
                 ->where('academic_year_id', $selectedAcademicYear->id)
+                ->where('teacher_id', $user->id)
                 ->orderBy('grade_level')
-                ->orderBy('class_name');
+                ->orderBy('class_name')
+                ->get();
 
-            if (! $user->isAdmin()) {
-                $classQuery->where('teacher_id', $user->id);
+            if ($user->isAdmin()) {
+                $totalSchoolClassesCount = TeachingClass::query()
+                    ->where('academic_year_id', $selectedAcademicYear->id)
+                    ->count();
             }
-
-            $quickSwitcherClasses = $classQuery->get();
         }
 
         $request->attributes->set('selectedAcademicYear', $selectedAcademicYear);
@@ -60,6 +65,7 @@ class ShareWorkspaceContext
         View::share('globalAcademicYears', $allAcademicYears);
         View::share('selectedAcademicYear', $selectedAcademicYear);
         View::share('quickSwitcherClasses', $quickSwitcherClasses);
+        View::share('totalSchoolClassesCount', $totalSchoolClassesCount);
 
         return $next($request);
     }
