@@ -41,7 +41,21 @@ class SchoolSetting extends Model
 
     public static function current(): self
     {
-        return static::query()->first() ?? static::query()->create([
+        $setting = static::query()->first();
+        if ($setting) {
+            return $setting;
+        }
+
+        $staticLogoPath = public_path('logo-smpn2-lemahabang.png');
+        $defaultLogoRight = null;
+        if (file_exists($staticLogoPath)) {
+            $raw = @file_get_contents($staticLogoPath);
+            if ($raw) {
+                $defaultLogoRight = 'data:image/png;base64,' . base64_encode($raw);
+            }
+        }
+
+        return static::query()->create([
             'gov_header' => 'PEMERINTAH KABUPATEN KARAWANG',
             'department_header' => 'DINAS PENDIDIKAN, PEMUDA DAN OLAHRAGA',
             'school_name' => 'SMP NEGERI 2 LEMAHABANG',
@@ -50,6 +64,8 @@ class SchoolSetting extends Model
             'default_city' => 'Lemahabang',
             'headmaster_name' => 'Teti Kusmiyati, S.Pd., M.M.',
             'headmaster_nip' => '19720514 199802 2 003',
+            'logo_right_data' => $defaultLogoRight,
+            'logo_right_size' => 92,
             'global_default_kktp' => 75,
             'available_grade_levels' => ['VII', 'VIII', 'IX'],
         ]);
@@ -62,6 +78,48 @@ class SchoolSetting extends Model
         return is_array($levels) && count($levels) > 0
             ? array_values($levels)
             : ['VII', 'VIII', 'IX'];
+    }
+
+    /**
+     * Resolves the primary school logo for application branding (Sidebar header, Login page, etc.)
+     * Prioritizes school logo (logo_right_data), then static asset fallback (logo-smpn2-lemahabang.png),
+     * then logo_left_data if available.
+     *
+     * @return array{data_uri: ?string, width: int, height: int, cell_width: int, url: ?string}
+     */
+    public function resolvedAppLogo(): array
+    {
+        if (! empty($this->logo_right_data)) {
+            $box = $this->resolvedLogoBox('right');
+            if (! empty($box['data_uri'])) {
+                $box['url'] = $box['data_uri'];
+                return $box;
+            }
+        }
+
+        $staticLogoRel = 'logo-smpn2-lemahabang.png';
+        $staticLogoPath = public_path($staticLogoRel);
+        if (file_exists($staticLogoPath)) {
+            $raw = @file_get_contents($staticLogoPath);
+            $dataUri = $raw ? ('data:image/png;base64,' . base64_encode($raw)) : null;
+            return [
+                'data_uri' => $dataUri,
+                'width' => 92,
+                'height' => 92,
+                'cell_width' => 100,
+                'url' => asset($staticLogoRel),
+            ];
+        }
+
+        if (! empty($this->logo_left_data)) {
+            $box = $this->resolvedLogoBox('left');
+            if (! empty($box['data_uri'])) {
+                $box['url'] = $box['data_uri'];
+                return $box;
+            }
+        }
+
+        return ['data_uri' => null, 'width' => 0, 'height' => 0, 'cell_width' => 0, 'url' => null];
     }
 
     /**

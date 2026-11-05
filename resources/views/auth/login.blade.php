@@ -20,10 +20,16 @@
         {{-- Panel Branding Kiri --}}
         <div class="lg:col-span-5 bg-slate-900 text-white p-8 sm:p-10 flex flex-col justify-center relative overflow-hidden">
             @php
-                $resolvedLeftLogo = $school?->resolvedLogoBox('left');
-                $hasLogo = !empty($resolvedLeftLogo['data_uri']);
+                $appLogo = $school?->resolvedAppLogo();
+                $hasLogo = !empty($appLogo['url'] ?? $appLogo['data_uri']);
+                $logoSrc = $appLogo['url'] ?? $appLogo['data_uri'];
             @endphp
             <div>
+                @if($hasLogo)
+                    <div class="mb-5 inline-block p-2 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xs">
+                        <img src="{{ $logoSrc }}" alt="Logo {{ $school->school_name }}" class="h-16 w-auto object-contain">
+                    </div>
+                @endif
                 <div class="inline-flex items-center gap-2.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[11px] font-bold mb-4">
                     <span>Platform Administrasi Akademik Guru</span>
                 </div>

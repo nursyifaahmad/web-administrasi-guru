@@ -58,11 +58,12 @@
                  :class="sidebarCollapsed ? 'px-4 lg:px-2 lg:justify-center' : 'px-4 sm:px-5'">
                 <div class="flex items-center gap-3 min-w-0" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
                     @php
-                        $resolvedLeftLogo = $globalSchool?->resolvedLogoBox('left');
-                        $hasLogo = !empty($resolvedLeftLogo['data_uri']);
+                        $appLogo = $globalSchool?->resolvedAppLogo();
+                        $hasLogo = !empty($appLogo['url'] ?? $appLogo['data_uri']);
+                        $logoSrc = $appLogo['url'] ?? $appLogo['data_uri'];
                     @endphp
                     @if($hasLogo)
-                        <img src="{{ $resolvedLeftLogo['data_uri'] }}" alt="Logo" class="w-10 h-10 object-contain rounded-xl p-0.5 bg-white/10 shrink-0">
+                        <img src="{{ $logoSrc }}" alt="Logo {{ $globalSchool->school_name ?? 'SMPN 2 Lemahabang' }}" class="w-10 h-10 object-contain rounded-xl p-0.5 bg-white/10 shrink-0">
                     @else
                         <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 font-extrabold text-lg shrink-0"
                              title="Administrasi Guru — {{ $globalSchool->school_name ?? 'Portal Akademik' }}">
