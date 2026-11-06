@@ -79,6 +79,106 @@ class SchoolScheduleController extends Controller
     }
 
     /**
+     * Halaman Multi-Step Timetable Builder Wizard (Buat Jadwal Baru dari Awal)
+     */
+    public function builder(Request $request): View
+    {
+        $selectedYearId = $request->session()->get('active_academic_year_id');
+        $academicYear = $selectedYearId
+            ? AcademicYear::query()->find($selectedYearId)
+            : AcademicYear::active();
+
+        if (! $academicYear) {
+            $academicYear = AcademicYear::query()->first();
+        }
+
+        $defaultConfig = $this->scheduleService->getDefaultTimeGridConfig();
+        $initialGrid = $this->scheduleService->calculateTimeGrid($defaultConfig);
+
+        $schoolClasses = SchoolClass::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->orderBy('name')
+            ->get();
+
+        $teachers = User::query()
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->where('role', 'guru')->orWhereNull('role');
+            })
+            ->orderBy('name')
+            ->get();
+
+        $scheduleTeachers = SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->orderBy('code')
+            ->get();
+
+        $subjects = Subject::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $school = SchoolSetting::current();
+
+        return view('admin.schedules.builder', [
+            'academicYear' => $academicYear,
+            'schoolClasses' => $schoolClasses,
+            'teachers' => $teachers,
+            'scheduleTeachers' => $scheduleTeachers,
+            'subjects' => $subjects,
+            'defaultConfig' => $defaultConfig,
+            'initialGrid' => $initialGrid,
+            'school' => $school,
+        ]);
+    }
+
+    /**
+     * AJAX Endpoint untuk kalkulasi grid waktu real-time
+     */
+    public function calculateSlotsAjax(Request $request): JsonResponse
+    {
+        $config = $request->all();
+        $grid = $this->scheduleService->calculateTimeGrid($config);
+        return response()->json([
+            'success' => true,
+            'grid' => $grid,
+        ]);
+    }
+
+    /**
+     * Eksekusi pembuatan jadwal dari builder (Manual atau Auto Generate)
+     */
+    public function saveBuilderSchedule(Request $request): RedirectResponse
+    {
+        $selectedYearId = $request->session()->get('active_academic_year_id');
+        $academicYear = $selectedYearId
+            ? AcademicYear::query()->find($selectedYearId)
+            : AcademicYear::active();
+
+        $payload = $request->all();
+
+        // Decode JSON jika dikirim sebagai stringified JSON
+        if (is_string($request->input('time_config'))) {
+            $payload['time_config'] = json_decode($request->input('time_config'), true) ?: [];
+        }
+        if (is_string($request->input('workloads'))) {
+            $payload['workloads'] = json_decode($request->input('workloads'), true) ?: [];
+        }
+        if (is_string($request->input('selected_classes'))) {
+            $payload['selected_classes'] = json_decode($request->input('selected_classes'), true) ?: [];
+        }
+
+        $result = $this->scheduleService->buildScheduleFromWizard($academicYear, $payload);
+
+        $modeLabel = ($result['generation_mode'] === 'auto')
+            ? "Otomatis Anti-Bentrok ({$result['allocated_jp']} JP teralokasi, {$result['conflicts_count']} bentrok)"
+            : "Kerangka Kosong (siap diisi guru & jam)";
+
+        return redirect()->route('admin.schedules.master.index')
+            ->with('status', "Jadwal baru berhasil dibuat dengan mode {$modeLabel}. Total {$result['total_items']} sel slot pelajaran tersedia.");
+    }
+
+    /**
      * Wizard "Buat Jadwal Baru dari Awal"
      */
     public function createScratch(Request $request): RedirectResponse

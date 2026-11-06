@@ -95,6 +95,9 @@ Route::middleware(['auth', 'workspace'])->group(function () {
 
         // Master Jadwal Pelajaran (Wakasek Kurikulum & Admin)
         Route::get('/jadwal-master', [SchoolScheduleController::class, 'index'])->name('schedules.master.index');
+        Route::get('/jadwal-master/builder', [SchoolScheduleController::class, 'builder'])->name('schedules.master.builder');
+        Route::post('/jadwal-master/builder/calculate-slots', [SchoolScheduleController::class, 'calculateSlotsAjax'])->name('schedules.master.builder.calculate');
+        Route::post('/jadwal-master/builder/generate', [SchoolScheduleController::class, 'saveBuilderSchedule'])->name('schedules.master.builder.generate');
         Route::post('/jadwal-master/create-scratch', [SchoolScheduleController::class, 'createScratch'])->name('schedules.master.scratch');
         Route::post('/jadwal-master/load-wakasek', [SchoolScheduleController::class, 'loadWakasekTemplate'])->name('schedules.master.load-wakasek');
         Route::put('/jadwal-master/item/{item}', [SchoolScheduleController::class, 'updateCell'])->name('schedules.master.update-cell');

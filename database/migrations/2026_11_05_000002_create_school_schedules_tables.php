@@ -43,9 +43,9 @@ return new class extends Migration
                 $table->text('conflict_notes')->nullable();
                 $table->timestamps();
 
-                $table->index(['academic_year_id', 'day_of_week', 'shift']);
-                $table->index(['academic_year_id', 'day_of_week', 'period_order']);
-                $table->index(['academic_year_id', 'class_name']);
+                $table->index(['academic_year_id', 'day_of_week', 'shift'], 'sched_items_ay_dow_shift_idx');
+                $table->index(['academic_year_id', 'day_of_week', 'period_order'], 'sched_items_ay_dow_period_idx');
+                $table->index(['academic_year_id', 'class_name'], 'sched_items_ay_class_idx');
             });
         }
     }

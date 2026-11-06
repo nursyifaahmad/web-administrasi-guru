@@ -686,6 +686,397 @@ CSV;
     }
 
     /**
+     * Konversi total menit ke format string waktu jam sekolah (misal: 460 -> "07.40")
+     */
+    public static function formatMinutesToTime(int $minutes): string
+    {
+        $h = (int) floor($minutes / 60);
+        $m = $minutes % 60;
+        return sprintf('%02d.%02d', $h, $m);
+    }
+
+    /**
+     * Konversi string waktu "07:00" atau "07.00" menjadi total menit dari tengah malam
+     */
+    public static function parseTimeToMinutes(?string $timeStr): int
+    {
+        if (empty($timeStr)) {
+            return 7 * 60; // default 07:00
+        }
+        $parts = preg_split('/[:.]/', trim($timeStr));
+        return ((int) ($parts[0] ?? 0)) * 60 + ((int) ($parts[1] ?? 0));
+    }
+
+    /**
+     * Pecah bobot JP suatu mapel menjadi sesi blok jam berurutan
+     * (Contoh: 4 JP -> [2, 2]; 5 JP -> [3, 2]; 6 JP -> [3, 3]; 3 JP -> [3])
+     */
+    public static function splitJpIntoBlocks(int $totalJp): array
+    {
+        if ($totalJp <= 3) {
+            return [$totalJp];
+        }
+        if ($totalJp === 4) {
+            return [2, 2];
+        }
+        if ($totalJp === 5) {
+            return [3, 2];
+        }
+        if ($totalJp === 6) {
+            return [3, 3];
+        }
+        if ($totalJp === 7) {
+            return [4, 3];
+        }
+        if ($totalJp === 8) {
+            return [4, 4];
+        }
+        return array_merge([3], self::splitJpIntoBlocks($totalJp - 3));
+    }
+
+    /**
+     * Preset default waktu dan kegiatan non-KBM (Standar SMPN 2 Lemahabang)
+     */
+    public function getDefaultTimeGridConfig(): array
+    {
+        return [
+            'jp_duration' => 40,
+            'start_time' => '07:00',
+            'days_count' => 6,
+            'daily_jp' => [
+                1 => 7, // Senin (7 JP)
+                2 => 8, // Selasa (8 JP)
+                3 => 8, // Rabu (8 JP)
+                4 => 8, // Kamis (8 JP)
+                5 => 5, // Jumat (5 JP)
+                6 => 7, // Sabtu (7 JP)
+            ],
+            'activities' => [
+                ['day' => 1, 'name' => 'UPACARA BENDERA', 'position' => 'before_jp_1', 'duration' => 40],
+                ['day' => 2, 'name' => 'SHOLAT DHUHA', 'position' => 'before_jp_1', 'duration' => 30],
+                ['day' => 3, 'name' => 'SHOLAT DHUHA', 'position' => 'before_jp_1', 'duration' => 30],
+                ['day' => 4, 'name' => 'SHOLAT DHUHA', 'position' => 'before_jp_1', 'duration' => 30],
+                ['day' => 5, 'name' => 'KEGIATAN KEAGAMAAN', 'position' => 'before_jp_1', 'duration' => 60],
+                ['day' => 6, 'name' => 'SABTU BERSIH / OR', 'position' => 'before_jp_1', 'duration' => 40],
+                ['day' => 'all', 'name' => 'ISTIRAHAT', 'position' => 'after_jp_4', 'duration' => 30],
+            ],
+        ];
+    }
+
+    /**
+     * Kalkulasi matematis pembagian jam pelajaran dan kegiatan non-KBM per hari
+     */
+    public function calculateTimeGrid(array $config = []): array
+    {
+        $defaults = $this->getDefaultTimeGridConfig();
+        $jpDuration = (int) ($config['jp_duration'] ?? $defaults['jp_duration']);
+        if ($jpDuration < 20 || $jpDuration > 60) {
+            $jpDuration = 40;
+        }
+
+        $startTimeStr = $config['start_time'] ?? $defaults['start_time'];
+        $daysCount = (int) ($config['days_count'] ?? $defaults['days_count']);
+        if ($daysCount < 5 || $daysCount > 6) {
+            $daysCount = 6;
+        }
+
+        $dailyJp = $config['daily_jp'] ?? $defaults['daily_jp'];
+        $activities = $config['activities'] ?? $defaults['activities'];
+
+        $grid = [];
+        $dayNames = self::DAYS_MAP;
+
+        for ($d = 1; $d <= $daysCount; $d++) {
+            $curMinutes = self::parseTimeToMinutes($startTimeStr);
+            $slots = [];
+            $totalJp = (int) ($dailyJp[$d] ?? 8);
+
+            // 1. Kegiatan sebelum JP 1 (misal Upacara, Sholat Dhuha)
+            foreach ($activities as $act) {
+                $matchDay = ($act['day'] === 'all' || (int) $act['day'] === $d);
+                if ($matchDay && ($act['position'] ?? '') === 'before_jp_1') {
+                    $startStr = self::formatMinutesToTime($curMinutes);
+                    $curMinutes += (int) ($act['duration'] ?? 30);
+                    $endStr = self::formatMinutesToTime($curMinutes);
+                    $slots[] = [
+                        'period_order' => 0,
+                        'time_range' => "{$startStr} - {$endStr}",
+                        'activity' => $act['name'],
+                        'is_activity' => true,
+                    ];
+                }
+            }
+
+            // 2. Jam Pelajaran (1 s.d. totalJp)
+            for ($jp = 1; $jp <= $totalJp; $jp++) {
+                $startStr = self::formatMinutesToTime($curMinutes);
+                $curMinutes += $jpDuration;
+                $endStr = self::formatMinutesToTime($curMinutes);
+                $slots[] = [
+                    'period_order' => $jp,
+                    'time_range' => "{$startStr} - {$endStr}",
+                    'activity' => null,
+                    'is_activity' => false,
+                ];
+
+                // Cek kegiatan setelah JP ini (misal Istirahat setelah JP 4)
+                foreach ($activities as $act) {
+                    $matchDay = ($act['day'] === 'all' || (int) $act['day'] === $d);
+                    if ($matchDay && ($act['position'] ?? '') === "after_jp_{$jp}") {
+                        $actStart = self::formatMinutesToTime($curMinutes);
+                        $curMinutes += (int) ($act['duration'] ?? 30);
+                        $actEnd = self::formatMinutesToTime($curMinutes);
+                        $slots[] = [
+                            'period_order' => 0,
+                            'time_range' => "{$actStart} - {$actEnd}",
+                            'activity' => $act['name'],
+                            'is_activity' => true,
+                        ];
+                    }
+                }
+            }
+
+            $grid[$d] = [
+                'day_num' => $d,
+                'day_name' => $dayNames[$d] ?? "Hari {$d}",
+                'total_jp' => $totalJp,
+                'slots' => $slots,
+            ];
+        }
+
+        return $grid;
+    }
+
+    /**
+     * Membangun jadwal dari wizard baru (Manual / Auto Generate dengan Algoritma Anti-Bentrok)
+     */
+    public function buildScheduleFromWizard(AcademicYear $academicYear, array $payload): array
+    {
+        $timeConfig = $payload['time_config'] ?? [];
+        $selectedClasses = $payload['selected_classes'] ?? [];
+        $workloads = $payload['workloads'] ?? [];
+        $generationMode = $payload['generation_mode'] ?? 'auto'; // 'auto' atau 'manual'
+        $shiftMode = $payload['shift_mode'] ?? 'single'; // 'single' atau 'double'
+
+        if (empty($selectedClasses)) {
+            $selectedClasses = [
+                '7A', '7B', '7C', '7D', '7E', '7F', '7G',
+                '8A', '8B', '8C', '8D', '8E', '8F', '8G',
+                '9A', '9B', '9C', '9D', '9E', '9F', '9G',
+            ];
+        }
+
+        // Kalkulasi time grid
+        $timeGrid = $this->calculateTimeGrid($timeConfig);
+
+        // Ambil data rombel, guru, mapel
+        $schoolClasses = SchoolClass::query()->where('academic_year_id', $academicYear->id)->get()->keyBy(function ($c) {
+            return self::normalizeClassName($c->name);
+        });
+
+        // Pisahkan kelas pagi & siang jika mode double shift
+        $classesPagi = [];
+        $classesSiang = [];
+        foreach ($selectedClasses as $cls) {
+            if ($shiftMode === 'double' && str_starts_with($cls, '8')) {
+                $classesSiang[] = $cls;
+            } else {
+                $classesPagi[] = $cls;
+            }
+        }
+        if (empty($classesSiang)) {
+            $classesPagi = $selectedClasses;
+        }
+
+        $allocatedCount = 0;
+        $unassignedCount = 0;
+
+        DB::transaction(function () use (
+            $academicYear, $selectedClasses, $classesPagi, $classesSiang,
+            $timeGrid, $workloads, $generationMode, $schoolClasses,
+            &$allocatedCount, &$unassignedCount
+        ) {
+            // 1. Bersihkan draf jadwal lama tahun ajaran ini
+            SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->delete();
+
+            // 2. Siapkan penampung memori untuk generator
+            // scheduleMap[class][day][period_order] = item_data
+            $scheduleMap = [];
+            // teacherBusy[teacher_code][day][period_order] = true
+            $teacherBusy = [];
+
+            // 3. Masukkan kegiatan non-KBM ke setiap kelas
+            foreach ($selectedClasses as $cls) {
+                foreach ($timeGrid as $d => $dayData) {
+                    foreach ($dayData['slots'] as $slot) {
+                        if ($slot['is_activity']) {
+                            $sc = $schoolClasses[$cls] ?? null;
+                            $shift = in_array($cls, $classesSiang, true) ? 'siang' : 'pagi';
+
+                            SchoolScheduleItem::query()->create([
+                                'academic_year_id' => $academicYear->id,
+                                'day_of_week' => $d,
+                                'shift' => $shift,
+                                'period_order' => 0,
+                                'time_range' => $slot['time_range'],
+                                'class_name' => $cls,
+                                'school_class_id' => $sc?->id,
+                                'teacher_code' => $slot['activity'],
+                                'teacher_name' => $slot['activity'],
+                                'subject_name' => null,
+                                'is_conflict' => false,
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            // 4. Jika mode Auto, jalankan algoritma penempatan beban mengajar
+            if ($generationMode === 'auto' && ! empty($workloads)) {
+                // Pecah workload jadi sesi blok jam
+                $sessions = [];
+                foreach ($workloads as $w) {
+                    $cls = $w['class_name'] ?? '';
+                    if (! in_array($cls, $selectedClasses, true)) {
+                        continue;
+                    }
+                    $jp = (int) ($w['jp_count'] ?? 0);
+                    if ($jp <= 0) {
+                        continue;
+                    }
+
+                    $blocks = self::splitJpIntoBlocks($jp);
+                    foreach ($blocks as $blockSize) {
+                        $sessions[] = array_merge($w, ['block_size' => $blockSize]);
+                    }
+                }
+
+                // Urutkan Most Constrained First (blok terbesar ditempatkan lebih dahulu)
+                usort($sessions, fn ($a, $b) => $b['block_size'] <=> $a['block_size']);
+
+                // Array hari yang tersedia
+                $availableDays = array_keys($timeGrid);
+
+                foreach ($sessions as $session) {
+                    $c = $session['class_name'];
+                    $tCode = (string) ($session['teacher_code'] ?? '');
+                    if ($tCode === '' && ! empty($session['teacher_name'])) {
+                        $tCode = substr(strtoupper(preg_replace('/[^a-zA-Z]/', '', $session['teacher_name'])), 0, 4);
+                    }
+                    $bSize = $session['block_size'];
+                    $placed = false;
+
+                    // Acak kandidat hari namun prioritaskan hari yang belum ada mapel ini
+                    $dayCandidates = $availableDays;
+                    shuffle($dayCandidates);
+
+                    usort($dayCandidates, function ($d1, $d2) use ($scheduleMap, $c, $session) {
+                        $hasD1 = false;
+                        $hasD2 = false;
+                        foreach (($scheduleMap[$c][$d1] ?? []) as $item) {
+                            if (($item['subject_name'] ?? '') === ($session['subject_name'] ?? '')) {
+                                $hasD1 = true;
+                            }
+                        }
+                        foreach (($scheduleMap[$c][$d2] ?? []) as $item) {
+                            if (($item['subject_name'] ?? '') === ($session['subject_name'] ?? '')) {
+                                $hasD2 = true;
+                            }
+                        }
+                        return $hasD1 <=> $hasD2;
+                    });
+
+                    foreach ($dayCandidates as $d) {
+                        $maxJp = (int) ($timeGrid[$d]['total_jp'] ?? 8);
+
+                        for ($pStart = 1; $pStart <= ($maxJp - $bSize + 1); $pStart++) {
+                            $canPlace = true;
+                            for ($offset = 0; $offset < $bSize; $offset++) {
+                                $p = $pStart + $offset;
+                                // Cek apakah sel kelas sudah terisi
+                                if (isset($scheduleMap[$c][$d][$p])) {
+                                    $canPlace = false;
+                                    break;
+                                }
+                                // Cek apakah guru sibuk di kelas lain pada jam ini
+                                if ($tCode !== '' && isset($teacherBusy[$tCode][$d][$p])) {
+                                    $canPlace = false;
+                                    break;
+                                }
+                            }
+
+                            if ($canPlace) {
+                                for ($offset = 0; $offset < $bSize; $offset++) {
+                                    $p = $pStart + $offset;
+                                    $scheduleMap[$c][$d][$p] = [
+                                        'teacher_code' => $tCode,
+                                        'teacher_name' => $session['teacher_name'] ?? null,
+                                        'subject_name' => $session['subject_name'] ?? null,
+                                        'user_id' => $session['user_id'] ?? null,
+                                        'subject_id' => $session['subject_id'] ?? null,
+                                    ];
+                                    if ($tCode !== '') {
+                                        $teacherBusy[$tCode][$d][$p] = true;
+                                    }
+                                }
+                                $placed = true;
+                                $allocatedCount += $bSize;
+                                break 2;
+                            }
+                        }
+                    }
+
+                    if (! $placed) {
+                        $unassignedCount += $bSize;
+                    }
+                }
+            }
+
+            // 5. Simpan seluruh slot KBM (1 s.d. totalJp) ke database
+            foreach ($selectedClasses as $cls) {
+                $sc = $schoolClasses[$cls] ?? null;
+                $shift = in_array($cls, $classesSiang, true) ? 'siang' : 'pagi';
+
+                foreach ($timeGrid as $d => $dayData) {
+                    $kbmSlots = array_filter($dayData['slots'], fn ($s) => ! $s['is_activity']);
+                    foreach ($kbmSlots as $slot) {
+                        $jp = $slot['period_order'];
+                        $assigned = $scheduleMap[$cls][$d][$jp] ?? null;
+
+                        SchoolScheduleItem::query()->create([
+                            'academic_year_id' => $academicYear->id,
+                            'day_of_week' => $d,
+                            'shift' => $shift,
+                            'period_order' => $jp,
+                            'time_range' => $slot['time_range'],
+                            'class_name' => $cls,
+                            'school_class_id' => $sc?->id,
+                            'teacher_code' => $assigned['teacher_code'] ?? null,
+                            'teacher_name' => $assigned['teacher_name'] ?? null,
+                            'subject_name' => $assigned['subject_name'] ?? null,
+                            'user_id' => $assigned['user_id'] ?? null,
+                            'subject_id' => $assigned['subject_id'] ?? null,
+                            'is_conflict' => false,
+                        ]);
+                    }
+                }
+            }
+        });
+
+        // Deteksi status bentrok final
+        $conflicts = $this->detectConflicts($academicYear);
+
+        return [
+            'status' => 'success',
+            'generation_mode' => $generationMode,
+            'total_items' => SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->count(),
+            'allocated_jp' => $allocatedCount,
+            'unassigned_jp' => $unassignedCount,
+            'conflicts_count' => count($conflicts),
+        ];
+    }
+
+    /**
      * Tukar jadwal antar 2 sel (Swap Slot) untuk mempermudah Wakasek mengatasi bentrok
      */
     public function swapSlots(int $itemId1, int $itemId2): bool
