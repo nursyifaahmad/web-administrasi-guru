@@ -102,21 +102,6 @@
                             class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-2xs transition">
                         <span x-text="saving ? 'Menyimpan...' : 'Simpan Absensi (Ctrl+S)'"></span>
                     </button>
-                    <button type="button" @click="nicknameModal = true"
-                            class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
-                            title="Atur nama panggilan peserta didik kelas ini">
-                        ✏️ Atur Panggilan
-                    </button>
-                    <button type="button" @click="importModal = true"
-                            class="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold hover:bg-indigo-100">
-                        Import Excel
-                    </button>
-                @else
-                    <button type="button" @click="nicknameModal = true"
-                            class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
-                            title="Atur nama panggilan peserta didik kelas ini">
-                        ✏️ Atur Panggilan
-                    </button>
                 @endif
             @endif
             <button type="button" @click="openExportModal()"
@@ -184,9 +169,6 @@
                         <tr class="bg-slate-100 text-slate-800 text-[11px] uppercase border-b border-slate-300">
                             <th rowspan="2" class="sticky left-0 z-20 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10">No</th>
                             <th rowspan="2" class="sticky left-9 sm:left-10 z-20 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[185px] sticky-col-shadow">Nama Lengkap</th>
-                            @if($teachingClass->show_nickname_column)
-                                <th rowspan="2" class="px-2.5 py-2.5 text-center border-r border-slate-300 min-w-[90px]">Nama Panggilan</th>
-                            @endif
                             <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 w-10">L/P</th>
                             <th :colspan="displayedDays.length" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-slate-200/70 font-extrabold">
                                 Bulan {{ $monthName }} {{ $year }} — Klik Angka Tanggal untuk Isi Cepat
@@ -253,7 +235,7 @@
                     <tbody class="divide-y divide-slate-200">
                         <template x-if="students.length === 0">
                             <tr>
-                                <td :colspan="({{ $teachingClass->show_nickname_column ? 8 : 7 }}) + displayedDays.length" class="px-5 py-10 text-center text-slate-500">
+                                <td :colspan="7 + displayedDays.length" class="px-5 py-10 text-center text-slate-500">
                                     Belum ada peserta didik di kelas ini. Tambahkan murid pada tab <strong>Peserta Didik & Wali Kelas</strong> terlebih dahulu.
                                 </td>
                             </tr>
@@ -262,9 +244,6 @@
                             <tr class="hover:bg-slate-50/80">
                                 <td class="sticky left-0 z-10 bg-white px-2 py-1.5 text-center font-bold text-slate-600 border-r border-slate-200" x-text="st.no"></td>
                                 <td class="sticky left-9 sm:left-10 z-10 bg-white px-2.5 sm:px-3 py-1.5 font-bold text-slate-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[210px] sticky-col-shadow" x-text="st.full_name"></td>
-                                @if($teachingClass->show_nickname_column)
-                                    <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200 truncate" x-text="st.nickname"></td>
-                                @endif
                                 <td class="px-2 py-1.5 text-center font-semibold text-slate-700 border-r border-slate-200" x-text="st.gender"></td>
 
                                 <template x-for="d in displayedDays" :key="st.id + '-' + d">
@@ -396,9 +375,6 @@
                         <tr>
                             <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200 w-12">No</th>
                             <th rowspan="2" class="px-4 py-2.5 border-r border-slate-200 min-w-[170px]">Nama Lengkap</th>
-                            @if($teachingClass->show_nickname_column)
-                                <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200">Nama Panggilan</th>
-                            @endif
                             <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200 w-14">L/P</th>
                             <th colspan="3" class="px-3 py-2 text-center border-b border-r border-slate-200 bg-emerald-50 text-emerald-900">Kehadiran</th>
                             <th colspan="4" class="px-3 py-2 text-center border-b border-r border-slate-200 bg-rose-50 text-rose-900">Ketidakhadiran</th>
@@ -419,9 +395,6 @@
                             <tr class="hover:bg-slate-50/70">
                                 <td class="px-3 py-2.5 text-center font-bold border-r border-slate-100">{{ $r['no'] }}</td>
                                 <td class="px-4 py-2.5 font-bold text-slate-900 border-r border-slate-100">{{ $r['student']->full_name }}</td>
-                                @if($teachingClass->show_nickname_column)
-                                    <td class="px-3 py-2.5 text-center text-slate-600 border-r border-slate-100">{{ $r['student']->nickname ?: '-' }}</td>
-                                @endif
                                 <td class="px-3 py-2.5 text-center font-semibold border-r border-slate-100">{{ $r['student']->gender }}</td>
                                 <td class="px-3 py-2.5 text-center border-r border-slate-100">{{ $r['dot'] }}</td>
                                 <td class="px-3 py-2.5 text-center font-semibold text-sky-700 border-r border-slate-100">{{ $r['dispen'] }}</td>
@@ -433,43 +406,10 @@
                                 <td class="px-3 py-2.5 text-center font-extrabold text-slate-900">{{ number_format($r['percentage'], 1) }}%</td>
                             </tr>
                         @empty
-                            <tr><td colspan="{{ $teachingClass->show_nickname_column ? 12 : 11 }}" class="px-5 py-10 text-center text-slate-500">Belum ada data peserta didik.</td></tr>
+                            <tr><td colspan="11" class="px-5 py-10 text-center text-slate-500">Belum ada data peserta didik.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
-            </div>
-        </div>
-    @endif
-
-    @if(! auth()->user()->isAdmin())
-        {{-- Modal Import Excel Absensi --}}
-        <div x-show="importModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-            <div @click.away="importModal = false" class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
-                <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
-                    <h3 class="text-sm font-bold">Import Absensi Bulan {{ $monthName }} {{ $year }}</h3>
-                    <button type="button" @click="importModal = false" class="text-slate-400 hover:text-white text-xl">&times;</button>
-                </div>
-                <form method="POST" action="{{ route('attendances.import', $teachingClass) }}" enctype="multipart/form-data" class="p-5 space-y-4 text-xs">
-                    @csrf
-                    <input type="hidden" name="month" value="{{ $month }}">
-                    <input type="hidden" name="year" value="{{ $year }}">
-                    <div class="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 flex items-center justify-between gap-2">
-                        <span>Unduh template Excel absensi bulan ini:</span>
-                        <a href="{{ route('attendances.template', [$teachingClass, 'month' => $month, 'year' => $year]) }}"
-                           data-skip-dirty-guard="1"
-                           class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 shrink-0">
-                            Unduh Template
-                        </a>
-                    </div>
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">File Excel (.xlsx / .xls / .csv) *</label>
-                        <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" required class="w-full text-xs">
-                    </div>
-                    <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                        <button type="button" @click="importModal = false" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>
-                        <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700">Import & Sinkronkan</button>
-                    </div>
-                </form>
             </div>
         </div>
     @endif
@@ -489,13 +429,6 @@
         'defaultOrientation' => $tab === 'recap' ? 'portrait' : 'landscape',
         'extraParams' => ['month' => $month, 'year' => $year],
     ])
-
-    @if(! auth()->user()->isAdmin())
-        @include('partials.nickname-modal', [
-            'teachingClass' => $teachingClass,
-            'students' => $teachingClass->activeStudents()->get(),
-        ])
-    @endif
 </div>
 
 @push('scripts')
@@ -520,9 +453,7 @@ function attendanceSpreadsheet(cfg) {
         justSaved: false,
         _savedTimer: null,
         savedMessage: '',
-        importModal: false,
         exportModal: false,
-        nicknameModal: false,
 
         get displayedDays() {
             if (!this.filterTeachingDays || !this.hasTeachingDays) {

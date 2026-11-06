@@ -134,11 +134,8 @@
             $activeDays = range(1, $matrix['days_in_month']);
         }
         $totalActiveDays = count($activeDays);
-        $showNickname = $options['show_nickname'] ?? true;
         $dayWidth = $totalActiveDays <= 14 ? '25px' : ($totalActiveDays <= 20 ? '20px' : '14px');
-        $nameWidth = $totalActiveDays <= 14 
-            ? ($showNickname ? '195px' : '270px') 
-            : ($showNickname ? '145px' : '205px');
+        $nameWidth = $totalActiveDays <= 14 ? '270px' : '205px';
     @endphp
 
     @include('exports.pdf.partials.header', [
@@ -150,9 +147,6 @@
             <tr>
                 <th rowspan="2" style="width: 22px;">No</th>
                 <th rowspan="2" style="width: {{ $nameWidth }};">Nama Lengkap</th>
-                @if($showNickname)
-                    <th rowspan="2" style="width: {{ $totalActiveDays <= 14 ? '75px' : '60px' }};">Panggilan</th>
-                @endif
                 <th rowspan="2" style="width: 24px;">L/P</th>
                 <th colspan="{{ $totalActiveDays }}">Tanggal ({{ $monthLabel }})</th>
                 <th rowspan="2" style="width: 34px;">Hadir</th>
@@ -179,9 +173,6 @@
                 <tr>
                     <td class="text-center">{{ $row['no'] }}</td>
                     <td>{{ $row['student']->full_name }}</td>
-                    @if($showNickname)
-                        <td class="text-center">{{ $row['student']->nickname ?: '-' }}</td>
-                    @endif
                     <td class="text-center">{{ $row['student']->gender }}</td>
                     @foreach($activeDays as $d)
                         @php
@@ -199,7 +190,7 @@
                     <td class="text-center">{{ $row['alfa'] }}</td>
                 </tr>
             @empty
-                <tr><td colspan="{{ ($showNickname ? 8 : 7) + $totalActiveDays }}" class="text-center">Belum ada peserta didik.</td></tr>
+                <tr><td colspan="{{ 7 + $totalActiveDays }}" class="text-center">Belum ada peserta didik.</td></tr>
             @endforelse
         </tbody>
     </table>

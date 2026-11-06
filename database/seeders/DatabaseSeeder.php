@@ -180,7 +180,6 @@ class DatabaseSeeder extends Seeder
                     [
                         'nis_nisn' => substr($st['nis'], 0, 6) . sprintf('%d%02d', $cIdx + 1, $sIdx + 1),
                         'full_name' => $st['full'],
-                        'nickname' => $st['nick'],
                         'gender' => $st['g'],
                         'is_active' => true,
                     ]

@@ -16,9 +16,6 @@
             <tr>
                 <th rowspan="2" style="width: 28px;">No</th>
                 <th rowspan="2">Nama Lengkap</th>
-                @if($options['show_nickname'] ?? true)
-                    <th rowspan="2" style="width: 85px;">Nama Panggilan</th>
-                @endif
                 <th rowspan="2" style="width: 32px;">L/P</th>
                 <th colspan="3">Rincian Kehadiran</th>
                 <th colspan="4">Jumlah Ketidakhadiran</th>
@@ -39,9 +36,6 @@
                 <tr>
                     <td class="text-center">{{ $row['no'] }}</td>
                     <td>{{ $row['student']->full_name }}</td>
-                    @if($options['show_nickname'] ?? true)
-                        <td class="text-center">{{ $row['student']->nickname ?: '-' }}</td>
-                    @endif
                     <td class="text-center">{{ $row['student']->gender }}</td>
                     <td class="text-center">{{ $row['dot'] }}</td>
                     <td class="text-center">{{ $row['dispen'] }}</td>
@@ -54,7 +48,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="{{ ($options['show_nickname'] ?? true) ? 12 : 11 }}" class="text-center" style="padding: 14px;">Belum ada data peserta didik.</td>
+                    <td colspan="11" class="text-center" style="padding: 14px;">Belum ada data peserta didik.</td>
                 </tr>
             @endforelse
         </tbody>

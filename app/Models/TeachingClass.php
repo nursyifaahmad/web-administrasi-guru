@@ -21,7 +21,6 @@ class TeachingClass extends Model
         'homeroom_teacher_name',
         'homeroom_teacher_nip',
         'homeroom_teacher_signature',
-        'show_nickname_column',
         'only_teaching_days',
         'is_grade_shared_with_admin',
         'is_archived',
@@ -64,7 +63,6 @@ class TeachingClass extends Model
     {
         return [
             'teaching_days' => 'array',
-            'show_nickname_column' => 'boolean',
             'only_teaching_days' => 'boolean',
             'is_grade_shared_with_admin' => 'boolean',
             'is_archived' => 'boolean',

@@ -123,7 +123,6 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     // Pengaturan Buku Kelas & Identitas
     Route::get('/kelas/{teachingClass}/pengaturan', [TeachingClassController::class, 'students'])->name('classes.settings');
     Route::get('/kelas/{teachingClass}/murid', [TeachingClassController::class, 'students'])->name('classes.students');
-    Route::post('/kelas/{teachingClass}/nama-panggilan', [TeachingClassController::class, 'updateNicknames'])->name('classes.nicknames.update');
     Route::post('/kelas/{teachingClass}/murid', [TeachingClassController::class, 'storeStudent'])->name('classes.students.store');
     Route::put('/kelas/{teachingClass}/murid/{student}', [TeachingClassController::class, 'updateStudent'])->name('classes.students.update');
     Route::delete('/kelas/{teachingClass}/murid/{student}', [TeachingClassController::class, 'destroyStudent'])->name('classes.students.destroy');
@@ -144,8 +143,6 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     // Menu 2: Absensi
     Route::get('/kelas/{teachingClass}/absensi', [AttendanceController::class, 'index'])->name('attendances.index');
     Route::post('/kelas/{teachingClass}/absensi/bulk-save', [AttendanceController::class, 'bulkSave'])->name('attendances.bulk-save');
-    Route::get('/kelas/{teachingClass}/absensi/template', [AttendanceController::class, 'downloadTemplate'])->name('attendances.template');
-    Route::post('/kelas/{teachingClass}/absensi/import', [AttendanceController::class, 'importExcel'])->name('attendances.import');
 
     // Menu 3: Nilai
     Route::get('/kelas/{teachingClass}/nilai', [GradebookController::class, 'index'])->name('grades.index');

@@ -131,15 +131,6 @@ class AdminReadOnlyAndGradePrivacyTest extends TestCase
         ]);
         $postSave->assertForbidden();
         $this->assertStringContainsString('Akses ditolak', $postSave->json('message'));
-
-        // 3. Admin mencoba POST import absensi -> ditolak HTTP 403 Forbidden
-        $file = UploadedFile::fake()->create('absen.xlsx', 50);
-        $postImport = $this->actingAs($this->admin)->post(route('attendances.import', $this->teachingClass), [
-            'month' => 8,
-            'year' => 2026,
-            'excel_file' => $file,
-        ]);
-        $postImport->assertForbidden();
     }
 
     public function test_admin_can_view_journal_in_monitoring_mode_but_cannot_store_update_sync_or_destroy_and_gets_403(): void

@@ -557,9 +557,8 @@ class ExcelExportImportService
         }
         $totalRenderedDays = count($activeDays);
 
-        $showNickname = $options['show_nickname'] ?? ($teachingClass->show_nickname_column ?? true);
-        $fixedLeftCols = $showNickname ? 4 : 3;
-        $totalCols = $fixedLeftCols + $totalRenderedDays + 4; // No, Nama Lengkap, [Panggilan], L/P, Active Days, Jml Hadir, S, I, A
+        $fixedLeftCols = 3;
+        $totalCols = $fixedLeftCols + $totalRenderedDays + 4; // No, Nama Lengkap, L/P, Active Days, Jml Hadir, S, I, A
 
         $row = $this->renderOfficialHeader(
             $sheet,
@@ -574,9 +573,7 @@ class ExcelExportImportService
         $h1 = $row;
         $h2 = $row + 1;
 
-        $fixedLeft = $showNickname
-            ? [1 => 'No', 2 => 'Nama Lengkap', 3 => 'Nama Panggilan', 4 => 'Jenis Kelamin']
-            : [1 => 'No', 2 => 'Nama Lengkap', 3 => 'Jenis Kelamin'];
+        $fixedLeft = [1 => 'No', 2 => 'Nama Lengkap', 3 => 'Jenis Kelamin'];
 
         foreach ($fixedLeft as $c => $lbl) {
             $sheet->mergeCells($this->range($c, $h1, $c, $h2));
@@ -617,13 +614,8 @@ class ExcelExportImportService
         $this->styleTableHeader($sheet, $this->range(1, $h1, $totalCols, $h2));
 
         $sheet->getColumnDimension('A')->setWidth(5);
-        $sheet->getColumnDimension('B')->setWidth($showNickname ? ($totalRenderedDays <= 14 ? 32 : 28) : ($totalRenderedDays <= 14 ? 38 : 34));
-        if ($showNickname) {
-            $sheet->getColumnDimension('C')->setWidth(14);
-            $sheet->getColumnDimension('D')->setWidth(10);
-        } else {
-            $sheet->getColumnDimension('C')->setWidth(10);
-        }
+        $sheet->getColumnDimension('B')->setWidth($totalRenderedDays <= 14 ? 38 : 34);
+        $sheet->getColumnDimension('C')->setWidth(10);
         $sheet->getColumnDimension($this->col($hadirCol))->setWidth(9);
         $sheet->getColumnDimension($this->col($sCol))->setWidth(5.5);
         $sheet->getColumnDimension($this->col($iCol))->setWidth(5.5);
@@ -635,12 +627,7 @@ class ExcelExportImportService
         foreach ($matrix['rows'] as $r) {
             $sheet->setCellValue($this->cell(1, $curr), $r['no']);
             $sheet->setCellValue($this->cell(2, $curr), $r['student']->full_name);
-            if ($showNickname) {
-                $sheet->setCellValue($this->cell(3, $curr), $r['student']->nickname ?: '-');
-                $sheet->setCellValue($this->cell(4, $curr), $r['student']->gender);
-            } else {
-                $sheet->setCellValue($this->cell(3, $curr), $r['student']->gender);
-            }
+            $sheet->setCellValue($this->cell(3, $curr), $r['student']->gender);
 
             foreach ($activeDays as $idx => $d) {
                 $st = $r['days'][$d] ?? '';
@@ -709,8 +696,7 @@ class ExcelExportImportService
         $this->applyPageSetup($sheet, $options);
 
         $recap = $this->attendanceService->buildSemesterRecap($teachingClass);
-        $showNickname = $options['show_nickname'] ?? ($teachingClass->show_nickname_column ?? true);
-        $totalCols = $showNickname ? 12 : 11;
+        $totalCols = 11;
 
         $row = $this->renderOfficialHeader(
             $sheet,
@@ -725,25 +711,23 @@ class ExcelExportImportService
         $h1 = $row;
         $h2 = $row + 1;
 
-        $fixedHeaders = $showNickname
-            ? [1 => 'No', 2 => 'Nama Lengkap', 3 => 'Nama Panggilan', 4 => 'L/P', 12 => '% Kehadiran']
-            : [1 => 'No', 2 => 'Nama Lengkap', 3 => 'L/P', 11 => '% Kehadiran'];
+        $fixedHeaders = [1 => 'No', 2 => 'Nama Lengkap', 3 => 'L/P', 11 => '% Kehadiran'];
 
         foreach ($fixedHeaders as $c => $lbl) {
             $sheet->mergeCells($this->range($c, $h1, $c, $h2));
             $sheet->setCellValue($this->cell($c, $h1), $lbl);
         }
 
-        $rincianStart = $showNickname ? 5 : 4;
-        $rincianEnd = $showNickname ? 7 : 6;
+        $rincianStart = 4;
+        $rincianEnd = 6;
         $sheet->mergeCells($this->range($rincianStart, $h1, $rincianEnd, $h1));
         $sheet->setCellValue($this->cell($rincianStart, $h1), 'Rincian Kehadiran');
         $sheet->setCellValue($this->cell($rincianStart, $h2), 'Hadir (.)');
         $sheet->setCellValue($this->cell($rincianStart + 1, $h2), 'Dispen (d)');
         $sheet->setCellValue($this->cell($rincianStart + 2, $h2), 'Jml Hadir');
 
-        $abStart = $showNickname ? 8 : 7;
-        $abEnd = $showNickname ? 11 : 10;
+        $abStart = 7;
+        $abEnd = 10;
         $sheet->mergeCells($this->range($abStart, $h1, $abEnd, $h1));
         $sheet->setCellValue($this->cell($abStart, $h1), 'Jumlah Ketidakhadiran');
         $sheet->setCellValue($this->cell($abStart, $h2), 'Sakit');
@@ -753,9 +737,7 @@ class ExcelExportImportService
 
         $this->styleTableHeader($sheet, $this->range(1, $h1, $totalCols, $h2));
 
-        $widths = $showNickname
-            ? [1 => 5, 2 => 28, 3 => 15, 4 => 7, 5 => 10, 6 => 11, 7 => 11, 8 => 9, 9 => 9, 10 => 9, 11 => 10, 12 => 13]
-            : [1 => 5, 2 => 34, 3 => 7, 4 => 10, 5 => 11, 6 => 11, 7 => 9, 8 => 9, 9 => 9, 10 => 10, 11 => 13];
+        $widths = [1 => 5, 2 => 34, 3 => 7, 4 => 10, 5 => 11, 6 => 11, 7 => 9, 8 => 9, 9 => 9, 10 => 10, 11 => 13];
         foreach ($widths as $c => $w) {
             $sheet->getColumnDimension($this->col($c))->setWidth($w);
         }
@@ -765,22 +747,15 @@ class ExcelExportImportService
         foreach ($recap['rows'] as $r) {
             $sheet->setCellValue($this->cell(1, $curr), $r['no']);
             $sheet->setCellValue($this->cell(2, $curr), $r['student']->full_name);
-            if ($showNickname) {
-                $sheet->setCellValue($this->cell(3, $curr), $r['student']->nickname ?: '-');
-                $sheet->setCellValue($this->cell(4, $curr), $r['student']->gender);
-                $offset = 0;
-            } else {
-                $sheet->setCellValue($this->cell(3, $curr), $r['student']->gender);
-                $offset = -1;
-            }
-            $sheet->setCellValue($this->cell(5 + $offset, $curr), $r['dot']);
-            $sheet->setCellValue($this->cell(6 + $offset, $curr), $r['dispen']);
-            $sheet->setCellValue($this->cell(7 + $offset, $curr), $r['present']);
-            $sheet->setCellValue($this->cell(8 + $offset, $curr), $r['sakit']);
-            $sheet->setCellValue($this->cell(9 + $offset, $curr), $r['izin']);
-            $sheet->setCellValue($this->cell(10 + $offset, $curr), $r['alfa']);
-            $sheet->setCellValue($this->cell(11 + $offset, $curr), $r['absent']);
-            $sheet->setCellValue($this->cell(12 + $offset, $curr), $r['percentage'] . '%');
+            $sheet->setCellValue($this->cell(3, $curr), $r['student']->gender);
+            $sheet->setCellValue($this->cell(4, $curr), $r['dot']);
+            $sheet->setCellValue($this->cell(5, $curr), $r['dispen']);
+            $sheet->setCellValue($this->cell(6, $curr), $r['present']);
+            $sheet->setCellValue($this->cell(7, $curr), $r['sakit']);
+            $sheet->setCellValue($this->cell(8, $curr), $r['izin']);
+            $sheet->setCellValue($this->cell(9, $curr), $r['alfa']);
+            $sheet->setCellValue($this->cell(10, $curr), $r['absent']);
+            $sheet->setCellValue($this->cell(11, $curr), $r['percentage'] . '%');
             $curr++;
         }
 
@@ -1078,17 +1053,16 @@ class ExcelExportImportService
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Template Daftar Murid');
 
-        $headers = ['No', 'NIS / NISN', 'Nama Lengkap', 'Nama Panggilan', 'Jenis Kelamin (L/P)'];
+        $headers = ['No', 'NIS / NISN', 'Nama Lengkap', 'Jenis Kelamin (L/P)'];
         foreach ($headers as $i => $h) {
             $sheet->setCellValue($this->cell($i + 1, 1), $h);
         }
-        $this->styleTableHeader($sheet, 'A1:E1');
+        $this->styleTableHeader($sheet, 'A1:D1');
 
         $sheet->getColumnDimension('A')->setWidth(6);
         $sheet->getColumnDimension('B')->setWidth(18);
-        $sheet->getColumnDimension('C')->setWidth(32);
-        $sheet->getColumnDimension('D')->setWidth(18);
-        $sheet->getColumnDimension('E')->setWidth(20);
+        $sheet->getColumnDimension('C')->setWidth(34);
+        $sheet->getColumnDimension('D')->setWidth(20);
 
         $students = $teachingClass->activeStudents()->get();
         if ($students->isNotEmpty()) {
@@ -1097,21 +1071,18 @@ class ExcelExportImportService
                 $sheet->setCellValue("A{$r}", $idx + 1);
                 $sheet->setCellValue("B{$r}", $st->nis_nisn);
                 $sheet->setCellValue("C{$r}", $st->full_name);
-                $sheet->setCellValue("D{$r}", $st->nickname);
-                $sheet->setCellValue("E{$r}", $st->gender);
+                $sheet->setCellValue("D{$r}", $st->gender);
             }
         } else {
             $sheet->setCellValue('A2', 1);
             $sheet->setCellValue('B2', '009812001');
             $sheet->setCellValue('C2', 'Ahmad Fauzan Pratama');
-            $sheet->setCellValue('D2', 'Fauzan');
-            $sheet->setCellValue('E2', 'L');
+            $sheet->setCellValue('D2', 'L');
 
             $sheet->setCellValue('A3', 2);
             $sheet->setCellValue('B3', '009812002');
             $sheet->setCellValue('C3', 'Siti Aisyah Putri');
-            $sheet->setCellValue('D3', 'Aisyah');
-            $sheet->setCellValue('E3', 'P');
+            $sheet->setCellValue('D3', 'P');
         }
 
         $safeClass = preg_replace('/[^A-Za-z0-9\-_]/', '_', $teachingClass->class_name);
@@ -1148,9 +1119,15 @@ class ExcelExportImportService
 
                 $orderNo = is_numeric($row[0] ?? null) ? (int) $row[0] : (++$nextOrder);
                 $nisNisn = trim((string) ($row[1] ?? '')) ?: null;
-                $nickname = trim((string) ($row[3] ?? '')) ?: null;
-                $rawGender = strtoupper(trim((string) ($row[4] ?? 'L')));
-                $gender = str_starts_with($rawGender, 'P') ? 'P' : 'L';
+                $col3 = strtoupper(trim((string) ($row[3] ?? '')));
+                $col4 = strtoupper(trim((string) ($row[4] ?? '')));
+                if (str_starts_with($col3, 'L') || str_starts_with($col3, 'P')) {
+                    $gender = str_starts_with($col3, 'P') ? 'P' : 'L';
+                } elseif (str_starts_with($col4, 'L') || str_starts_with($col4, 'P')) {
+                    $gender = str_starts_with($col4, 'P') ? 'P' : 'L';
+                } else {
+                    $gender = 'L';
+                }
 
                 ClassStudent::query()->create([
                     'school_class_id' => $teachingClass->school_class_id,
@@ -1158,7 +1135,6 @@ class ExcelExportImportService
                     'order_number' => $orderNo,
                     'nis_nisn' => $nisNisn,
                     'full_name' => $fullName,
-                    'nickname' => $nickname,
                     'gender' => $gender,
                     'is_active' => true,
                 ]);
@@ -1178,17 +1154,16 @@ class ExcelExportImportService
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Template Daftar Murid');
 
-        $headers = ['No', 'NIS / NISN', 'Nama Lengkap', 'Nama Panggilan', 'Jenis Kelamin (L/P)'];
+        $headers = ['No', 'NIS / NISN', 'Nama Lengkap', 'Jenis Kelamin (L/P)'];
         foreach ($headers as $i => $h) {
             $sheet->setCellValue($this->cell($i + 1, 1), $h);
         }
-        $this->styleTableHeader($sheet, 'A1:E1');
+        $this->styleTableHeader($sheet, 'A1:D1');
 
         $sheet->getColumnDimension('A')->setWidth(6);
         $sheet->getColumnDimension('B')->setWidth(18);
-        $sheet->getColumnDimension('C')->setWidth(32);
-        $sheet->getColumnDimension('D')->setWidth(18);
-        $sheet->getColumnDimension('E')->setWidth(20);
+        $sheet->getColumnDimension('C')->setWidth(34);
+        $sheet->getColumnDimension('D')->setWidth(20);
 
         $students = $schoolClass->activeStudents()->get();
         if ($students->isNotEmpty()) {
@@ -1197,21 +1172,18 @@ class ExcelExportImportService
                 $sheet->setCellValue("A{$r}", $idx + 1);
                 $sheet->setCellValue("B{$r}", $st->nis_nisn);
                 $sheet->setCellValue("C{$r}", $st->full_name);
-                $sheet->setCellValue("D{$r}", $st->nickname);
-                $sheet->setCellValue("E{$r}", $st->gender);
+                $sheet->setCellValue("D{$r}", $st->gender);
             }
         } else {
             $sheet->setCellValue('A2', 1);
             $sheet->setCellValue('B2', '009812001');
             $sheet->setCellValue('C2', 'Ahmad Fauzan Pratama');
-            $sheet->setCellValue('D2', 'Fauzan');
-            $sheet->setCellValue('E2', 'L');
+            $sheet->setCellValue('D2', 'L');
 
             $sheet->setCellValue('A3', 2);
             $sheet->setCellValue('B3', '009812002');
             $sheet->setCellValue('C3', 'Siti Aisyah Putri');
-            $sheet->setCellValue('D3', 'Aisyah');
-            $sheet->setCellValue('E3', 'P');
+            $sheet->setCellValue('D3', 'P');
         }
 
         $safeClass = preg_replace('/[^A-Za-z0-9\-_]/', '_', $schoolClass->name);
@@ -1249,9 +1221,15 @@ class ExcelExportImportService
 
                 $orderNo = is_numeric($row[0] ?? null) ? (int) $row[0] : (++$nextOrder);
                 $nisNisn = trim((string) ($row[1] ?? '')) ?: null;
-                $nickname = trim((string) ($row[3] ?? '')) ?: null;
-                $rawGender = strtoupper(trim((string) ($row[4] ?? 'L')));
-                $gender = str_starts_with($rawGender, 'P') ? 'P' : 'L';
+                $col3 = strtoupper(trim((string) ($row[3] ?? '')));
+                $col4 = strtoupper(trim((string) ($row[4] ?? '')));
+                if (str_starts_with($col3, 'L') || str_starts_with($col3, 'P')) {
+                    $gender = str_starts_with($col3, 'P') ? 'P' : 'L';
+                } elseif (str_starts_with($col4, 'L') || str_starts_with($col4, 'P')) {
+                    $gender = str_starts_with($col4, 'P') ? 'P' : 'L';
+                } else {
+                    $gender = 'L';
+                }
 
                 ClassStudent::query()->create([
                     'school_class_id' => $schoolClass->id,
@@ -1259,7 +1237,6 @@ class ExcelExportImportService
                     'order_number' => $orderNo,
                     'nis_nisn' => $nisNisn,
                     'full_name' => $fullName,
-                    'nickname' => $nickname,
                     'gender' => $gender,
                     'is_active' => true,
                 ]);
@@ -1435,113 +1412,4 @@ class ExcelExportImportService
         return $updated;
     }
 
-    /**
-     * Unduh Template Excel Absensi Bulanan & Import Absensi Bulanan.
-     */
-    public function downloadAttendanceTemplate(TeachingClass $teachingClass, int $year, int $month): StreamedResponse
-    {
-        $matrix = $this->attendanceService->buildMonthlyMatrix($teachingClass, $year, $month);
-        $daysInMonth = $matrix['days_in_month'];
-
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Template Absensi');
-
-        $headers = ['No', 'ID_MURID', 'Nama Lengkap', 'Nama Panggilan', 'L/P'];
-        for ($d = 1; $d <= $daysInMonth; $d++) {
-            $headers[] = (string) $d;
-        }
-
-        foreach ($headers as $idx => $h) {
-            $c = $idx + 1;
-            $sheet->setCellValue($this->cell($c, 1), $h);
-            $sheet->getColumnDimension($this->col($c))->setWidth($c === 3 ? 28 : ($c <= 5 ? 12 : 4.2));
-        }
-        $this->styleTableHeader($sheet, $this->range(1, 1, count($headers), 1));
-
-        foreach ($matrix['rows'] as $rIdx => $r) {
-            $rowNo = $rIdx + 2;
-            $sheet->setCellValue($this->cell(1, $rowNo), $r['no']);
-            $sheet->setCellValue($this->cell(2, $rowNo), $r['student']->id);
-            $sheet->setCellValue($this->cell(3, $rowNo), $r['student']->full_name);
-            $sheet->setCellValue($this->cell(4, $rowNo), $r['student']->nickname);
-            $sheet->setCellValue($this->cell(5, $rowNo), $r['student']->gender);
-
-            for ($d = 1; $d <= $daysInMonth; $d++) {
-                $sheet->setCellValue($this->cell(5 + $d, $rowNo), $r['days'][$d] ?? '');
-            }
-        }
-
-        $safeClass = preg_replace('/[^A-Za-z0-9\-_]/', '_', $teachingClass->class_name);
-        $mName = IndonesianDate::monthName($month);
-
-        return $this->streamSpreadsheet($spreadsheet, "Template_Absensi_{$safeClass}_{$mName}_{$year}.xlsx");
-    }
-
-    public function importAttendance(TeachingClass $teachingClass, int $year, int $month, string $filePath): int
-    {
-        $daysInMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->daysInMonth;
-        $students = $teachingClass->activeStudents()->get();
-        $studentsById = $students->keyBy('id');
-        $studentsByName = $students->keyBy(fn ($s) => mb_strtolower(trim($s->full_name)));
-
-        $spreadsheet = IOFactory::load($filePath);
-        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
-
-        $affectedDates = [];
-        $updatedRows = 0;
-
-        DB::transaction(function () use ($teachingClass, $year, $month, $daysInMonth, $rows, $studentsById, $studentsByName, &$affectedDates, &$updatedRows) {
-            foreach ($rows as $idx => $row) {
-                if ($idx === 0) {
-                    continue;
-                }
-
-                $rawId = isset($row[1]) && is_numeric($row[1]) ? (int) $row[1] : null;
-                $rawName = mb_strtolower(trim((string) ($row[2] ?? '')));
-                $student = ($rawId && $studentsById->has($rawId))
-                    ? $studentsById->get($rawId)
-                    : ($rawName !== '' ? $studentsByName->get($rawName) : null);
-
-                if (! $student) {
-                    continue;
-                }
-
-                for ($d = 1; $d <= $daysInMonth; $d++) {
-                    $rawVal = strtolower(trim((string) ($row[4 + $d] ?? '')));
-                    $dateStr = sprintf('%04d-%02d-%02d', $year, $month, $d);
-
-                    if (in_array($rawVal, Attendance::VALID_STATUSES, true)) {
-                        Attendance::query()->updateOrCreate(
-                            [
-                                'teaching_class_id' => $teachingClass->id,
-                                'class_student_id' => $student->id,
-                                'attendance_date' => $dateStr,
-                            ],
-                            ['status' => $rawVal]
-                        );
-                        $affectedDates[$dateStr] = true;
-                    } elseif ($rawVal === '') {
-                        Attendance::query()
-                            ->where('teaching_class_id', $teachingClass->id)
-                            ->where('class_student_id', $student->id)
-                            ->whereDate('attendance_date', $dateStr)
-                            ->delete();
-                        $affectedDates[$dateStr] = true;
-                    }
-                }
-                $updatedRows++;
-            }
-        });
-
-        foreach (array_keys($affectedDates) as $dateStr) {
-            $this->attendanceService->syncJournalForDate($teachingClass, $dateStr);
-        }
-
-        if ($teachingClass->gradeWeight()->first()?->isAutoAttendance()) {
-            $this->gradeService->recalculateClass($teachingClass, $this->attendanceService);
-        }
-
-        return $updatedRows;
-    }
 }

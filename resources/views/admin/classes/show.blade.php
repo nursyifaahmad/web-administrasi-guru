@@ -66,7 +66,6 @@
                             <th class="px-3 py-3 w-14 text-center">No</th>
                             <th class="px-3 py-3 w-28">NIS / NISN</th>
                             <th class="px-4 py-3">Nama Lengkap</th>
-                            <th class="px-3 py-3 w-32">Nama Panggilan</th>
                             <th class="px-3 py-3 w-20 text-center">L / P</th>
                             <th class="px-4 py-3 w-36 text-right">Aksi</th>
                         </tr>
@@ -77,7 +76,6 @@
                                 <td class="px-3 py-2.5 text-center font-bold text-slate-700">{{ $st->order_number }}</td>
                                 <td class="px-3 py-2.5 font-mono text-slate-600">{{ $st->nis_nisn ?: '-' }}</td>
                                 <td class="px-4 py-2.5 font-bold text-slate-900">{{ $st->full_name }}</td>
-                                <td class="px-3 py-2.5 text-slate-700">{{ $st->nickname ?: '-' }}</td>
                                 <td class="px-3 py-2.5 text-center">
                                     <span class="px-2 py-0.5 rounded-full font-bold text-[11px] {{ $st->gender === 'P' ? 'bg-pink-50 text-pink-700' : 'bg-sky-50 text-sky-700' }}">
                                         {{ $st->gender }}
@@ -90,7 +88,6 @@
                                                     'order_number' => $st->order_number,
                                                     'nis_nisn' => $st->nis_nisn,
                                                     'full_name' => $st->full_name,
-                                                    'nickname' => $st->nickname,
                                                     'gender' => $st->gender,
                                                     'update_url' => route('admin.classes.students.update', [$schoolClass, $st]),
                                                 ])"
@@ -248,19 +245,12 @@
                     <input type="text" name="full_name" required placeholder="Contoh: Muhammad Rizky Pratama"
                            class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
                 </div>
-                <div class="grid grid-cols-2 gap-2.5">
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">Nama Panggilan</label>
-                        <input type="text" name="nickname" placeholder="Rizky"
-                               class="w-full rounded-xl border border-slate-300 px-3 py-2">
-                    </div>
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">Jenis Kelamin *</label>
-                        <select name="gender" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
-                            <option value="L">Laki-laki (L)</option>
-                            <option value="P">Perempuan (P)</option>
-                        </select>
-                    </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Jenis Kelamin *</label>
+                    <select name="gender" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
+                        <option value="L">Laki-laki (L)</option>
+                        <option value="P">Perempuan (P)</option>
+                    </select>
                 </div>
                 <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
                     <button type="button" @click="addStudentModal = false" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>
@@ -298,19 +288,12 @@
                         <input type="text" name="full_name" x-model="editStudent.full_name" required
                                class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
                     </div>
-                    <div class="grid grid-cols-2 gap-2.5">
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Nama Panggilan</label>
-                            <input type="text" name="nickname" x-model="editStudent.nickname"
-                                   class="w-full rounded-xl border border-slate-300 px-3 py-2">
-                        </div>
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Jenis Kelamin *</label>
-                            <select name="gender" x-model="editStudent.gender" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
-                                <option value="L">Laki-laki (L)</option>
-                                <option value="P">Perempuan (P)</option>
-                            </select>
-                        </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Jenis Kelamin *</label>
+                        <select name="gender" x-model="editStudent.gender" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold">
+                            <option value="L">Laki-laki (L)</option>
+                            <option value="P">Perempuan (P)</option>
+                        </select>
                     </div>
                     <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
                         <button type="button" @click="editStudent = null" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>

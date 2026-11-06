@@ -11,7 +11,6 @@
             show_headmaster: false,
             show_digital_signature: true,
             show_journal_paraf: true,
-            show_nickname: @js($teachingClass->show_nickname_column ?? true),
             only_teaching_days: @js($teachingClass->only_teaching_days ?? true),
             month: @js($extraParams['month'] ?? ''),
             year: @js($extraParams['year'] ?? now()->year),
@@ -25,7 +24,6 @@
                 params.set('show_headmaster', this.show_headmaster ? '1' : '0');
                 params.set('show_digital_signature', this.show_digital_signature ? '1' : '0');
                 params.set('show_journal_paraf', this.show_journal_paraf ? '1' : '0');
-                params.set('show_nickname', this.show_nickname ? '1' : '0');
                 params.set('only_teaching_days', this.only_teaching_days ? '1' : '0');
                 if (this.month) params.set('month', this.month);
                 if (this.year) params.set('year', this.year);
@@ -106,10 +104,6 @@
                 <label class="flex items-center gap-2.5 cursor-pointer">
                     <input type="checkbox" x-model="only_teaching_days" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
                     <span class="text-slate-700 font-medium">Hanya Cetak Tanggal Mengajar Efektif (Rekomendasi - Lebih Rapi &amp; Hemat Kertas)</span>
-                </label>
-                <label class="flex items-center gap-2.5 cursor-pointer">
-                    <input type="checkbox" x-model="show_nickname" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                    <span class="text-slate-700 font-medium">Sertakan Kolom Nama Panggilan Siswa</span>
                 </label>
                 @endif
                 @if(!empty($isJournalExport))

@@ -15,7 +15,6 @@ class ClassStudent extends Model
         'order_number',
         'nis_nisn',
         'full_name',
-        'nickname',
         'gender',
         'is_active',
     ];

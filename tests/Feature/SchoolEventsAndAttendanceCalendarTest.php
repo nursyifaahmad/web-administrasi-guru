@@ -117,7 +117,6 @@ class SchoolEventsAndAttendanceCalendarTest extends TestCase
             'order_number' => 1,
             'nis_nisn' => '1001',
             'full_name' => 'Budi Santoso',
-            'nickname' => 'Budi',
             'gender' => 'L',
             'is_active' => true,
         ]);

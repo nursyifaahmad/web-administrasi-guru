@@ -166,45 +166,4 @@ class AttendanceController extends Controller
             'saved_at' => now()->format('H:i:s'),
         ]);
     }
-
-    public function downloadTemplate(
-        Request $request,
-        TeachingClass $teachingClass,
-        ExcelExportImportService $excelService
-    ) {
-        $this->authorizeClassAccess($request->user(), $teachingClass);
-        $month = max(1, min(12, $request->integer('month') ?: (int) now()->month));
-        $year = max(2020, min(2099, $request->integer('year') ?: (int) now()->year));
-
-        return $excelService->downloadAttendanceTemplate($teachingClass, $year, $month);
-    }
-
-    public function importExcel(
-        Request $request,
-        TeachingClass $teachingClass,
-        ExcelExportImportService $excelService
-    ): RedirectResponse {
-        $this->authorizeClassAccess($request->user(), $teachingClass);
-
-        abort_if(
-            $request->user()->isAdmin(),
-            403,
-            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) absensi, tidak dapat mengimpor data absensi guru.'
-        );
-
-        $validated = $request->validate([
-            'year' => ['required', 'integer', 'min:2020', 'max:2099'],
-            'month' => ['required', 'integer', 'min:1', 'max:12'],
-            'excel_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
-        ]);
-
-        $count = $excelService->importAttendance(
-            $teachingClass,
-            (int) $validated['year'],
-            (int) $validated['month'],
-            $request->file('excel_file')->getRealPath()
-        );
-
-        return back()->with('success', "Berhasil mengimpor absensi untuk {$count} peserta didik & menyinkronkan Jurnal Harian.");
-    }
 }

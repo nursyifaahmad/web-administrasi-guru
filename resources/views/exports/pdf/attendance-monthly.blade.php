@@ -20,11 +20,8 @@
         $activeDays = range(1, $matrix['days_in_month']);
     }
     $totalActiveDays = count($activeDays);
-    $showNickname = $options['show_nickname'] ?? true;
     $dayWidth = $totalActiveDays <= 14 ? '25px' : ($totalActiveDays <= 20 ? '20px' : '14px');
-    $nameWidth = $totalActiveDays <= 14 
-        ? ($showNickname ? '195px' : '270px') 
-        : ($showNickname ? '145px' : '207px');
+    $nameWidth = $totalActiveDays <= 14 ? '270px' : '207px';
 @endphp
 
 <!DOCTYPE html>
@@ -45,9 +42,6 @@
             <tr>
                 <th rowspan="2" style="width: 22px;">No</th>
                 <th rowspan="2" style="width: {{ $nameWidth }};">Nama Lengkap</th>
-                @if($showNickname)
-                    <th rowspan="2" style="width: {{ $totalActiveDays <= 14 ? '75px' : '62px' }};">Nama Panggilan</th>
-                @endif
                 <th rowspan="2" style="width: 24px;">L/P</th>
                 <th colspan="{{ $totalActiveDays }}">Bulan {{ $monthLabel }} (Tanggal Pertemuan)</th>
                 <th rowspan="2" style="width: 34px;">Jml Hadir</th>
@@ -74,9 +68,6 @@
                 <tr>
                     <td class="text-center">{{ $row['no'] }}</td>
                     <td>{{ $row['student']->full_name }}</td>
-                    @if($showNickname)
-                        <td class="text-center">{{ $row['student']->nickname ?: '-' }}</td>
-                    @endif
                     <td class="text-center">{{ $row['student']->gender }}</td>
                     @foreach($activeDays as $d)
                         @php
@@ -96,7 +87,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="{{ ($showNickname ? 8 : 7) + $totalActiveDays }}" class="text-center" style="padding: 14px;">Belum ada daftar peserta didik di kelas ini.</td>
+                    <td colspan="{{ 7 + $totalActiveDays }}" class="text-center" style="padding: 14px;">Belum ada daftar peserta didik di kelas ini.</td>
                 </tr>
             @endforelse
         </tbody>

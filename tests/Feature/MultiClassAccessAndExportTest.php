@@ -255,13 +255,12 @@ class MultiClassAccessAndExportTest extends TestCase
         $tplRows = $loadedTpl->getActiveSheet()->toArray();
         @unlink($verifyTpl);
 
-        $this->assertSame(['No', 'NIS / NISN', 'Nama Lengkap', 'Nama Panggilan', 'Jenis Kelamin (L/P)'], $tplRows[0]);
+        $this->assertSame(['No', 'NIS / NISN', 'Nama Lengkap', 'Jenis Kelamin (L/P)'], $tplRows[0]);
 
         $this->actingAs($admin)->post(route('admin.classes.students.store', $schoolClass), [
             'order_number' => 1,
             'nis_nisn' => '1001',
             'full_name' => 'Ahmad Faiz',
-            'nickname' => 'Faiz',
             'gender' => 'L',
         ])->assertRedirect();
 
@@ -269,7 +268,6 @@ class MultiClassAccessAndExportTest extends TestCase
             'order_number' => 2,
             'nis_nisn' => '1002',
             'full_name' => 'Bilqis Syakira',
-            'nickname' => 'Bilqis',
             'gender' => 'P',
         ])->assertRedirect();
 
@@ -277,7 +275,6 @@ class MultiClassAccessAndExportTest extends TestCase
             'order_number' => 3,
             'nis_nisn' => '1003',
             'full_name' => 'Chairul Anam',
-            'nickname' => 'Anam',
             'gender' => 'L',
         ])->assertRedirect();
 
@@ -337,7 +334,6 @@ class MultiClassAccessAndExportTest extends TestCase
             'order_number' => 4,
             'nis_nisn' => '1004',
             'full_name' => 'Dinda Kirana',
-            'nickname' => 'Dinda',
             'gender' => 'P',
         ])->assertRedirect();
 
@@ -346,42 +342,6 @@ class MultiClassAccessAndExportTest extends TestCase
         $this->assertSame(4, $classBin->activeStudents()->count());
         $this->assertTrue($classMtk->activeStudents()->where('full_name', 'Dinda Kirana')->exists());
         $this->assertTrue($classBin->activeStudents()->where('full_name', 'Dinda Kirana')->exists());
-
-        // 6. Guru MTK menginput nama panggilan murid (fitur mandiri guru)
-        $this->actingAs($guruMtk)->post(route('classes.nicknames.update', $classMtk), [
-            'nicknames' => [
-                $firstStudent->id => 'Ijul Spesial',
-            ],
-        ])->assertRedirect();
-
-        // Data resmi tidak berubah, hanya panggilan yang terupdate
-        $firstStudent->refresh();
-        $this->assertSame('Ahmad Faiz', $firstStudent->full_name);
-        $this->assertSame('1001', $firstStudent->nis_nisn);
-        $this->assertSame('L', $firstStudent->gender);
-        $this->assertSame('Ijul Spesial', $firstStudent->nickname);
-
-        // Guru BIN yang mengajar rombel yang sama langsung melihat panggilan baru tanpa perlu ketik ulang
-        $binFirstStudent = $classBin->activeStudents()->where('id', $firstStudent->id)->first();
-        $this->assertSame('Ijul Spesial', $binFirstStudent->nickname);
-
-        // Guru lain yang tidak mengajar kelas MTK dilarang mengubah nickname
-        $this->actingAs($guruBin)->post(route('classes.nicknames.update', $classMtk), [
-            'nicknames' => [
-                $firstStudent->id => 'Hacker Nick',
-            ],
-        ])->assertStatus(403);
-
-        // 7. Guru MTK mengatur toggle kolom nama panggilan (sembunyikan kolom)
-        $this->assertTrue($classMtk->show_nickname_column);
-        $this->actingAs($guruMtk)->put(route('classes.update', $classMtk), [
-            'subject_id' => $subMtk->id,
-            'schedule_info' => 'Senin 1-2',
-            'show_nickname_column' => false,
-        ])->assertRedirect();
-
-        $classMtk->refresh();
-        $this->assertFalse($classMtk->show_nickname_column);
 
         // Halaman absensi kelas MTK berhasil dibuka tanpa error
         $attRes = $this->actingAs($guruMtk)->get(route('attendances.index', $classMtk));

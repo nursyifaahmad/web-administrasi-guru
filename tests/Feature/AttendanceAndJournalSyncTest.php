@@ -57,7 +57,6 @@ class AttendanceAndJournalSyncTest extends TestCase
                 'teaching_class_id' => $tClass->id,
                 'order_number' => $i,
                 'full_name' => "Murid Ke-{$i}",
-                'nickname' => "M{$i}",
                 'gender' => $i % 2 === 0 ? 'P' : 'L',
                 'is_active' => true,
             ]);

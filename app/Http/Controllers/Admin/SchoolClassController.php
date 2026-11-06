@@ -161,7 +161,6 @@ class SchoolClassController extends Controller
             'order_number' => ['nullable', 'integer', 'min:1'],
             'nis_nisn' => ['nullable', 'string', 'max:40'],
             'full_name' => ['required', 'string', 'max:180'],
-            'nickname' => ['nullable', 'string', 'max:80'],
             'gender' => ['required', Rule::in(['L', 'P'])],
         ]);
 
@@ -173,7 +172,6 @@ class SchoolClassController extends Controller
             'order_number' => $nextOrder,
             'nis_nisn' => $validated['nis_nisn'] ?? null,
             'full_name' => trim($validated['full_name']),
-            'nickname' => ! empty($validated['nickname']) ? trim($validated['nickname']) : null,
             'gender' => $validated['gender'],
             'is_active' => true,
         ]);
@@ -193,7 +191,6 @@ class SchoolClassController extends Controller
             'order_number' => ['required', 'integer', 'min:1'],
             'nis_nisn' => ['nullable', 'string', 'max:40'],
             'full_name' => ['required', 'string', 'max:180'],
-            'nickname' => ['nullable', 'string', 'max:80'],
             'gender' => ['required', Rule::in(['L', 'P'])],
         ]);
 
@@ -201,7 +198,6 @@ class SchoolClassController extends Controller
             'order_number' => (int) $validated['order_number'],
             'nis_nisn' => $validated['nis_nisn'] ?? null,
             'full_name' => trim($validated['full_name']),
-            'nickname' => ! empty($validated['nickname']) ? trim($validated['nickname']) : null,
             'gender' => $validated['gender'],
         ]);
 

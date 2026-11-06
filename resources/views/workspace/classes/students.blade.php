@@ -7,7 +7,7 @@
 @section('content')
 @include('partials.class-workspace-tabs')
 
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-5" x-data="{ nicknameModal: false }">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
     {{-- Kolom Kiri: Form Pengaturan Mata Pelajaran & Jadwal Mengajar --}}
     <div class="lg:col-span-7 space-y-5">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 md:p-6 space-y-5">
@@ -69,7 +69,7 @@
                     <p class="text-[11px] text-slate-400 mt-1">Keterangan hari & jam mengajar ini dicetak pada bagian kop/identitas Jurnal, Absensi, dan Nilai.</p>
                 </div>
 
-                <div class="pt-3 border-t border-slate-100 space-y-3">
+                <div class="pt-3 border-t border-slate-100">
                     <label class="flex items-start gap-3 cursor-pointer">
                         <input type="checkbox" name="only_teaching_days" value="1"
                                @checked($teachingClass->only_teaching_days ?? true)
@@ -78,18 +78,6 @@
                             <span class="block font-bold text-slate-800 text-xs">Hanya Tampilkan Tanggal Mengajar pada Tabel Absensi (Sembunyikan Hari Non-KBM)</span>
                             <span class="block text-[11px] text-slate-400 mt-0.5">
                                 Sangat direkomendasikan. Tabel absensi hanya memuat kolom tanggal pertemuan yang ada jam pelajarannya, sehingga kolom nama siswa jauh lebih lebar dan tabel sangat rapi.
-                            </span>
-                        </div>
-                    </label>
-
-                    <label class="flex items-start gap-3 cursor-pointer">
-                        <input type="checkbox" name="show_nickname_column" value="1"
-                               @checked($teachingClass->show_nickname_column)
-                               class="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                        <div>
-                            <span class="block font-bold text-slate-800 text-xs">Tampilkan Kolom Nama Panggilan di Menu Absensi</span>
-                            <span class="block text-[11px] text-slate-400 mt-0.5">
-                                Bila dicentang, kolom Nama Panggilan akan tampil di tabel absensi bulanan dan cetakan. Bila tidak dicentang, tabel tanggal pertemuan menjadi lebih lebar dan leluasa.
                             </span>
                         </div>
                     </label>
@@ -173,24 +161,6 @@
                     </div>
                 </div>
 
-                {{-- Card Pengaturan Panggilan Siswa --}}
-                <div class="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-2">
-                    <div class="flex items-center justify-between">
-                        <span class="font-bold text-emerald-950 text-xs">Nama Panggilan Siswa</span>
-                        <span class="text-[10px] font-extrabold px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded-md">
-                            {{ $students->filter(fn($s) => !empty($s->nickname))->count() }} / {{ $students->count() }} Terisi
-                        </span>
-                    </div>
-                    <p class="text-[11px] text-emerald-800 leading-relaxed">
-                        Guru dapat menginput atau memperbarui nama panggilan siswa untuk memudahkan pemanggilan di kelas.
-                    </p>
-                    <button type="button" @click="nicknameModal = true"
-                            class="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 shadow-2xs transition">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                        <span>Atur Nama Panggilan Siswa</span>
-                    </button>
-                </div>
-
                 <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
                     <div class="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">Wali Kelas</div>
                     <div class="text-sm font-bold text-slate-900">{{ $teachingClass->homeroom_teacher_name ?: '-' }}</div>
@@ -222,8 +192,5 @@
             </div>
         </div>
     </div>
-
-    {{-- Modal Atur Nama Panggilan --}}
-    @include('partials.nickname-modal', ['teachingClass' => $teachingClass, 'students' => $students])
 </div>
 @endsection

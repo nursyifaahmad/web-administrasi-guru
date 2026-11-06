@@ -271,7 +271,6 @@ class TeachingClassController extends Controller
                             'order_number' => $idx + 1,
                             'nis_nisn' => $st->nis_nisn,
                             'full_name' => $st->full_name,
-                            'nickname' => $st->nickname,
                             'gender' => $st->gender,
                             'is_active' => true,
                         ]);
@@ -296,7 +295,6 @@ class TeachingClassController extends Controller
             'schedule_info' => ['nullable', 'string', 'max:180'],
             'teaching_days' => ['nullable', 'array'],
             'teaching_days.*' => ['integer', 'min:0', 'max:6'],
-            'show_nickname_column' => ['nullable', 'boolean'],
             'only_teaching_days' => ['nullable', 'boolean'],
             'grade_level' => ['nullable', 'string', 'max:20'],
             'class_name' => ['nullable', 'string', 'max:60'],
@@ -316,7 +314,6 @@ class TeachingClassController extends Controller
             $wkSig = $validated['homeroom_teacher_signature_data'];
         }
 
-        $showNickname = $request->boolean('show_nickname_column');
         $onlyTeachingDays = $request->boolean('only_teaching_days');
         $teachingDays = $request->has('teaching_days')
             ? array_values(array_unique(array_map('intval', (array) $request->input('teaching_days', []))))
@@ -333,7 +330,6 @@ class TeachingClassController extends Controller
                 'subject_id' => (int) $validated['subject_id'],
                 'schedule_info' => $validated['schedule_info'] ?? null,
                 'teaching_days' => $teachingDays,
-                'show_nickname_column' => $showNickname,
                 'only_teaching_days' => $onlyTeachingDays,
                 'grade_level' => $sc->grade_level,
                 'class_name' => $sc->name,
@@ -348,7 +344,6 @@ class TeachingClassController extends Controller
                 'class_name' => $className,
                 'schedule_info' => $validated['schedule_info'] ?? null,
                 'teaching_days' => $teachingDays,
-                'show_nickname_column' => $showNickname,
                 'only_teaching_days' => $onlyTeachingDays,
                 'homeroom_teacher_name' => $wkName,
                 'homeroom_teacher_nip' => $wkNip,
@@ -424,30 +419,6 @@ class TeachingClassController extends Controller
         ]);
     }
 
-    public function updateNicknames(Request $request, TeachingClass $teachingClass): RedirectResponse
-    {
-        $this->authorizeClassAccess($request->user(), $teachingClass);
-
-        $validated = $request->validate([
-            'nicknames' => ['required', 'array'],
-            'nicknames.*' => ['nullable', 'string', 'max:80'],
-        ]);
-
-        $studentIds = $teachingClass->activeStudents()->pluck('id');
-
-        DB::transaction(function () use ($validated, $studentIds) {
-            foreach ($validated['nicknames'] as $studentId => $nickname) {
-                if ($studentIds->contains((int) $studentId)) {
-                    ClassStudent::where('id', $studentId)->update([
-                        'nickname' => ! empty($nickname) ? trim($nickname) : null,
-                    ]);
-                }
-            }
-        });
-
-        return back()->with('success', 'Nama panggilan seluruh peserta didik berhasil disimpan.');
-    }
-
     public function storeStudent(Request $request, TeachingClass $teachingClass, GradeCalculationService $gradeService): RedirectResponse
     {
         $user = $request->user();
@@ -458,7 +429,6 @@ class TeachingClassController extends Controller
             'order_number' => ['nullable', 'integer', 'min:1'],
             'nis_nisn' => ['nullable', 'string', 'max:40'],
             'full_name' => ['required', 'string', 'max:180'],
-            'nickname' => ['nullable', 'string', 'max:80'],
             'gender' => ['required', Rule::in(['L', 'P'])],
         ]);
 
@@ -470,7 +440,6 @@ class TeachingClassController extends Controller
             'order_number' => $nextOrder,
             'nis_nisn' => $validated['nis_nisn'] ?? null,
             'full_name' => trim($validated['full_name']),
-            'nickname' => ! empty($validated['nickname']) ? trim($validated['nickname']) : null,
             'gender' => $validated['gender'],
             'is_active' => true,
         ]);
@@ -500,7 +469,6 @@ class TeachingClassController extends Controller
             'order_number' => ['required', 'integer', 'min:1'],
             'nis_nisn' => ['nullable', 'string', 'max:40'],
             'full_name' => ['required', 'string', 'max:180'],
-            'nickname' => ['nullable', 'string', 'max:80'],
             'gender' => ['required', Rule::in(['L', 'P'])],
         ]);
 
@@ -508,7 +476,6 @@ class TeachingClassController extends Controller
             'order_number' => (int) $validated['order_number'],
             'nis_nisn' => $validated['nis_nisn'] ?? null,
             'full_name' => trim($validated['full_name']),
-            'nickname' => ! empty($validated['nickname']) ? trim($validated['nickname']) : null,
             'gender' => $validated['gender'],
         ]);
 
@@ -593,7 +560,6 @@ class TeachingClassController extends Controller
                     'order_number' => ++$maxOrder,
                     'nis_nisn' => $st->nis_nisn,
                     'full_name' => $st->full_name,
-                    'nickname' => $st->nickname,
                     'gender' => $st->gender,
                     'is_active' => true,
                 ]);

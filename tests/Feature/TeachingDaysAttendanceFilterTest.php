@@ -59,7 +59,6 @@ class TeachingDaysAttendanceFilterTest extends TestCase
             'schedule_info' => 'Senin jam 6-7, Kamis jam 2',
             'teaching_days' => $teachingDays,
             'only_teaching_days' => $onlyTeachingDays,
-            'show_nickname_column' => true,
             'homeroom_teacher_name' => 'Wali Kelas VII-E',
             'homeroom_teacher_nip' => '198001012005011001',
         ]);
@@ -72,7 +71,6 @@ class TeachingDaysAttendanceFilterTest extends TestCase
             'order_number' => 1,
             'nis_nisn' => '1001',
             'full_name' => 'Ahmad Santoso',
-            'nickname' => 'Ahmad',
             'gender' => 'L',
             'is_active' => true,
         ]);
@@ -83,7 +81,6 @@ class TeachingDaysAttendanceFilterTest extends TestCase
             'order_number' => 2,
             'nis_nisn' => '1002',
             'full_name' => 'Budi Pratama',
-            'nickname' => 'Budi',
             'gender' => 'L',
             'is_active' => true,
         ]);
@@ -103,7 +100,6 @@ class TeachingDaysAttendanceFilterTest extends TestCase
             'schedule_info' => 'Senin jam ke 6-7 & Kamis jam ke 2',
             'teaching_days' => ['1', '4'], // Senin & Kamis
             'only_teaching_days' => 1,
-            'show_nickname_column' => 1,
         ])->assertRedirect();
 
         $cls->refresh();
