@@ -27,6 +27,17 @@ class TeachingClassController extends Controller
 
         $search = $request->string('q')->trim()->toString();
         $gradeFilter = $request->string('grade_level')->trim()->toString() ?: null;
+        $viewMode = $request->string('view')->trim()->toString();
+        $teacherFilter = $request->integer('teacher_id') ?: null;
+
+        $myClassesCount = TeachingClass::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->where('teacher_id', $user->id)
+            ->count();
+
+        $allClassesCount = TeachingClass::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->count();
 
         $query = TeachingClass::query()
             ->with(['subject.kktps', 'teacher', 'academicYear', 'studentGrades'])
@@ -36,10 +47,23 @@ class TeachingClassController extends Controller
             ])
             ->where('academic_year_id', $academicYear->id);
 
+        $effectiveView = 'my';
         if (! $user->isAdmin()) {
             $query->where('teacher_id', $user->id);
-        } elseif ($request->filled('teacher_id')) {
-            $query->where('teacher_id', $request->integer('teacher_id'));
+            $effectiveView = 'my';
+        } else {
+            // Mode untuk akun administrator/wakasek:
+            if ($teacherFilter) {
+                $query->where('teacher_id', $teacherFilter);
+                $effectiveView = 'all';
+            } elseif ($viewMode === 'all') {
+                // Tampilkan seluruh kelas dewan guru (mode supervisi)
+                $effectiveView = 'all';
+            } else {
+                // Default tampilan admin: hanya kelas milik admin sendiri
+                $query->where('teacher_id', $user->id);
+                $effectiveView = 'my';
+            }
         }
 
         if ($gradeFilter) {
@@ -75,9 +99,13 @@ class TeachingClassController extends Controller
             ->orderByDesc('academic_year_id')
             ->orderBy('class_name');
 
-        if (! $user->isAdmin()) {
+        if (! $user->isAdmin() || $effectiveView === 'my') {
             $copyableClassesQuery->where('teacher_id', $user->id);
         }
+
+        $teachers = $user->isAdmin()
+            ? User::query()->where('is_active', true)->orderBy('name')->get()
+            : collect();
 
         return view('workspace.classes.index', [
             'classes' => $classes,
@@ -85,12 +113,16 @@ class TeachingClassController extends Controller
             'attendanceDaysByClass' => $attendanceDaysByClass,
             'subjects' => Subject::query()->where('is_active', true)->with('kktps')->orderBy('name')->get(),
             'gradeLevels' => $school->gradeLevels(),
-            'teachers' => $user->isAdmin() ? User::query()->where('role', 'guru')->where('is_active', true)->orderBy('name')->get() : collect(),
+            'teachers' => $teachers,
             'copyableClasses' => $copyableClassesQuery->get(),
+            'effectiveView' => $effectiveView,
+            'myClassesCount' => $myClassesCount,
+            'allClassesCount' => $allClassesCount,
             'filters' => [
                 'q' => $search,
                 'grade_level' => $gradeFilter,
-                'teacher_id' => $request->integer('teacher_id') ?: null,
+                'teacher_id' => $teacherFilter,
+                'view' => $viewMode,
             ],
         ]);
     }

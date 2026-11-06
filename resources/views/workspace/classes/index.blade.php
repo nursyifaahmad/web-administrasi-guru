@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
-@section('title', 'Daftar Kelas Administrasi')
-@section('page_title', 'Portofolio Buku Administrasi Kelas')
+@section('title', 'Buku Administrasi Kelas')
+@section('page_title', 'Buku Administrasi Kelas')
 
 @section('content')
 <div class="space-y-5"
@@ -20,9 +20,58 @@
             return this.schoolClasses.find(c => String(c.id) === String(this.selectedSchoolClassId)) || null;
         }
      }">
+
+    {{-- Tab Switcher Khusus Akun Admin/Wakasek --}}
+    @if(auth()->user()->isAdmin())
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+            <div class="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200/80 gap-1">
+                <a href="{{ route('classes.index') }}"
+                   class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition {{ $effectiveView === 'my' ? 'bg-white text-emerald-700 shadow-2xs border border-slate-200/70' : 'text-slate-600 hover:text-slate-900' }}">
+                    <svg class="w-4 h-4 {{ $effectiveView === 'my' ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                    <span>Kelas Saya</span>
+                    <span class="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold {{ $effectiveView === 'my' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700' }}">{{ $myClassesCount }}</span>
+                </a>
+                <a href="{{ route('classes.index', ['view' => 'all']) }}"
+                   class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition {{ $effectiveView === 'all' ? 'bg-white text-indigo-700 shadow-2xs border border-slate-200/70' : 'text-slate-600 hover:text-slate-900' }}">
+                    <svg class="w-4 h-4 {{ $effectiveView === 'all' ? 'text-indigo-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                    <span>Supervisi Seluruh Guru</span>
+                    <span class="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold {{ $effectiveView === 'all' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-700' }}">{{ $allClassesCount }}</span>
+                </a>
+            </div>
+
+            <div class="text-[11px] text-slate-500 pr-1">
+                @if($effectiveView === 'my')
+                    Menampilkan buku kelas yang diampu langsung oleh Anda (<strong>{{ auth()->user()->name }}</strong>).
+                @else
+                    Mode Supervisi Monitoring: Menampilkan buku kelas seluruh dewan guru sekolah.
+                @endif
+            </div>
+        </div>
+
+        @if($effectiveView === 'all')
+            <div class="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-200 text-indigo-950 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                        👁️
+                    </div>
+                    <div>
+                        <div class="font-bold text-indigo-900">Mode Supervisi Administrator: Monitoring Seluruh Kelas</div>
+                        <div class="text-[11px] text-indigo-700">Menampilkan buku administrasi KBM seluruh dewan guru untuk pemantauan jurnal mengajar, presensi, dan rekap nilai.</div>
+                    </div>
+                </div>
+                <a href="{{ route('classes.index') }}" class="px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-indigo-700 font-bold hover:bg-indigo-100 transition inline-flex items-center gap-1.5">
+                    <span>&larr; Kembali ke Kelas Saya</span>
+                </a>
+            </div>
+        @endif
+    @endif
+
     {{-- Toolbar Pencarian & Tambah Kelas --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <form method="GET" action="{{ route('classes.index') }}" class="flex flex-wrap items-center gap-2 flex-1">
+            @if(auth()->user()->isAdmin() && $effectiveView === 'all')
+                <input type="hidden" name="view" value="all">
+            @endif
             <input type="text" name="q" value="{{ $filters['q'] }}" placeholder="Cari nama kelas, mapel, atau wali kelas..."
                    class="w-full sm:w-64 rounded-xl border border-slate-300 px-3.5 py-2 text-xs">
             <select name="grade_level" onchange="this.form.submit()" class="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold">
@@ -31,15 +80,19 @@
                     <option value="{{ $lvl }}" @selected($filters['grade_level'] === $lvl)>Tingkat {{ $lvl }}</option>
                 @endforeach
             </select>
-            @if(auth()->user()->isAdmin())
+            @if(auth()->user()->isAdmin() && $effectiveView === 'all')
                 <select name="teacher_id" onchange="this.form.submit()" class="rounded-xl border border-slate-300 px-3 py-2 text-xs">
                     <option value="">Semua Guru</option>
                     @foreach($teachers as $t)
-                        <option value="{{ $t->id }}" @selected($filters['teacher_id'] === $t->id)>{{ $t->name }}</option>
+                        <option value="{{ $t->id }}" @selected($filters['teacher_id'] === $t->id)>{{ $t->name }} ({{ $t->role === 'admin' ? 'Admin' : 'Guru' }})</option>
                     @endforeach
                 </select>
             @endif
             <button type="submit" class="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800">Filter</button>
+            @if(!empty($filters['q']) || !empty($filters['grade_level']) || !empty($filters['teacher_id']))
+                <a href="{{ $effectiveView === 'all' ? route('classes.index', ['view' => 'all']) : route('classes.index') }}"
+                   class="px-2.5 py-2 rounded-xl text-slate-500 hover:text-slate-800 text-xs font-semibold">Reset</a>
+            @endif
         </form>
 
         <button type="button" @click="createClassModal = true"
@@ -50,19 +103,41 @@
 
     {{-- Grid Kartu Kelas (Mendukung 15+ Kelas dengan Rapi & Cepat) --}}
     @if($classes->isEmpty())
-        <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
-            <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-extrabold text-xl mb-3">
-                +
+        @if(auth()->user()->isAdmin() && $effectiveView === 'my')
+            <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-extrabold text-2xl mb-3">
+                    👤
+                </div>
+                <h3 class="text-base font-bold text-slate-900">Belum Ada Buku Kelas Administrasi Anda ({{ auth()->user()->name }})</h3>
+                <p class="text-xs text-slate-500 mt-1.5 max-w-md mx-auto leading-relaxed">
+                    Anda sedang login sebagai <strong>Administrator/Wakasek</strong> dan saat ini belum memiliki buku kelas mengajar pribadi yang diampu langsung pada periode {{ $selectedAcademicYear->full_label }}.
+                </p>
+                <div class="mt-5 flex flex-wrap items-center justify-center gap-3">
+                    <button type="button" @click="createClassModal = true"
+                            class="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-2xs transition">
+                        + Buat Kelas Saya Baru
+                    </button>
+                    <a href="{{ route('classes.index', ['view' => 'all']) }}"
+                       class="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 shadow-2xs transition">
+                        🏫 Lihat Seluruh Kelas Guru (Supervisi {{ $allClassesCount }} Kelas)
+                    </a>
+                </div>
             </div>
-            <h3 class="text-base font-bold text-slate-900">Belum Ada Buku Kelas Administrasi pada {{ $selectedAcademicYear->full_label }}</h3>
-            <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Anda dapat membuat 1 hingga 15+ kelas administrasi sesuai jadwal mengajar Anda, lalu mengimpor daftar murid dari Excel dalam hitungan detik.
-            </p>
-            <button type="button" @click="createClassModal = true"
-                    class="mt-4 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">
-                + Buat Kelas Pertama Sekarang
-            </button>
-        </div>
+        @else
+            <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-extrabold text-xl mb-3">
+                    +
+                </div>
+                <h3 class="text-base font-bold text-slate-900">Belum Ada Buku Kelas Administrasi pada {{ $selectedAcademicYear->full_label }}</h3>
+                <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                    Anda dapat membuat 1 hingga 15+ kelas administrasi sesuai jadwal mengajar Anda, lalu mengimpor daftar murid dari Excel dalam hitungan detik.
+                </p>
+                <button type="button" @click="createClassModal = true"
+                        class="mt-4 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">
+                    + Buat Kelas Pertama Sekarang
+                </button>
+            </div>
+        @endif
     @else
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             @foreach($classes as $cls)
@@ -157,8 +232,13 @@
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">Pemilik Kelas (Guru Pengampu) *</label>
                         <select name="teacher_id" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold">
-                            @foreach($teachers as $t)
-                                <option value="{{ $t->id }}">{{ $t->name }} (NIP. {{ $t->nip ?: '-' }})</option>
+                            <option value="{{ auth()->id() }}" @selected(old('teacher_id', auth()->id()) == auth()->id())>
+                                {{ auth()->user()->name }} (Saya / Administrator)
+                            </option>
+                            @foreach($teachers->where('id', '!=', auth()->id()) as $t)
+                                <option value="{{ $t->id }}" @selected(old('teacher_id') == $t->id)>
+                                    {{ $t->name }} ({{ $t->role === 'admin' ? 'Admin' : 'Guru' }} - NIP. {{ $t->nip ?: '-' }})
+                                </option>
                             @endforeach
                         </select>
                     </div>
