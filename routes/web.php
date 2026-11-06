@@ -35,9 +35,11 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 });
 
+// Logout (Mendukung POST & GET, tidak dibatasi auth agar jika session kedaluwarsa tetap sukses keluar)
+Route::match(['GET', 'POST'], '/logout', [AuthController::class, 'logout'])->name('logout');
+
 // Area Terautentikasi (Guru & Admin)
 Route::middleware(['auth', 'workspace'])->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::post('/switch-academic-year', [AuthController::class, 'switchAcademicYear'])->name('academic-year.switch');
 
     // Profil & Tanda Tangan Digital

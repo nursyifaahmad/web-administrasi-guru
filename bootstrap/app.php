@@ -14,11 +14,21 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->trustProxies(at: '*');
+        $middleware->validateCsrfTokens(except: [
+            'logout',
+        ]);
         $middleware->alias([
             'admin' => EnsureUserIsAdmin::class,
             'workspace' => ShareWorkspaceContext::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->render(function (\Illuminate\Session\TokenMismatchException $e, $request) {
+            if ($request->is('logout') || $request->routeIs('logout')) {
+                return redirect()->route('login')->with('status', 'Anda telah keluar dari sistem.');
+            }
+
+            return redirect()->guest(route('login'))
+                ->with('warning', 'Sesi Anda telah kedaluwarsa karena tidak ada aktivitas. Silakan login kembali.');
+        });
     })->create();

@@ -56,6 +56,12 @@
                 </div>
             @endif
 
+            @if(session('warning'))
+                <div class="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 text-xs text-amber-800 font-medium">
+                    {{ session('warning') }}
+                </div>
+            @endif
+
             @if($errors->any())
                 <div class="mt-4 rounded-xl bg-rose-50 border border-rose-200 px-3.5 py-2.5 text-xs text-rose-800 font-medium">
                     {{ $errors->first() }}
