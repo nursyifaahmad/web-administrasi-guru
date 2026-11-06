@@ -90,6 +90,7 @@ class SchoolScheduleBuilderTest extends TestCase
         $response->assertSee('4. Beban Guru');
         $response->assertSee('5. Metode');
         $response->assertSee('6. Konfirmasi');
+        $response->assertSee('Rekapitulasi Beban Jam Mengajar per Guru');
     }
 
     public function test_non_admin_cannot_access_builder(): void

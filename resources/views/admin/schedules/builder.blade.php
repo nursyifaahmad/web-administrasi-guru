@@ -268,27 +268,56 @@
             return this.workloads.reduce((sum, w) => sum + (parseInt(w.jp_count) || 0), 0);
         },
 
+        teacherSearchQuery: '',
+
         getTeacherSummary() {
             let map = {};
             for (let w of this.workloads) {
                 let key = w.teacher_name;
                 if (!map[key]) {
                     map[key] = {
+                        user_id: w.user_id,
                         name: w.teacher_name,
                         code: w.teacher_code,
                         subjects: {},
+                        classes: [],
+                        pagiJp: 0,
+                        siangJp: 0,
                         totalJp: 0,
-                        classesCount: 0
                     };
                 }
+                let jp = parseInt(w.jp_count) || 0;
                 if (!map[key].subjects[w.subject_name]) {
                     map[key].subjects[w.subject_name] = 0;
                 }
-                map[key].subjects[w.subject_name] += (parseInt(w.jp_count) || 0);
-                map[key].totalJp += (parseInt(w.jp_count) || 0);
-                map[key].classesCount++;
+                map[key].subjects[w.subject_name] += jp;
+                map[key].totalJp += jp;
+
+                if (!map[key].classes.includes(w.class_name)) {
+                    map[key].classes.push(w.class_name);
+                }
+
+                if (this.isSiangClass(w.class_name)) {
+                    map[key].siangJp += jp;
+                } else {
+                    map[key].pagiJp += jp;
+                }
             }
-            return Object.values(map);
+
+            let list = Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
+
+            if (this.teacherSearchQuery && this.teacherSearchQuery.trim() !== '') {
+                let q = this.teacherSearchQuery.toLowerCase().trim();
+                list = list.filter(t => t.name.toLowerCase().includes(q) || (t.code && t.code.toLowerCase().includes(q)));
+            }
+
+            return list;
+        },
+
+        removeTeacherWorkloads(teacherName) {
+            if (confirm('Hapus seluruh alokasi jam mengajar untuk guru ' + teacherName + '?')) {
+                this.workloads = this.workloads.filter(w => w.teacher_name !== teacherName);
+            }
         }
      }">
 
@@ -1066,6 +1095,136 @@
                                     </td>
                                 </tr>
                             </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {{-- TABEL REKAPITULASI JUMLAH JP MASING-MASING GURU --}}
+                <div class="space-y-3 pt-4 border-t border-slate-200">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                            <h3 class="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                                <span>📊 Rekapitulasi Beban Jam Mengajar per Guru</span>
+                                <span class="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-black"
+                                      x-text="getTeacherSummary().length + ' Guru Terdaftar'"></span>
+                            </h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">
+                                Akumulasi total jam mengajar masing-masing guru beserta status pemenuhan beban minimal sertifikasi (24 JP).
+                            </p>
+                        </div>
+
+                        {{-- Search Input Cepat Guru --}}
+                        <div class="flex items-center gap-2">
+                            <div class="relative">
+                                <input type="text" x-model="teacherSearchQuery" placeholder="Cari nama / kode guru..."
+                                       class="w-56 rounded-xl border border-slate-200 pl-8 pr-3 py-1.5 text-xs font-bold bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xs">
+                        <table class="w-full text-xs text-left">
+                            <thead class="bg-slate-100 text-slate-700 uppercase text-[10px] border-b border-slate-200">
+                                <tr>
+                                    <th class="px-3 py-2.5 text-center w-10">No</th>
+                                    <th class="px-3 py-2.5">Nama Guru</th>
+                                    <th class="px-3 py-2.5 text-center w-16">Kode</th>
+                                    <th class="px-3 py-2.5">Mata Pelajaran &amp; JP</th>
+                                    <th class="px-3 py-2.5">Rombel Sasaran</th>
+                                    <template x-if="shiftMode === 'double'">
+                                        <th class="px-3 py-2.5 text-center w-32">Rincian Shift</th>
+                                    </template>
+                                    <th class="px-3 py-2.5 text-center w-28">Total JP</th>
+                                    <th class="px-3 py-2.5 text-center w-36">Status Beban (24 JP)</th>
+                                    <th class="px-3 py-2.5 text-center w-16">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 bg-white">
+                                <template x-for="(t, tIdx) in getTeacherSummary()" :key="t.name">
+                                    <tr class="hover:bg-slate-50 transition">
+                                        <td class="px-3 py-2.5 text-center font-bold text-slate-400" x-text="tIdx + 1"></td>
+                                        <td class="px-3 py-2.5 font-bold text-slate-900">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px] flex items-center justify-center shrink-0"
+                                                     x-text="t.name.charAt(0).toUpperCase()"></div>
+                                                <span x-text="t.name"></span>
+                                            </div>
+                                        </td>
+                                        <td class="px-3 py-2.5 text-center font-mono font-extrabold text-emerald-800" x-text="t.code || '-'"></td>
+                                        <td class="px-3 py-2.5">
+                                            <div class="flex flex-wrap gap-1">
+                                                <template x-for="(jp, sName) in t.subjects" :key="sName">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 font-bold text-[10px]">
+                                                        <span x-text="sName"></span>
+                                                        <span class="text-emerald-700 font-extrabold" x-text="'(' + jp + ' JP)'"></span>
+                                                    </span>
+                                                </template>
+                                            </div>
+                                        </td>
+                                        <td class="px-3 py-2.5">
+                                            <div class="flex flex-wrap gap-1 items-center">
+                                                <template x-for="c in t.classes" :key="c">
+                                                    <span class="px-1.5 py-0.2 rounded font-extrabold text-[10px]"
+                                                          :class="isSiangClass(c) ? 'bg-amber-100 text-amber-900' : 'bg-blue-100 text-blue-900'"
+                                                          x-text="c"></span>
+                                                </template>
+                                                <span class="text-[10px] text-slate-400 font-bold ml-1" x-text="'(' + t.classes.length + ' Kelas)'"></span>
+                                            </div>
+                                        </td>
+                                        <template x-if="shiftMode === 'double'">
+                                            <td class="px-3 py-2.5 text-center text-[11px] font-bold">
+                                                <span class="text-emerald-700" x-text="'🌅 ' + t.pagiJp + ' JP'"></span>
+                                                <span class="text-slate-300 mx-1">|</span>
+                                                <span class="text-amber-800" x-text="'☀️ ' + t.siangJp + ' JP'"></span>
+                                            </td>
+                                        </template>
+                                        <td class="px-3 py-2.5 text-center">
+                                            <span class="px-2.5 py-1 rounded-xl font-black text-xs inline-block"
+                                                  :class="t.totalJp >= 24 ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-900'"
+                                                  x-text="t.totalJp + ' JP'"></span>
+                                        </td>
+                                        <td class="px-3 py-2.5 text-center">
+                                            <span x-show="t.totalJp >= 24"
+                                                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px]">
+                                                <span>✅ Terpenuhi</span>
+                                                <span class="text-[9px] opacity-75">(≥ 24)</span>
+                                            </span>
+                                            <span x-show="t.totalJp < 24"
+                                                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold text-[10px]">
+                                                <span>⚠️ Kurang</span>
+                                                <span class="text-[9px] opacity-75" x-text="'(-' + (24 - t.totalJp) + ' JP)'"></span>
+                                            </span>
+                                        </td>
+                                        <td class="px-3 py-2.5 text-center">
+                                            <button type="button" @click="removeTeacherWorkloads(t.name)" title="Hapus seluruh alokasi guru ini"
+                                                    class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <tr x-show="getTeacherSummary().length === 0">
+                                    <td colspan="9" class="px-4 py-6 text-center text-xs text-slate-400 italic">
+                                        Belum ada guru yang dialokasikan jam mengajar.
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tfoot x-show="getTeacherSummary().length > 0" class="bg-slate-50 font-bold text-xs text-slate-700 border-t border-slate-200">
+                                <tr>
+                                    <td colspan="3" class="px-3 py-2 text-slate-500 font-semibold"
+                                        x-text="'Total Guru: ' + getTeacherSummary().length + ' Orang'"></td>
+                                    <td colspan="2" class="px-3 py-2 text-right text-slate-500">
+                                        Rata-rata: <span class="font-extrabold text-slate-800" x-text="Math.round(getTotalJpAllocated() / (getTeacherSummary().length || 1)) + ' JP / Guru'"></span>
+                                    </td>
+                                    <template x-if="shiftMode === 'double'">
+                                        <td></td>
+                                    </template>
+                                    <td class="px-3 py-2 text-center font-black text-emerald-800"
+                                        x-text="getTotalJpAllocated() + ' JP'"></td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
