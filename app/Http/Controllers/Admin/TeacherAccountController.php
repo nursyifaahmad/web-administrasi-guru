@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\SchoolScheduleItem;
 use App\Models\SchoolScheduleTeacher;
+use App\Models\Subject;
+use App\Models\TeacherSubject;
 use App\Models\User;
 use App\Services\SchoolScheduleService;
+use App\Support\SignatureImageHelper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -20,6 +23,7 @@ class TeacherAccountController extends Controller
         $search = $request->string('q')->trim()->toString();
 
         $query = User::query()
+            ->with(['teacherSubjects.subject'])
             ->withCount([
                 'teachingClasses as total_classes_count',
                 'teachingClasses as semester_classes_count' => fn ($q) => $q->where('academic_year_id', $academicYear->id),
@@ -166,6 +170,7 @@ class TeacherAccountController extends Controller
             'users' => $query->get(),
             'search' => $search,
             'scheduleTeachers' => $scheduleTeachers,
+            'subjects' => Subject::query()->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 
@@ -180,7 +185,24 @@ class TeacherAccountController extends Controller
             'default_subject' => ['nullable', 'string', 'max:120'],
             'password' => ['required', 'string', 'min:6'],
             'schedule_codes' => ['nullable', 'string'],
+            'signature_data' => ['nullable', 'string'],
+            'signature_file' => ['nullable', 'image', 'max:2048'],
+            'teacher_subjects' => ['nullable', 'array'],
+            'teacher_subjects.*.subject_id' => ['required_with:teacher_subjects', 'exists:subjects,id'],
+            'teacher_subjects.*.teaching_code' => ['nullable', 'string', 'max:30'],
         ]);
+
+        $sigData = null;
+        if ($request->hasFile('signature_file')) {
+            $file = $request->file('signature_file');
+            $mime = $file->getMimeType() ?: 'image/png';
+            $rawBase64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file->getRealPath()));
+            $normalized = SignatureImageHelper::normalizeInk($rawBase64);
+            $sigData = $normalized['data_uri'] ?? $rawBase64;
+        } elseif (! empty($validated['signature_data'])) {
+            $normalized = SignatureImageHelper::normalizeInk($validated['signature_data']);
+            $sigData = $normalized['data_uri'] ?? $validated['signature_data'];
+        }
 
         $user = User::query()->create([
             'name' => $validated['name'],
@@ -189,9 +211,42 @@ class TeacherAccountController extends Controller
             'role' => $validated['role'],
             'phone' => $validated['phone'] ?? null,
             'default_subject' => $validated['default_subject'] ?? null,
+            'signature_data' => $sigData,
             'password' => $validated['password'],
             'is_active' => true,
         ]);
+
+        // Simpan penugasan mapel & kode mengajar
+        $assignedSubjectNames = [];
+        $extractedCodes = [];
+        if (! empty($validated['teacher_subjects']) && is_array($validated['teacher_subjects'])) {
+            foreach ($validated['teacher_subjects'] as $row) {
+                if (! empty($row['subject_id'])) {
+                    $tCode = ! empty($row['teaching_code']) ? trim($row['teaching_code']) : null;
+                    $ts = TeacherSubject::query()->updateOrCreate(
+                        [
+                            'user_id' => $user->id,
+                            'subject_id' => $row['subject_id'],
+                        ],
+                        [
+                            'teaching_code' => $tCode,
+                        ]
+                    );
+                    if ($ts->subject) {
+                        $assignedSubjectNames[] = $ts->subject->name;
+                    }
+                    if ($tCode) {
+                        $extractedCodes[] = $tCode;
+                    }
+                }
+            }
+        } elseif (! empty($validated['default_subject'])) {
+            $assignedSubjectNames[] = $validated['default_subject'];
+        }
+
+        if (! empty($assignedSubjectNames)) {
+            $user->update(['default_subject' => implode(', ', array_unique($assignedSubjectNames))]);
+        }
 
         $academicYear = $this->resolveAcademicYear($request);
         $scheduleService = app(SchoolScheduleService::class);
@@ -200,6 +255,11 @@ class TeacherAccountController extends Controller
         $scheduleCodes = [];
         if (! empty($validated['schedule_codes'])) {
             $scheduleCodes = array_filter(array_map('trim', explode(',', $validated['schedule_codes'])));
+        }
+
+        // Gabungkan juga kode dari penugasan mapel jika ada
+        if (! empty($extractedCodes)) {
+            $scheduleCodes = array_unique(array_merge($scheduleCodes, $extractedCodes));
         }
 
         // Jika tidak ada schedule_codes eksplisit, coba cocokkan berdasarkan nama
@@ -241,7 +301,7 @@ class TeacherAccountController extends Controller
             $integratedMsg = " dan otomatis terintegrasi ke Master Jadwal (Kode {$codesStr} • {$createdClassCount} buku kelas administrasi otomatis disiapkan).";
         }
 
-        return back()->with('success', "Akun {$user->name} berhasil dibuat{$integratedMsg}");
+        return back()->with('success', "Data Master Guru {$user->name} berhasil disimpan{$integratedMsg}");
     }
 
     public function update(Request $request, User $teacher): RedirectResponse
@@ -255,6 +315,12 @@ class TeacherAccountController extends Controller
             'default_subject' => ['nullable', 'string', 'max:120'],
             'password' => ['nullable', 'string', 'min:6'],
             'is_active' => ['nullable', 'boolean'],
+            'signature_data' => ['nullable', 'string'],
+            'signature_file' => ['nullable', 'image', 'max:2048'],
+            'remove_signature' => ['nullable', 'boolean'],
+            'teacher_subjects' => ['nullable', 'array'],
+            'teacher_subjects.*.subject_id' => ['required_with:teacher_subjects', 'exists:subjects,id'],
+            'teacher_subjects.*.teaching_code' => ['nullable', 'string', 'max:30'],
         ]);
 
         $payload = [
@@ -266,6 +332,19 @@ class TeacherAccountController extends Controller
             'default_subject' => $validated['default_subject'] ?? null,
         ];
 
+        if ($request->boolean('remove_signature')) {
+            $payload['signature_data'] = null;
+        } elseif ($request->hasFile('signature_file')) {
+            $file = $request->file('signature_file');
+            $mime = $file->getMimeType() ?: 'image/png';
+            $rawBase64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file->getRealPath()));
+            $normalized = SignatureImageHelper::normalizeInk($rawBase64);
+            $payload['signature_data'] = $normalized['data_uri'] ?? $rawBase64;
+        } elseif (! empty($validated['signature_data'])) {
+            $normalized = SignatureImageHelper::normalizeInk($validated['signature_data']);
+            $payload['signature_data'] = $normalized['data_uri'] ?? $validated['signature_data'];
+        }
+
         if ($teacher->id !== $request->user()->id && $request->has('is_active')) {
             $payload['is_active'] = $request->boolean('is_active');
         }
@@ -274,9 +353,63 @@ class TeacherAccountController extends Controller
             $payload['password'] = $validated['password'];
         }
 
+        // Sinkronkan penugasan mapel & kode mengajar jika dikirim
+        if ($request->has('teacher_subjects')) {
+            TeacherSubject::where('user_id', $teacher->id)->delete();
+            $assignedSubjectNames = [];
+            if (! empty($validated['teacher_subjects']) && is_array($validated['teacher_subjects'])) {
+                foreach ($validated['teacher_subjects'] as $row) {
+                    if (! empty($row['subject_id'])) {
+                        $ts = TeacherSubject::query()->create([
+                            'user_id' => $teacher->id,
+                            'subject_id' => $row['subject_id'],
+                            'teaching_code' => ! empty($row['teaching_code']) ? trim($row['teaching_code']) : null,
+                        ]);
+                        if ($ts->subject) {
+                            $assignedSubjectNames[] = $ts->subject->name;
+                        }
+                    }
+                }
+            }
+            if (! empty($assignedSubjectNames)) {
+                $payload['default_subject'] = implode(', ', array_unique($assignedSubjectNames));
+            }
+        }
+
         $teacher->update($payload);
 
-        return back()->with('success', "Data akun {$teacher->name} berhasil diperbarui.");
+        return back()->with('success', "Data Master Guru {$teacher->name} berhasil diperbarui.");
+    }
+
+    public function updateSignature(Request $request, User $teacher): RedirectResponse
+    {
+        if ($request->boolean('remove_signature')) {
+            $teacher->update(['signature_data' => null]);
+            return back()->with('success', "Tanda tangan digital {$teacher->name} berhasil dihapus.");
+        }
+
+        $sigData = null;
+        if ($request->hasFile('signature_file')) {
+            $request->validate([
+                'signature_file' => ['required', 'image', 'max:2048'],
+            ]);
+            $file = $request->file('signature_file');
+            $mime = $file->getMimeType() ?: 'image/png';
+            $rawBase64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file->getRealPath()));
+            $normalized = SignatureImageHelper::normalizeInk($rawBase64);
+            $sigData = $normalized['data_uri'] ?? $rawBase64;
+        } elseif ($request->filled('signature_data')) {
+            $raw = $request->input('signature_data');
+            $normalized = SignatureImageHelper::normalizeInk($raw);
+            $sigData = $normalized['data_uri'] ?? $raw;
+        }
+
+        if ($sigData) {
+            $teacher->update(['signature_data' => $sigData]);
+            return back()->with('success', "Tanda tangan digital {$teacher->name} berhasil diperbarui.");
+        }
+
+        return back()->with('error', 'Tidak ada data tanda tangan yang diunggah.');
     }
 
     public function toggleStatus(Request $request, User $teacher): RedirectResponse

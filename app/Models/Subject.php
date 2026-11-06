@@ -32,6 +32,18 @@ class Subject extends Model
         return $this->hasMany(TeachingClass::class);
     }
 
+    public function teacherSubjects(): HasMany
+    {
+        return $this->hasMany(TeacherSubject::class);
+    }
+
+    public function teachers(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'teacher_subjects')
+            ->withPivot('teaching_code')
+            ->withTimestamps();
+    }
+
     public function kktpForGrade(string $gradeLevel, ?int $globalDefault = null): int
     {
         if ($this->relationLoaded('kktps')) {

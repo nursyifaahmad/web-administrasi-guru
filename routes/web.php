@@ -48,10 +48,11 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
 
-        // Manajemen Akun Guru & Admin
+        // Master Guru & Akun Pengguna
         Route::get('/guru', [TeacherAccountController::class, 'index'])->name('teachers.index');
         Route::post('/guru', [TeacherAccountController::class, 'store'])->name('teachers.store');
         Route::put('/guru/{teacher}', [TeacherAccountController::class, 'update'])->name('teachers.update');
+        Route::patch('/guru/{teacher}/signature', [TeacherAccountController::class, 'updateSignature'])->name('teachers.signature.update');
         Route::patch('/guru/{teacher}/toggle', [TeacherAccountController::class, 'toggleStatus'])->name('teachers.toggle');
         Route::delete('/guru/{teacher}', [TeacherAccountController::class, 'destroy'])->name('teachers.destroy');
 

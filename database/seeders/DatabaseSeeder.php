@@ -112,6 +112,13 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
+        if (isset($subjectMap['MTK'])) {
+            \App\Models\TeacherSubject::query()->updateOrCreate(
+                ['user_id' => $guru1->id, 'subject_id' => $subjectMap['MTK']->id],
+                ['teaching_code' => '7']
+            );
+        }
+
         $guru2 = User::query()->updateOrCreate(
             ['email' => 'siti@sekolah.sch.id'],
             [
@@ -125,27 +132,34 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
+        if (isset($subjectMap['BIN'])) {
+            \App\Models\TeacherSubject::query()->updateOrCreate(
+                ['user_id' => $guru2->id, 'subject_id' => $subjectMap['BIN']->id],
+                ['teaching_code' => '4']
+            );
+        }
+
         $sampleStudents = [
-            ['nis' => '009812001', 'full' => 'Aditya Pratama Putra', 'nick' => 'Adit', 'g' => 'L'],
-            ['nis' => '009812002', 'full' => 'Aisyah Putri Ramadhani', 'nick' => 'Aisyah', 'g' => 'P'],
-            ['nis' => '009812003', 'full' => 'Bagas Dwi Saputra', 'nick' => 'Bagas', 'g' => 'L'],
-            ['nis' => '009812004', 'full' => 'Citra Lestari Ningsih', 'nick' => 'Citra', 'g' => 'P'],
-            ['nis' => '009812005', 'full' => 'Dimas Arya Nugraha', 'nick' => 'Dimas', 'g' => 'L'],
-            ['nis' => '009812006', 'full' => 'Fajar Siddiq Maulana', 'nick' => 'Fajar', 'g' => 'L'],
-            ['nis' => '009812007', 'full' => 'Gita Permata Sari', 'nick' => 'Gita', 'g' => 'P'],
-            ['nis' => '009812008', 'full' => 'Hafizurahman Alfarizi', 'nick' => 'Hafiz', 'g' => 'L'],
-            ['nis' => '009812009', 'full' => 'Indah Cahyani Putri', 'nick' => 'Indah', 'g' => 'P'],
-            ['nis' => '009812010', 'full' => 'Kevin Julio Firmansyah', 'nick' => 'Kevin', 'g' => 'L'],
-            ['nis' => '009812011', 'full' => 'Laila Nur Azizah', 'nick' => 'Laila', 'g' => 'P'],
-            ['nis' => '009812012', 'full' => 'Muhammad Rizky Fadillah', 'nick' => 'Rizky', 'g' => 'L'],
-            ['nis' => '009812013', 'full' => 'Nabila Syifa Azzahra', 'nick' => 'Nabila', 'g' => 'P'],
-            ['nis' => '009812014', 'full' => 'Putri Ayu Wandira', 'nick' => 'Ayu', 'g' => 'P'],
-            ['nis' => '009812015', 'full' => 'Rafi Ahmad Fauzan', 'nick' => 'Rafi', 'g' => 'L'],
-            ['nis' => '009812016', 'full' => 'Salma Khairunnisa', 'nick' => 'Salma', 'g' => 'P'],
-            ['nis' => '009812017', 'full' => 'Taufik Hidayatullah', 'nick' => 'Taufik', 'g' => 'L'],
-            ['nis' => '009812018', 'full' => 'Vina Melati Sukma', 'nick' => 'Vina', 'g' => 'P'],
-            ['nis' => '009812019', 'full' => 'Yoga Pratama Wijaya', 'nick' => 'Yoga', 'g' => 'L'],
-            ['nis' => '009812020', 'full' => 'Zahra Aulia Rahma', 'nick' => 'Zahra', 'g' => 'P'],
+            ['nis' => '009812001', 'full' => 'Aditya Pratama Putra', 'g' => 'L'],
+            ['nis' => '009812002', 'full' => 'Aisyah Putri Ramadhani', 'g' => 'P'],
+            ['nis' => '009812003', 'full' => 'Bagas Dwi Saputra', 'g' => 'L'],
+            ['nis' => '009812004', 'full' => 'Citra Lestari Ningsih', 'g' => 'P'],
+            ['nis' => '009812005', 'full' => 'Dimas Arya Nugraha', 'g' => 'L'],
+            ['nis' => '009812006', 'full' => 'Fajar Siddiq Maulana', 'g' => 'L'],
+            ['nis' => '009812007', 'full' => 'Gita Permata Sari', 'g' => 'P'],
+            ['nis' => '009812008', 'full' => 'Hafizurahman Alfarizi', 'g' => 'L'],
+            ['nis' => '009812009', 'full' => 'Indah Cahyani Putri', 'g' => 'P'],
+            ['nis' => '009812010', 'full' => 'Kevin Julio Firmansyah', 'g' => 'L'],
+            ['nis' => '009812011', 'full' => 'Laila Nur Azizah', 'g' => 'P'],
+            ['nis' => '009812012', 'full' => 'Muhammad Rizky Fadillah', 'g' => 'L'],
+            ['nis' => '009812013', 'full' => 'Nabila Syifa Azzahra', 'g' => 'P'],
+            ['nis' => '009812014', 'full' => 'Putri Ayu Wandira', 'g' => 'P'],
+            ['nis' => '009812015', 'full' => 'Rafi Ahmad Fauzan', 'g' => 'L'],
+            ['nis' => '009812016', 'full' => 'Salma Khairunnisa', 'g' => 'P'],
+            ['nis' => '009812017', 'full' => 'Taufik Hidayatullah', 'g' => 'L'],
+            ['nis' => '009812018', 'full' => 'Vina Melati Sukma', 'g' => 'P'],
+            ['nis' => '009812019', 'full' => 'Yoga Pratama Wijaya', 'g' => 'L'],
+            ['nis' => '009812020', 'full' => 'Zahra Aulia Rahma', 'g' => 'P'],
         ];
 
         $schoolClassesList = [
