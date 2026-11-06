@@ -1494,6 +1494,243 @@ CSV;
     }
 
     /**
+     * Ambil daftar alokasi mengajar unik seorang guru dari Master Jadwal Sekolah untuk tahun ajaran aktif.
+     * Mengembalikan Collection alokasi kelas (Rombel, Mapel, Total JP, Hari Mengajar, Jadwal Mengajar, Status Pembuatan).
+     *
+     * @return Collection<int, array>
+     */
+    public function getTeacherClassAllocations(AcademicYear $year, User $user): Collection
+    {
+        $scheduleTeacher = SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $year->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (! $scheduleTeacher && ! $user->isAdmin()) {
+            $allTeachers = SchoolScheduleTeacher::query()
+                ->where('academic_year_id', $year->id)
+                ->get();
+            $cleanU = self::cleanAlphaString($user->name);
+            $pureNameU = self::cleanAlphaString(explode(',', $user->name)[0]);
+            if (strlen($cleanU) >= 4) {
+                $scheduleTeacher = $allTeachers->first(function ($t) use ($cleanU, $pureNameU) {
+                    $cleanT = self::cleanAlphaString($t->name);
+                    $pureNameT = self::cleanAlphaString(explode(',', $t->name)[0]);
+                    return $cleanT === $cleanU
+                        || $pureNameT === $pureNameU
+                        || (strlen($pureNameU) >= 4 && strlen($pureNameT) >= 4 && ($pureNameT === $pureNameU || str_contains($pureNameT, $pureNameU) || str_contains($pureNameU, $pureNameT)));
+                });
+            }
+        }
+
+        $items = SchoolScheduleItem::query()
+            ->where('academic_year_id', $year->id)
+            ->where(function ($q) use ($user, $scheduleTeacher) {
+                $q->where('user_id', $user->id);
+                if ($scheduleTeacher) {
+                    $q->orWhere('teacher_code', $scheduleTeacher->code);
+                }
+            })
+            ->get()
+            ->filter(fn ($item) => ! $item->isCommonActivity());
+
+        if ($items->isEmpty()) {
+            return collect();
+        }
+
+        $schoolClasses = SchoolClass::query()
+            ->where('academic_year_id', $year->id)
+            ->withCount('activeStudents')
+            ->get();
+
+        $subjects = Subject::query()->where('is_active', true)->get();
+
+        $existingClasses = TeachingClass::query()
+            ->where('academic_year_id', $year->id)
+            ->where('teacher_id', $user->id)
+            ->get();
+
+        $grouped = $items->groupBy(fn ($i) => $i->class_name . '_' . ($i->subject_name ?: ''));
+
+        $allocations = collect();
+
+        foreach ($grouped as $key => $classItems) {
+            $first = $classItems->first();
+            $clsShort = $first->class_name;
+            $gradeNum = substr($clsShort, 0, 1);
+            $gradeRoman = match ($gradeNum) {
+                '7' => 'VII',
+                '8' => 'VIII',
+                '9' => 'IX',
+                default => 'VII',
+            };
+            $formattedClassName = $gradeRoman . '-' . substr($clsShort, 1);
+
+            $sc = $schoolClasses->first(function ($s) use ($formattedClassName, $clsShort) {
+                return $s->name === $formattedClassName 
+                    || str_replace('-', '', $s->name) === $clsShort
+                    || str_replace('-', ' ', $s->name) === $formattedClassName;
+            });
+
+            $matchedSubject = null;
+            if ($first->subject_id) {
+                $matchedSubject = $subjects->find($first->subject_id);
+            }
+            if (! $matchedSubject && $first->subject_name) {
+                $cleanSubj = self::cleanAlphaString($first->subject_name);
+                $matchedSubject = $subjects->first(function ($s) use ($cleanSubj) {
+                    $cleanName = self::cleanAlphaString($s->name);
+                    return str_contains($cleanName, $cleanSubj) || str_contains($cleanSubj, $cleanName);
+                });
+            }
+            if (! $matchedSubject && $scheduleTeacher?->subject) {
+                $cleanSubj = self::cleanAlphaString($scheduleTeacher->subject);
+                $matchedSubject = $subjects->first(function ($s) use ($cleanSubj) {
+                    $cleanName = self::cleanAlphaString($s->name);
+                    return str_contains($cleanName, $cleanSubj) || str_contains($cleanSubj, $cleanName);
+                });
+            }
+
+            $totalJp = $classItems->count();
+            $daysGrouped = $classItems->groupBy('day_of_week');
+            $teachingDays = $classItems->pluck('day_of_week')->unique()->sort()->values()->all();
+
+            $scheduleParts = [];
+            foreach ($daysGrouped as $dNum => $dItems) {
+                $dName = self::DAYS_MAP[$dNum] ?? 'Hari ' . $dNum;
+                $periods = $dItems->pluck('period_order')->filter(fn ($p) => $p > 0)->sort()->values();
+                $periodStr = $periods->count() > 1
+                    ? ('Jam ' . $periods->first() . '-' . $periods->last())
+                    : ($periods->count() === 1 ? ('Jam ' . $periods->first()) : '');
+
+                $times = $dItems->pluck('time_range')->filter()->values();
+                $timeStr = $times->isNotEmpty() ? $times->first() : '';
+                if ($times->count() > 1) {
+                    $firstStart = explode('-', $times->first())[0] ?? '';
+                    $lastEnd = explode('-', $times->last())[1] ?? '';
+                    if ($firstStart && $lastEnd) {
+                        $timeStr = trim($firstStart) . ' - ' . trim($lastEnd);
+                    }
+                }
+
+                $scheduleParts[] = trim("{$dName} {$periodStr} ({$timeStr})");
+            }
+            $scheduleInfoStr = implode(' • ', $scheduleParts);
+
+            // Cek apakah kelas ini sudah ada di TeachingClass
+            $existing = $existingClasses->first(function ($ec) use ($sc, $formattedClassName, $clsShort, $matchedSubject) {
+                $classMatches = ($sc && (int) $ec->school_class_id === (int) $sc->id)
+                    || $ec->class_name === $formattedClassName
+                    || $ec->class_name === $clsShort
+                    || str_replace(' ', '-', $ec->class_name) === $formattedClassName;
+
+                if (! $classMatches) {
+                    return false;
+                }
+
+                if ($matchedSubject && (int) $ec->subject_id !== (int) $matchedSubject->id) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            $allocations->push([
+                'key' => md5($user->id . '_' . $clsShort . '_' . ($matchedSubject?->id ?? $first->subject_name)),
+                'class_code' => $clsShort,
+                'class_name' => $sc ? $sc->name : $formattedClassName,
+                'grade_level' => $sc ? $sc->grade_level : $gradeRoman,
+                'school_class_id' => $sc?->id,
+                'school_class_name' => $sc?->name,
+                'active_students_count' => $sc?->active_students_count ?? 0,
+                'homeroom_teacher_name' => $sc?->homeroom_teacher_name ?: '-',
+                'homeroom_teacher_nip' => $sc?->homeroom_teacher_nip ?: '-',
+                'subject_id' => $matchedSubject?->id,
+                'subject_code' => $matchedSubject?->code,
+                'subject_name' => $matchedSubject?->name ?: ($first->subject_name ?: '-'),
+                'total_jp' => $totalJp,
+                'teaching_days' => $teachingDays,
+                'schedule_info' => $scheduleInfoStr,
+                'already_created' => (bool) $existing,
+                'existing_teaching_class_id' => $existing?->id,
+            ]);
+        }
+
+        return $allocations->sortBy('class_name')->values();
+    }
+
+    /**
+     * Sinkronkan / buat seluruh buku kelas mengajar guru yang belum dibuat dari Master Jadwal Sekolah.
+     */
+    public function syncTeacherClasses(AcademicYear $year, User $user): array
+    {
+        $allocations = $this->getTeacherClassAllocations($year, $user);
+        $createdCount = 0;
+        $syncedCount = 0;
+
+        DB::transaction(function () use ($allocations, $year, $user, &$createdCount, &$syncedCount) {
+            foreach ($allocations as $alloc) {
+                if ($alloc['already_created']) {
+                    // Update schedule_info & teaching_days jika ada perubahan
+                    TeachingClass::query()
+                        ->where('id', $alloc['existing_teaching_class_id'])
+                        ->update([
+                            'schedule_info' => $alloc['schedule_info'],
+                            'teaching_days' => $alloc['teaching_days'],
+                            'only_teaching_days' => true,
+                        ]);
+                    $syncedCount++;
+                    continue;
+                }
+
+                // Cari SchoolClass atau buat jika belum ada
+                $schoolClass = null;
+                if (! empty($alloc['school_class_id'])) {
+                    $schoolClass = SchoolClass::query()->find($alloc['school_class_id']);
+                }
+
+                if (! $schoolClass) {
+                    $schoolClass = SchoolClass::query()->firstOrCreate(
+                        [
+                            'academic_year_id' => $year->id,
+                            'name' => $alloc['class_name'],
+                        ],
+                        [
+                            'grade_level' => $alloc['grade_level'],
+                            'homeroom_teacher_name' => $alloc['homeroom_teacher_name'] !== '-' ? $alloc['homeroom_teacher_name'] : '-',
+                            'homeroom_teacher_nip' => $alloc['homeroom_teacher_nip'] !== '-' ? $alloc['homeroom_teacher_nip'] : null,
+                        ]
+                    );
+                }
+
+                $cls = TeachingClass::query()->create([
+                    'teacher_id' => $user->id,
+                    'academic_year_id' => $year->id,
+                    'school_class_id' => $schoolClass->id,
+                    'subject_id' => $alloc['subject_id'],
+                    'grade_level' => $alloc['grade_level'],
+                    'class_name' => $schoolClass->name,
+                    'schedule_info' => $alloc['schedule_info'],
+                    'teaching_days' => $alloc['teaching_days'],
+                    'only_teaching_days' => true,
+                    'homeroom_teacher_name' => $schoolClass->homeroom_teacher_name ?: '-',
+                    'homeroom_teacher_nip' => $schoolClass->homeroom_teacher_nip,
+                    'homeroom_teacher_signature' => $schoolClass->homeroom_teacher_signature,
+                ]);
+
+                $cls->ensureDefaultsInitialized();
+                $createdCount++;
+            }
+        });
+
+        return [
+            'created' => $createdCount,
+            'updated' => $syncedCount,
+            'total' => $allocations->count(),
+        ];
+    }
+
+    /**
      * Ambil daftar 21 Wali Kelas resmi (Tingkat VII, VIII, IX) yang diurutkan rapi berdasarkan kelas (7A s.d. 9G).
      *
      * @return Collection<int, array{class_code: string, class_label: string, class_roman: string, grade_level: string, teacher_name: string, teacher_code: ?string}>

@@ -7,7 +7,17 @@
 <div class="space-y-5"
      x-data="{
         createClassModal: false,
+        selectedTeacherId: '{{ auth()->id() }}',
+        allocations: @js($scheduleAllocations),
+        selectedAllocKey: '',
+        useScheduleMode: true,
+        isLoadingAllocations: false,
+
         selectedSchoolClassId: '{{ $schoolClasses->first()?->id ?? '' }}',
+        selectedSubjectId: '{{ $subjects->first()?->id ?? '' }}',
+        scheduleInfoText: '',
+        teachingDaysJson: '',
+
         schoolClasses: @js($schoolClasses->map(fn($sc) => [
             'id' => (string) $sc->id,
             'name' => $sc->name,
@@ -16,8 +26,73 @@
             'homeroom_teacher_nip' => $sc->homeroom_teacher_nip ?: '-',
             'active_students_count' => $sc->active_students_count,
         ])),
+
         get selectedRombel() {
             return this.schoolClasses.find(c => String(c.id) === String(this.selectedSchoolClassId)) || null;
+        },
+
+        get currentAllocation() {
+            return this.allocations.find(a => a.key === this.selectedAllocKey) || null;
+        },
+
+        get pendingAllocations() {
+            return this.allocations.filter(a => !a.already_created);
+        },
+
+        onTeacherChanged() {
+            if (!this.selectedTeacherId) return;
+            this.isLoadingAllocations = true;
+            fetch('{{ route('classes.schedule-allocations') }}?teacher_id=' + this.selectedTeacherId)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        this.allocations = data.allocations || [];
+                        this.autoSelectFirstPending();
+                    }
+                })
+                .catch(err => console.error(err))
+                .finally(() => {
+                    this.isLoadingAllocations = false;
+                });
+        },
+
+        onAllocationSelected() {
+            const alloc = this.currentAllocation;
+            if (!alloc) return;
+
+            if (alloc.school_class_id) {
+                this.selectedSchoolClassId = String(alloc.school_class_id);
+            } else {
+                const matchSc = this.schoolClasses.find(sc => sc.name === alloc.class_name);
+                if (matchSc) {
+                    this.selectedSchoolClassId = String(matchSc.id);
+                }
+            }
+
+            if (alloc.subject_id) {
+                this.selectedSubjectId = String(alloc.subject_id);
+            }
+
+            this.scheduleInfoText = alloc.schedule_info || '';
+            this.teachingDaysJson = JSON.stringify(alloc.teaching_days || []);
+        },
+
+        autoSelectFirstPending() {
+            this.selectedAllocKey = '';
+            const firstPending = this.allocations.find(a => !a.already_created);
+            if (firstPending) {
+                this.selectedAllocKey = firstPending.key;
+                this.onAllocationSelected();
+            } else {
+                this.selectedSchoolClassId = '{{ $schoolClasses->first()?->id ?? '' }}';
+                this.selectedSubjectId = '{{ $subjects->first()?->id ?? '' }}';
+                this.scheduleInfoText = '';
+                this.teachingDaysJson = '';
+            }
+        },
+
+        init() {
+            this.autoSelectFirstPending();
         }
      }">
 
@@ -95,10 +170,27 @@
             @endif
         </form>
 
-        <button type="button" @click="createClassModal = true"
-                class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-2xs transition">
-            <span>+ Buat Kelas Administrasi Baru</span>
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+            @php
+                $pendingScheduleCount = $scheduleAllocations->where('already_created', false)->count();
+            @endphp
+            @if($pendingScheduleCount > 0 && (!auth()->user()->isAdmin() || $effectiveView === 'my'))
+                <form method="POST" action="{{ route('classes.sync-from-schedule') }}" class="inline">
+                    @csrf
+                    <input type="hidden" name="teacher_id" value="{{ auth()->id() }}">
+                    <button type="submit"
+                            title="Buat sekaligus seluruh {{ $pendingScheduleCount }} kelas mengajar Anda sesuai Master Jadwal Sekolah"
+                            class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-2xs transition">
+                        <span>⚡ Buat Sekaligus dari Jadwal ({{ $pendingScheduleCount }} Kelas)</span>
+                    </button>
+                </form>
+            @endif
+
+            <button type="button" @click="createClassModal = true; autoSelectFirstPending()"
+                    class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-2xs transition">
+                <span>+ Buat Kelas Administrasi Baru</span>
+            </button>
+        </div>
     </div>
 
     {{-- Grid Kartu Kelas (Mendukung 15+ Kelas dengan Rapi & Cepat) --}}
@@ -126,16 +218,32 @@
         @else
             <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
                 <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-extrabold text-xl mb-3">
-                    +
+                    📚
                 </div>
                 <h3 class="text-base font-bold text-slate-900">Belum Ada Buku Kelas Administrasi pada {{ $selectedAcademicYear->full_label }}</h3>
                 <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                    Anda dapat membuat 1 hingga 15+ kelas administrasi sesuai jadwal mengajar Anda, lalu mengimpor daftar murid dari Excel dalam hitungan detik.
+                    @if($scheduleAllocations->isNotEmpty())
+                        Master Jadwal Sekolah mendeteksi Anda memiliki <strong>{{ $scheduleAllocations->count() }} rombel mengajar</strong>. Anda dapat membuat sekaligus seluruh buku kelas atau membuatnya satu per satu dengan panduan resmi.
+                    @else
+                        Anda dapat membuat 1 hingga 15+ kelas administrasi sesuai jadwal mengajar Anda, lalu mengimpor daftar murid dari Excel dalam hitungan detik.
+                    @endif
                 </p>
-                <button type="button" @click="createClassModal = true"
-                        class="mt-4 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">
-                    + Buat Kelas Pertama Sekarang
-                </button>
+                <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
+                    @if($pendingScheduleCount > 0)
+                        <form method="POST" action="{{ route('classes.sync-from-schedule') }}" class="inline">
+                            @csrf
+                            <input type="hidden" name="teacher_id" value="{{ auth()->id() }}">
+                            <button type="submit"
+                                    class="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-2xs transition">
+                                ⚡ Buat Sekaligus dari Master Jadwal ({{ $pendingScheduleCount }} Kelas)
+                            </button>
+                        </form>
+                    @endif
+                    <button type="button" @click="createClassModal = true; autoSelectFirstPending()"
+                            class="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-2xs transition">
+                        + Buat Kelas Baru Terpandu
+                    </button>
+                </div>
             </div>
         @endif
     @else
@@ -226,12 +334,21 @@
                 </div>
                 <button type="button" @click="createClassModal = false" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
             </div>
+            <form id="syncFromScheduleModalForm" method="POST" action="{{ route('classes.sync-from-schedule') }}" class="hidden">
+                @csrf
+                <input type="hidden" name="teacher_id" :value="selectedTeacherId">
+            </form>
+
             <form method="POST" action="{{ route('classes.store') }}" class="p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
                 @csrf
                 @if(auth()->user()->isAdmin())
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">Pemilik Kelas (Guru Pengampu) *</label>
-                        <select name="teacher_id" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold">
+                        <select name="teacher_id"
+                                x-model="selectedTeacherId"
+                                @change="onTeacherChanged()"
+                                required
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold">
                             <option value="{{ auth()->id() }}" @selected(old('teacher_id', auth()->id()) == auth()->id())>
                                 {{ auth()->user()->name }} (Saya / Administrator)
                             </option>
@@ -242,18 +359,87 @@
                             @endforeach
                         </select>
                     </div>
+                @else
+                    <input type="hidden" name="teacher_id" :value="selectedTeacherId">
                 @endif
+
+                {{-- Banner Master Jadwal Sekolah --}}
+                <div x-show="isLoadingAllocations" class="p-3 rounded-xl bg-slate-100 text-slate-600 flex items-center gap-2 text-xs">
+                    <svg class="animate-spin w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span>Memuat alokasi mengajar Master Jadwal Sekolah...</span>
+                </div>
+
+                <div x-show="!isLoadingAllocations && allocations.length > 0" class="p-3.5 rounded-xl bg-emerald-50/90 border border-emerald-200 text-emerald-950 space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">📅</span>
+                            <div class="text-xs font-bold text-emerald-900">
+                                Jadwal Resmi Wakasek: <span x-text="allocations.length + ' Rombel'"></span>
+                                (<span x-text="allocations.reduce((acc, a) => acc + (a.total_jp || 0), 0) + ' JP'"></span>)
+                            </div>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                              :class="pendingAllocations.length > 0 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-200 text-emerald-900'"
+                              x-text="pendingAllocations.length > 0 ? pendingAllocations.length + ' Belum Dibuat' : 'Semua Sudah Dibuat ✓'">
+                        </span>
+                    </div>
+
+                    <div x-show="pendingAllocations.length > 0" class="pt-1.5 border-t border-emerald-200/70 flex items-center justify-between gap-2">
+                        <span class="text-[11px] text-emerald-800">
+                            Ingin cepat? Buat seluruh <strong x-text="pendingAllocations.length"></strong> buku kelas dari Master Jadwal sekaligus:
+                        </span>
+                        <button type="submit"
+                                form="syncFromScheduleModalForm"
+                                class="px-3 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shrink-0 transition shadow-2xs">
+                            ⚡ Buat Sekaligus
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Selector Pintar: Pilih Alokasi Mengajar Resmi --}}
+                <div x-show="!isLoadingAllocations && allocations.length > 0 && useScheduleMode" class="space-y-1">
+                    <label class="block font-bold text-slate-700">
+                        Pilih Kelas Mengajar dari Master Jadwal Sekolah *
+                    </label>
+                    <select x-model="selectedAllocKey"
+                            @change="onAllocationSelected()"
+                            class="w-full rounded-xl border border-emerald-400 bg-emerald-50/40 px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500">
+                        <option value="" disabled>— Pilih Alokasi Mengajar Resmi Anda —</option>
+                        <template x-for="alloc in allocations" :key="alloc.key">
+                            <option :value="alloc.key"
+                                    :disabled="alloc.already_created"
+                                    :class="alloc.already_created ? 'text-slate-400 bg-slate-100' : 'text-slate-900 font-bold'">
+                                <span x-text="(alloc.already_created ? '✓ [Sudah Dibuat] ' : '⭐ [Siap Dibuat] ') + alloc.class_name + ' • ' + alloc.subject_name + ' (' + alloc.total_jp + ' JP • ' + alloc.schedule_info + ')'"></span>
+                            </option>
+                        </template>
+                    </select>
+                    <div class="flex items-center justify-between text-[11px] text-slate-500">
+                        <span>Rombel, Mapel, dan Jam terisi otomatis sesuai Master Jadwal Wakasek.</span>
+                        <button type="button" @click="useScheduleMode = false" class="text-emerald-700 hover:underline font-semibold">
+                            Mode Mandiri &rarr;
+                        </button>
+                    </div>
+                </div>
+
+                <div x-show="!isLoadingAllocations && allocations.length > 0 && !useScheduleMode" class="p-2.5 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
+                    <span>Mode pengisian mandiri aktif (di luar jadwal resmi).</span>
+                    <button type="button" @click="useScheduleMode = true; onAllocationSelected()" class="text-emerald-700 hover:underline font-bold">
+                        &larr; Kembali ke Master Jadwal
+                    </button>
+                </div>
 
                 {{-- Pilihan Rombongan Belajar Terpusat --}}
                 @if($schoolClasses->isNotEmpty())
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">
                             Pilih Rombongan Belajar (Rombel) @if(!auth()->user()->isAdmin()) * @endif
+                            <span x-show="useScheduleMode && currentAllocation" class="text-[10px] text-emerald-600 font-extrabold">(Sesuai Jadwal)</span>
                         </label>
                         <select name="school_class_id"
                                 x-model="selectedSchoolClassId"
+                                :disabled="useScheduleMode && currentAllocation"
                                 @if(!auth()->user()->isAdmin()) required @endif
-                                class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-800 bg-white">
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold text-slate-800 bg-white disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed">
                             @if(auth()->user()->isAdmin())
                                 <option value="">— Buat Rombel Bebas / Mandiri (Tanpa Rombel Terpusat) —</option>
                             @else
@@ -265,6 +451,9 @@
                                 </option>
                             @endforeach
                         </select>
+                        <template x-if="useScheduleMode && currentAllocation">
+                            <input type="hidden" name="school_class_id" :value="selectedSchoolClassId">
+                        </template>
                     </div>
 
                     {{-- Card Info Rombel Terpilih --}}
@@ -297,8 +486,15 @@
                 {{-- Mata Pelajaran & Jadwal --}}
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="sm:col-span-2">
-                        <label class="block font-bold text-slate-700 mb-1">Mata Pelajaran *</label>
-                        <select name="subject_id" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold">
+                        <label class="block font-bold text-slate-700 mb-1">
+                            Mata Pelajaran *
+                            <span x-show="useScheduleMode && currentAllocation" class="text-[10px] text-emerald-600 font-extrabold">(Sesuai Jadwal)</span>
+                        </label>
+                        <select name="subject_id"
+                                x-model="selectedSubjectId"
+                                :disabled="useScheduleMode && currentAllocation"
+                                required
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed">
                             @foreach($subjects as $sub)
                                 @php
                                     $hasCode = str_contains(strtoupper($sub->name), '(' . strtoupper($sub->code) . ')');
@@ -306,11 +502,23 @@
                                 <option value="{{ $sub->id }}">{{ $hasCode ? $sub->name : "{$sub->name} ({$sub->code})" }}</option>
                             @endforeach
                         </select>
+                        <template x-if="useScheduleMode && currentAllocation">
+                            <input type="hidden" name="subject_id" :value="selectedSubjectId">
+                        </template>
                     </div>
                     <div>
-                        <label class="block font-bold text-slate-700 mb-1">Jadwal Mengajar</label>
-                        <input type="text" name="schedule_info" placeholder="Misal: Sen (1-2)"
-                               class="w-full rounded-xl border border-slate-300 px-3 py-2">
+                        <label class="block font-bold text-slate-700 mb-1">
+                            Jadwal Mengajar
+                            <span x-show="useScheduleMode && currentAllocation" class="text-[10px] text-emerald-600 font-extrabold">(Terkunci)</span>
+                        </label>
+                        <input type="text"
+                               name="schedule_info"
+                               x-model="scheduleInfoText"
+                               :readonly="useScheduleMode && currentAllocation"
+                               placeholder="Misal: Sen (1-2)"
+                               class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs"
+                               :class="useScheduleMode && currentAllocation ? 'bg-slate-100 text-slate-700 font-semibold cursor-not-allowed' : 'bg-white'">
+                        <input type="hidden" name="teaching_days" :value="teachingDaysJson">
                     </div>
                 </div>
 
@@ -365,7 +573,12 @@
 
                 <div class="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-slate-100 shrink-0">
                     <button type="button" @click="createClassModal = false" class="w-full sm:w-auto px-4 py-2 rounded-xl border border-slate-300 font-semibold text-center">Batal</button>
-                    <button type="submit" class="w-full sm:w-auto px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-2xs text-center">Buat Kelas Sekarang</button>
+                    <button type="submit"
+                            :disabled="useScheduleMode && currentAllocation && currentAllocation.already_created"
+                            class="w-full sm:w-auto px-5 py-2 rounded-xl font-bold text-center shadow-2xs transition"
+                            :class="(useScheduleMode && currentAllocation && currentAllocation.already_created) ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'">
+                        <span x-text="(useScheduleMode && currentAllocation) ? (currentAllocation.already_created ? 'Buku Kelas ' + currentAllocation.class_name + ' Sudah Dibuat' : '+ Buat Buku Kelas ' + currentAllocation.class_name) : 'Buat Kelas Sekarang'"></span>
+                    </button>
                 </div>
             </form>
         </div>

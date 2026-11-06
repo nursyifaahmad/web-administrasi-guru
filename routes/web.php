@@ -113,6 +113,8 @@ Route::middleware(['auth', 'workspace'])->group(function () {
 
     // Ruang Kerja Kelas Administrasi (Guru 1..15+ Kelas & Kontrol Admin)
     Route::get('/jadwal-mengajar', [TeachingScheduleController::class, 'index'])->name('schedules.index');
+    Route::get('/kelas/schedule-allocations', [TeachingClassController::class, 'scheduleAllocations'])->name('classes.schedule-allocations');
+    Route::post('/kelas/sync-from-schedule', [TeachingClassController::class, 'syncFromSchedule'])->name('classes.sync-from-schedule');
     Route::get('/kelas', [TeachingClassController::class, 'index'])->name('classes.index');
     Route::post('/kelas', [TeachingClassController::class, 'store'])->name('classes.store');
     Route::put('/kelas/{teachingClass}', [TeachingClassController::class, 'update'])->name('classes.update');

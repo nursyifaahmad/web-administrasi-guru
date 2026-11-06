@@ -11,6 +11,8 @@ use App\Models\TeachingClass;
 use App\Models\User;
 use App\Services\ExcelExportImportService;
 use App\Services\GradeCalculationService;
+use App\Services\SchoolScheduleService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -107,6 +109,9 @@ class TeachingClassController extends Controller
             ? User::query()->where('is_active', true)->orderBy('name')->get()
             : collect();
 
+        $scheduleService = app(SchoolScheduleService::class);
+        $scheduleAllocations = $scheduleService->getTeacherClassAllocations($academicYear, $user);
+
         return view('workspace.classes.index', [
             'classes' => $classes,
             'schoolClasses' => $schoolClasses,
@@ -118,6 +123,7 @@ class TeachingClassController extends Controller
             'effectiveView' => $effectiveView,
             'myClassesCount' => $myClassesCount,
             'allClassesCount' => $allClassesCount,
+            'scheduleAllocations' => $scheduleAllocations,
             'filters' => [
                 'q' => $search,
                 'grade_level' => $gradeFilter,
@@ -125,6 +131,47 @@ class TeachingClassController extends Controller
                 'view' => $viewMode,
             ],
         ]);
+    }
+
+    public function scheduleAllocations(Request $request, SchoolScheduleService $scheduleService): JsonResponse
+    {
+        $user = $request->user();
+        $targetUser = $user;
+        if ($user->isAdmin() && $request->filled('teacher_id')) {
+            $targetUser = User::query()->find($request->integer('teacher_id')) ?? $user;
+        }
+
+        $academicYear = $this->resolveAcademicYear($request);
+        $allocations = $scheduleService->getTeacherClassAllocations($academicYear, $targetUser);
+
+        return response()->json([
+            'status' => 'success',
+            'teacher_id' => $targetUser->id,
+            'teacher_name' => $targetUser->name,
+            'total_allocations' => $allocations->count(),
+            'pending_count' => $allocations->where('already_created', false)->count(),
+            'created_count' => $allocations->where('already_created', true)->count(),
+            'allocations' => $allocations->values(),
+        ]);
+    }
+
+    public function syncFromSchedule(Request $request, SchoolScheduleService $scheduleService): RedirectResponse
+    {
+        $user = $request->user();
+        $targetUser = $user;
+        if ($user->isAdmin() && $request->filled('teacher_id')) {
+            $targetUser = User::query()->find($request->integer('teacher_id')) ?? $user;
+        }
+
+        $academicYear = $this->resolveAcademicYear($request);
+        $result = $scheduleService->syncTeacherClasses($academicYear, $targetUser);
+
+        $msg = "Berhasil memproses buku kelas dari Master Jadwal Sekolah: {$result['created']} kelas baru dibuat, {$result['updated']} kelas diperbarui datanya.";
+        if ($result['created'] === 0 && $result['updated'] === 0) {
+            $msg = "Seluruh kelas mengajar ({$result['total']} kelas) sesuai Master Jadwal sudah ada dan up-to-date.";
+        }
+
+        return redirect()->route('classes.index')->with('success', $msg);
     }
 
     public function store(Request $request): RedirectResponse
@@ -139,6 +186,7 @@ class TeachingClassController extends Controller
             'grade_level' => ['required_without:school_class_id', 'nullable', 'string', 'max:20'],
             'class_name' => ['required_without:school_class_id', 'nullable', 'string', 'max:60'],
             'schedule_info' => ['nullable', 'string', 'max:180'],
+            'teaching_days' => ['nullable'],
             'homeroom_teacher_name' => ['required_without:school_class_id', 'nullable', 'string', 'max:180'],
             'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
             'copy_students_from_class_id' => ['nullable', 'exists:teaching_classes,id'],
@@ -148,12 +196,34 @@ class TeachingClassController extends Controller
             ? (int) $validated['teacher_id']
             : $user->id;
 
-        $createdClass = DB::transaction(function () use ($validated, $ownerId, $academicYear, $user) {
-            $schoolClass = ! empty($validated['school_class_id'])
-                ? SchoolClass::query()->findOrFail($validated['school_class_id'])
-                : null;
+        $schoolClass = ! empty($validated['school_class_id'])
+            ? SchoolClass::query()->find($validated['school_class_id'])
+            : null;
 
-            $className = $schoolClass ? $schoolClass->name : trim($validated['class_name'] ?? '');
+        $className = $schoolClass ? $schoolClass->name : trim($validated['class_name'] ?? '');
+
+        // Cegah pembuatan buku kelas duplikat untuk rombel dan mapel yang sama oleh guru yang sama
+        $duplicateCheck = TeachingClass::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->where('teacher_id', $ownerId)
+            ->where('subject_id', (int) $validated['subject_id'])
+            ->where(function ($q) use ($schoolClass, $className) {
+                if ($schoolClass) {
+                    $q->where('school_class_id', $schoolClass->id)
+                      ->orWhere('class_name', $schoolClass->name);
+                } else {
+                    $q->where('class_name', $className);
+                }
+            })
+            ->first();
+
+        if ($duplicateCheck) {
+            return redirect()
+                ->route('classes.index')
+                ->with('warning', "Buku kelas untuk {$duplicateCheck->class_name} ({$duplicateCheck->subject->name}) sudah pernah dibuat sebelumnya. Anda tidak dapat membuat buku kelas duplikat.");
+        }
+
+        $createdClass = DB::transaction(function () use ($validated, $ownerId, $academicYear, $user, $schoolClass, $className) {
             $gradeLevel = $schoolClass ? $schoolClass->grade_level : strtoupper(trim($validated['grade_level'] ?? 'VII'));
             $wkName = $schoolClass ? $schoolClass->homeroom_teacher_name : trim($validated['homeroom_teacher_name'] ?? '-');
             $wkNip = $schoolClass ? $schoolClass->homeroom_teacher_nip : ($validated['homeroom_teacher_nip'] ?? null);
@@ -173,6 +243,9 @@ class TeachingClassController extends Controller
                 );
             }
 
+            $rawDays = $validated['teaching_days'] ?? null;
+            $teachingDays = is_array($rawDays) ? $rawDays : (is_string($rawDays) && str_starts_with($rawDays, '[') ? json_decode($rawDays, true) : null);
+
             $cls = TeachingClass::query()->create([
                 'teacher_id' => $ownerId,
                 'academic_year_id' => $academicYear->id,
@@ -181,6 +254,8 @@ class TeachingClassController extends Controller
                 'grade_level' => $gradeLevel,
                 'class_name' => $className,
                 'schedule_info' => $validated['schedule_info'] ?? null,
+                'teaching_days' => $teachingDays,
+                'only_teaching_days' => ! empty($teachingDays),
                 'homeroom_teacher_name' => $wkName,
                 'homeroom_teacher_nip' => $wkNip,
                 'homeroom_teacher_signature' => $wkSig,
