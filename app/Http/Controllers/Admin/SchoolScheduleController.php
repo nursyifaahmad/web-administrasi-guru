@@ -94,6 +94,7 @@ class SchoolScheduleController extends Controller
 
         $defaultConfig = $this->scheduleService->getDefaultTimeGridConfig();
         $initialGrid = $this->scheduleService->calculateTimeGrid($defaultConfig);
+        $defaultClassesSiang = ['8A', '8B', '8C', '8D', '8E', '8F', '8G'];
 
         $schoolClasses = SchoolClass::query()
             ->where('academic_year_id', $academicYear->id)
@@ -127,6 +128,7 @@ class SchoolScheduleController extends Controller
             'scheduleTeachers' => $scheduleTeachers,
             'subjects' => $subjects,
             'defaultConfig' => $defaultConfig,
+            'defaultClassesSiang' => $defaultClassesSiang,
             'initialGrid' => $initialGrid,
             'school' => $school,
         ]);
@@ -166,6 +168,9 @@ class SchoolScheduleController extends Controller
         }
         if (is_string($request->input('selected_classes'))) {
             $payload['selected_classes'] = json_decode($request->input('selected_classes'), true) ?: [];
+        }
+        if (is_string($request->input('classes_siang'))) {
+            $payload['classes_siang'] = json_decode($request->input('classes_siang'), true) ?: [];
         }
 
         $result = $this->scheduleService->buildScheduleFromWizard($academicYear, $payload);

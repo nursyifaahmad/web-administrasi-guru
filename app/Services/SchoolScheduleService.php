@@ -742,6 +742,7 @@ CSV;
         return [
             'jp_duration' => 40,
             'start_time' => '07:00',
+            'start_time_siang' => '12:15',
             'days_count' => 6,
             'daily_jp' => [
                 1 => 7, // Senin (7 JP)
@@ -764,7 +765,7 @@ CSV;
     }
 
     /**
-     * Kalkulasi matematis pembagian jam pelajaran dan kegiatan non-KBM per hari
+     * Kalkulasi matematis pembagian jam pelajaran dan kegiatan non-KBM per hari (Pagi & Siang)
      */
     public function calculateTimeGrid(array $config = []): array
     {
@@ -775,6 +776,7 @@ CSV;
         }
 
         $startTimeStr = $config['start_time'] ?? $defaults['start_time'];
+        $startTimeSiangStr = $config['start_time_siang'] ?? $defaults['start_time_siang'];
         $daysCount = (int) ($config['days_count'] ?? $defaults['days_count']);
         if ($daysCount < 5 || $daysCount > 6) {
             $daysCount = 6;
@@ -787,18 +789,18 @@ CSV;
         $dayNames = self::DAYS_MAP;
 
         for ($d = 1; $d <= $daysCount; $d++) {
-            $curMinutes = self::parseTimeToMinutes($startTimeStr);
-            $slots = [];
+            $curMinutesPagi = self::parseTimeToMinutes($startTimeStr);
+            $slotsPagi = [];
             $totalJp = (int) ($dailyJp[$d] ?? 8);
 
-            // 1. Kegiatan sebelum JP 1 (misal Upacara, Sholat Dhuha)
+            // 1. Kegiatan sebelum JP 1 (Pagi) (misal Upacara, Sholat Dhuha)
             foreach ($activities as $act) {
                 $matchDay = ($act['day'] === 'all' || (int) $act['day'] === $d);
                 if ($matchDay && ($act['position'] ?? '') === 'before_jp_1') {
-                    $startStr = self::formatMinutesToTime($curMinutes);
-                    $curMinutes += (int) ($act['duration'] ?? 30);
-                    $endStr = self::formatMinutesToTime($curMinutes);
-                    $slots[] = [
+                    $startStr = self::formatMinutesToTime($curMinutesPagi);
+                    $curMinutesPagi += (int) ($act['duration'] ?? 30);
+                    $endStr = self::formatMinutesToTime($curMinutesPagi);
+                    $slotsPagi[] = [
                         'period_order' => 0,
                         'time_range' => "{$startStr} - {$endStr}",
                         'activity' => $act['name'],
@@ -807,26 +809,58 @@ CSV;
                 }
             }
 
-            // 2. Jam Pelajaran (1 s.d. totalJp)
+            // 2. Jam Pelajaran Pagi (1 s.d. totalJp)
             for ($jp = 1; $jp <= $totalJp; $jp++) {
-                $startStr = self::formatMinutesToTime($curMinutes);
-                $curMinutes += $jpDuration;
-                $endStr = self::formatMinutesToTime($curMinutes);
-                $slots[] = [
+                $startStr = self::formatMinutesToTime($curMinutesPagi);
+                $curMinutesPagi += $jpDuration;
+                $endStr = self::formatMinutesToTime($curMinutesPagi);
+                $slotsPagi[] = [
                     'period_order' => $jp,
                     'time_range' => "{$startStr} - {$endStr}",
                     'activity' => null,
                     'is_activity' => false,
                 ];
 
-                // Cek kegiatan setelah JP ini (misal Istirahat setelah JP 4)
+                // Cek kegiatan/istirahat setelah JP ini
                 foreach ($activities as $act) {
                     $matchDay = ($act['day'] === 'all' || (int) $act['day'] === $d);
                     if ($matchDay && ($act['position'] ?? '') === "after_jp_{$jp}") {
-                        $actStart = self::formatMinutesToTime($curMinutes);
-                        $curMinutes += (int) ($act['duration'] ?? 30);
-                        $actEnd = self::formatMinutesToTime($curMinutes);
-                        $slots[] = [
+                        $actStart = self::formatMinutesToTime($curMinutesPagi);
+                        $curMinutesPagi += (int) ($act['duration'] ?? 30);
+                        $actEnd = self::formatMinutesToTime($curMinutesPagi);
+                        $slotsPagi[] = [
+                            'period_order' => 0,
+                            'time_range' => "{$actStart} - {$actEnd}",
+                            'activity' => $act['name'],
+                            'is_activity' => true,
+                        ];
+                    }
+                }
+            }
+
+            // 3. Jam Pelajaran Siang (1 s.d. totalJp) dihitung dari $startTimeSiangStr
+            $curMinutesSiang = self::parseTimeToMinutes($startTimeSiangStr);
+            $slotsSiang = [];
+
+            for ($jp = 1; $jp <= $totalJp; $jp++) {
+                $startStr = self::formatMinutesToTime($curMinutesSiang);
+                $curMinutesSiang += $jpDuration;
+                $endStr = self::formatMinutesToTime($curMinutesSiang);
+                $slotsSiang[] = [
+                    'period_order' => $jp,
+                    'time_range' => "{$startStr} - {$endStr}",
+                    'activity' => null,
+                    'is_activity' => false,
+                ];
+
+                // Cek jeda istirahat siang setelah JP ini (misal Istirahat setelah JP 4)
+                foreach ($activities as $act) {
+                    $matchDay = ($act['day'] === 'all' || (int) $act['day'] === $d);
+                    if ($matchDay && ($act['position'] ?? '') === "after_jp_{$jp}") {
+                        $actStart = self::formatMinutesToTime($curMinutesSiang);
+                        $curMinutesSiang += (int) ($act['duration'] ?? 30);
+                        $actEnd = self::formatMinutesToTime($curMinutesSiang);
+                        $slotsSiang[] = [
                             'period_order' => 0,
                             'time_range' => "{$actStart} - {$actEnd}",
                             'activity' => $act['name'],
@@ -840,7 +874,8 @@ CSV;
                 'day_num' => $d,
                 'day_name' => $dayNames[$d] ?? "Hari {$d}",
                 'total_jp' => $totalJp,
-                'slots' => $slots,
+                'slots' => $slotsPagi,
+                'slots_siang' => $slotsSiang,
             ];
         }
 
@@ -857,6 +892,10 @@ CSV;
         $workloads = $payload['workloads'] ?? [];
         $generationMode = $payload['generation_mode'] ?? 'auto'; // 'auto' atau 'manual'
         $shiftMode = $payload['shift_mode'] ?? 'single'; // 'single' atau 'double'
+        $customClassesSiang = $payload['classes_siang'] ?? null;
+        if (is_string($customClassesSiang)) {
+            $customClassesSiang = json_decode($customClassesSiang, true);
+        }
 
         if (empty($selectedClasses)) {
             $selectedClasses = [
@@ -864,6 +903,11 @@ CSV;
                 '8A', '8B', '8C', '8D', '8E', '8F', '8G',
                 '9A', '9B', '9C', '9D', '9E', '9F', '9G',
             ];
+        }
+
+        // Pastikan timeConfig menyertakan start_time_siang jika ada
+        if (! isset($timeConfig['start_time_siang']) && isset($payload['start_time_siang'])) {
+            $timeConfig['start_time_siang'] = $payload['start_time_siang'];
         }
 
         // Kalkulasi time grid
@@ -877,22 +921,23 @@ CSV;
         // Pisahkan kelas pagi & siang jika mode double shift
         $classesPagi = [];
         $classesSiang = [];
-        foreach ($selectedClasses as $cls) {
-            if ($shiftMode === 'double' && str_starts_with($cls, '8')) {
-                $classesSiang[] = $cls;
+        if ($shiftMode === 'double') {
+            if (is_array($customClassesSiang)) {
+                $classesSiang = array_values(array_intersect($selectedClasses, $customClassesSiang));
             } else {
-                $classesPagi[] = $cls;
+                $classesSiang = array_values(array_filter($selectedClasses, fn ($c) => str_starts_with($c, '8')));
             }
-        }
-        if (empty($classesSiang)) {
+            $classesPagi = array_values(array_diff($selectedClasses, $classesSiang));
+        } else {
             $classesPagi = $selectedClasses;
+            $classesSiang = [];
         }
 
         $allocatedCount = 0;
         $unassignedCount = 0;
 
         DB::transaction(function () use (
-            $academicYear, $selectedClasses, $classesPagi, $classesSiang,
+            $academicYear, $selectedClasses, $classesPagi, $classesSiang, $shiftMode,
             $timeGrid, $workloads, $generationMode, $schoolClasses,
             &$allocatedCount, &$unassignedCount
         ) {
@@ -902,17 +947,19 @@ CSV;
             // 2. Siapkan penampung memori untuk generator
             // scheduleMap[class][day][period_order] = item_data
             $scheduleMap = [];
-            // teacherBusy[teacher_code][day][period_order] = true
+            // teacherBusy[teacher_code][busy_key] = true
             $teacherBusy = [];
 
             // 3. Masukkan kegiatan non-KBM ke setiap kelas
             foreach ($selectedClasses as $cls) {
-                foreach ($timeGrid as $d => $dayData) {
-                    foreach ($dayData['slots'] as $slot) {
-                        if ($slot['is_activity']) {
-                            $sc = $schoolClasses[$cls] ?? null;
-                            $shift = in_array($cls, $classesSiang, true) ? 'siang' : 'pagi';
+                $isSiang = in_array($cls, $classesSiang, true);
+                $shift = $isSiang ? 'siang' : 'pagi';
+                $sc = $schoolClasses[$cls] ?? null;
 
+                foreach ($timeGrid as $d => $dayData) {
+                    $daySlots = ($isSiang && ! empty($dayData['slots_siang'])) ? $dayData['slots_siang'] : $dayData['slots'];
+                    foreach ($daySlots as $slot) {
+                        if ($slot['is_activity']) {
                             SchoolScheduleItem::query()->create([
                                 'academic_year_id' => $academicYear->id,
                                 'day_of_week' => $d,
@@ -959,6 +1006,9 @@ CSV;
 
                 foreach ($sessions as $session) {
                     $c = $session['class_name'];
+                    $isClassSiang = in_array($c, $classesSiang, true);
+                    $classShift = $isClassSiang ? 'siang' : 'pagi';
+
                     $tCode = (string) ($session['teacher_code'] ?? '');
                     if ($tCode === '' && ! empty($session['teacher_name'])) {
                         $tCode = substr(strtoupper(preg_replace('/[^a-zA-Z]/', '', $session['teacher_name'])), 0, 4);
@@ -998,8 +1048,9 @@ CSV;
                                     $canPlace = false;
                                     break;
                                 }
-                                // Cek apakah guru sibuk di kelas lain pada jam ini
-                                if ($tCode !== '' && isset($teacherBusy[$tCode][$d][$p])) {
+                                // Cek apakah guru sibuk di kelas lain pada jam dan shift yang sama
+                                $busyKey = ($shiftMode === 'double') ? "{$classShift}_{$d}_{$p}" : "{$d}_{$p}";
+                                if ($tCode !== '' && isset($teacherBusy[$tCode][$busyKey])) {
                                     $canPlace = false;
                                     break;
                                 }
@@ -1016,7 +1067,8 @@ CSV;
                                         'subject_id' => $session['subject_id'] ?? null,
                                     ];
                                     if ($tCode !== '') {
-                                        $teacherBusy[$tCode][$d][$p] = true;
+                                        $busyKey = ($shiftMode === 'double') ? "{$classShift}_{$d}_{$p}" : "{$d}_{$p}";
+                                        $teacherBusy[$tCode][$busyKey] = true;
                                     }
                                 }
                                 $placed = true;
@@ -1035,10 +1087,12 @@ CSV;
             // 5. Simpan seluruh slot KBM (1 s.d. totalJp) ke database
             foreach ($selectedClasses as $cls) {
                 $sc = $schoolClasses[$cls] ?? null;
-                $shift = in_array($cls, $classesSiang, true) ? 'siang' : 'pagi';
+                $isSiang = in_array($cls, $classesSiang, true);
+                $shift = $isSiang ? 'siang' : 'pagi';
 
                 foreach ($timeGrid as $d => $dayData) {
-                    $kbmSlots = array_filter($dayData['slots'], fn ($s) => ! $s['is_activity']);
+                    $daySlots = ($isSiang && ! empty($dayData['slots_siang'])) ? $dayData['slots_siang'] : $dayData['slots'];
+                    $kbmSlots = array_filter($daySlots, fn ($s) => ! $s['is_activity']);
                     foreach ($kbmSlots as $slot) {
                         $jp = $slot['period_order'];
                         $assigned = $scheduleMap[$cls][$d][$jp] ?? null;
