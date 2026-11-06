@@ -84,12 +84,12 @@ class SchoolScheduleBuilderTest extends TestCase
         $response = $this->actingAs($admin)->get(route('admin.schedules.master.builder'));
         $response->assertOk();
         $response->assertSee('Smart Timetable Builder');
-        $response->assertSee('1. Model Shift');
-        $response->assertSee('2. Waktu Belajar');
-        $response->assertSee('3. Non-KBM');
-        $response->assertSee('4. Beban Guru');
-        $response->assertSee('5. Metode');
-        $response->assertSee('6. Konfirmasi');
+        $response->assertSee('Model Shift');
+        $response->assertSee('Waktu Belajar');
+        $response->assertSee('Non-KBM');
+        $response->assertSee('Beban Guru');
+        $response->assertSee('Metode');
+        $response->assertSee('Konfirmasi');
         $response->assertSee('Rekapitulasi Beban Jam Mengajar per Guru');
     }
 

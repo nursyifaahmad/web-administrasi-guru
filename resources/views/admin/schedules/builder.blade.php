@@ -351,54 +351,191 @@
     </div>
 
     {{-- PROGRESS STEPPER 6 LANGKAH --}}
-    <div class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-2xs">
-        <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3.5">
+        {{-- Progress Header & Status --}}
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">
+                    <span>⚡ Wizard</span>
+                </span>
+                <span class="text-xs font-bold text-slate-600">
+                    Langkah <strong class="text-slate-900 font-black" x-text="step"></strong> dari 6:
+                    <span class="text-emerald-700 font-extrabold"
+                          x-text="['Model Shift Belajar', 'Waktu Belajar & Durasi JP', 'Kegiatan Non-KBM & Istirahat', 'Beban Jam Mengajar Guru', 'Pilihan Metode Penjadwalan', 'Konfirmasi & Terapkan Jadwal'][step - 1]"></span>
+                </span>
+            </div>
+            <div class="flex items-center gap-2.5 text-xs text-slate-500 font-bold shrink-0">
+                <div class="w-32 sm:w-40 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200/60">
+                    <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full transition-all duration-300"
+                         :style="'width: ' + ((step / 6) * 100) + '%'"></div>
+                </div>
+                <span class="text-[11px] font-black text-slate-700" x-text="Math.round((step / 6) * 100) + '%'"></span>
+            </div>
+        </div>
+
+        {{-- 6 Step Buttons Flow --}}
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {{-- Step 1 --}}
             <button type="button" @click="step = 1"
-                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
-                    :class="step === 1 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 1 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
-                <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
-                      :class="step === 1 ? 'bg-white text-emerald-800' : (step > 1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">1</span>
-                <span class="truncate">1. Model Shift</span>
+                    class="p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex items-center gap-2.5 group"
+                    :class="step === 1
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
+                        : (step > 1
+                            ? 'bg-white border-emerald-200 text-slate-800 hover:bg-emerald-50/50'
+                            : 'bg-slate-50/60 border-slate-200 text-slate-400 hover:bg-white hover:text-slate-600')">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition"
+                      :class="step === 1
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : (step > 1
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-200 text-slate-600')">
+                    <template x-if="step > 1">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                    </template>
+                    <template x-if="step <= 1">
+                        <span>1</span>
+                    </template>
+                </span>
+                <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-bold uppercase tracking-wider leading-none"
+                         :class="step === 1 ? 'text-emerald-700' : (step > 1 ? 'text-emerald-600' : 'text-slate-400')">Step 1</div>
+                    <div class="text-xs font-bold truncate leading-tight mt-1"
+                         :class="step === 1 ? 'text-slate-900 font-extrabold' : (step > 1 ? 'text-slate-800 font-bold' : 'text-slate-500')">Model Shift</div>
+                </div>
             </button>
 
+            {{-- Step 2 --}}
             <button type="button" @click="step = 2; recalculateGrid()"
-                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
-                    :class="step === 2 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 2 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
-                <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
-                      :class="step === 2 ? 'bg-white text-emerald-800' : (step > 2 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">2</span>
-                <span class="truncate">2. Waktu Belajar</span>
+                    class="p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex items-center gap-2.5 group"
+                    :class="step === 2
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
+                        : (step > 2
+                            ? 'bg-white border-emerald-200 text-slate-800 hover:bg-emerald-50/50'
+                            : 'bg-slate-50/60 border-slate-200 text-slate-400 hover:bg-white hover:text-slate-600')">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition"
+                      :class="step === 2
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : (step > 2
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-200 text-slate-600')">
+                    <template x-if="step > 2">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                    </template>
+                    <template x-if="step <= 2">
+                        <span>2</span>
+                    </template>
+                </span>
+                <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-bold uppercase tracking-wider leading-none"
+                         :class="step === 2 ? 'text-emerald-700' : (step > 2 ? 'text-emerald-600' : 'text-slate-400')">Step 2</div>
+                    <div class="text-xs font-bold truncate leading-tight mt-1"
+                         :class="step === 2 ? 'text-slate-900 font-extrabold' : (step > 2 ? 'text-slate-800 font-bold' : 'text-slate-500')">Waktu Belajar</div>
+                </div>
             </button>
 
+            {{-- Step 3 --}}
             <button type="button" @click="step = 3; recalculateGrid()"
-                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
-                    :class="step === 3 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 3 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
-                <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
-                      :class="step === 3 ? 'bg-white text-emerald-800' : (step > 3 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">3</span>
-                <span class="truncate">3. Non-KBM</span>
+                    class="p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex items-center gap-2.5 group"
+                    :class="step === 3
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
+                        : (step > 3
+                            ? 'bg-white border-emerald-200 text-slate-800 hover:bg-emerald-50/50'
+                            : 'bg-slate-50/60 border-slate-200 text-slate-400 hover:bg-white hover:text-slate-600')">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition"
+                      :class="step === 3
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : (step > 3
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-200 text-slate-600')">
+                    <template x-if="step > 3">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                    </template>
+                    <template x-if="step <= 3">
+                        <span>3</span>
+                    </template>
+                </span>
+                <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-bold uppercase tracking-wider leading-none"
+                         :class="step === 3 ? 'text-emerald-700' : (step > 3 ? 'text-emerald-600' : 'text-slate-400')">Step 3</div>
+                    <div class="text-xs font-bold truncate leading-tight mt-1"
+                         :class="step === 3 ? 'text-slate-900 font-extrabold' : (step > 3 ? 'text-slate-800 font-bold' : 'text-slate-500')">Non-KBM</div>
+                </div>
             </button>
 
+            {{-- Step 4 --}}
             <button type="button" @click="step = 4"
-                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
-                    :class="step === 4 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 4 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
-                <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
-                      :class="step === 4 ? 'bg-white text-emerald-800' : (step > 4 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">4</span>
-                <span class="truncate">4. Beban Guru</span>
+                    class="p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex items-center gap-2.5 group"
+                    :class="step === 4
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
+                        : (step > 4
+                            ? 'bg-white border-emerald-200 text-slate-800 hover:bg-emerald-50/50'
+                            : 'bg-slate-50/60 border-slate-200 text-slate-400 hover:bg-white hover:text-slate-600')">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition"
+                      :class="step === 4
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : (step > 4
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-200 text-slate-600')">
+                    <template x-if="step > 4">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                    </template>
+                    <template x-if="step <= 4">
+                        <span>4</span>
+                    </template>
+                </span>
+                <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-bold uppercase tracking-wider leading-none"
+                         :class="step === 4 ? 'text-emerald-700' : (step > 4 ? 'text-emerald-600' : 'text-slate-400')">Step 4</div>
+                    <div class="text-xs font-bold truncate leading-tight mt-1"
+                         :class="step === 4 ? 'text-slate-900 font-extrabold' : (step > 4 ? 'text-slate-800 font-bold' : 'text-slate-500')">Beban Guru</div>
+                </div>
             </button>
 
+            {{-- Step 5 --}}
             <button type="button" @click="step = 5"
-                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
-                    :class="step === 5 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 5 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
-                <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
-                      :class="step === 5 ? 'bg-white text-emerald-800' : (step > 5 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">5</span>
-                <span class="truncate">5. Metode</span>
+                    class="p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex items-center gap-2.5 group"
+                    :class="step === 5
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
+                        : (step > 5
+                            ? 'bg-white border-emerald-200 text-slate-800 hover:bg-emerald-50/50'
+                            : 'bg-slate-50/60 border-slate-200 text-slate-400 hover:bg-white hover:text-slate-600')">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition"
+                      :class="step === 5
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : (step > 5
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-200 text-slate-600')">
+                    <template x-if="step > 5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                    </template>
+                    <template x-if="step <= 5">
+                        <span>5</span>
+                    </template>
+                </span>
+                <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-bold uppercase tracking-wider leading-none"
+                         :class="step === 5 ? 'text-emerald-700' : (step > 5 ? 'text-emerald-600' : 'text-slate-400')">Step 5</div>
+                    <div class="text-xs font-bold truncate leading-tight mt-1"
+                         :class="step === 5 ? 'text-slate-900 font-extrabold' : (step > 5 ? 'text-slate-800 font-bold' : 'text-slate-500')">Metode</div>
+                </div>
             </button>
 
+            {{-- Step 6 --}}
             <button type="button" @click="step = 6"
-                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
-                    :class="step === 6 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-slate-50 text-slate-400 border-slate-200'">
-                <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
-                      :class="step === 6 ? 'bg-white text-emerald-800' : 'bg-slate-200 text-slate-600')">6</span>
-                <span class="truncate">6. Konfirmasi</span>
+                    class="p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex items-center gap-2.5 group"
+                    :class="step === 6
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
+                        : 'bg-slate-50/60 border-slate-200 text-slate-400 hover:bg-white hover:text-slate-600'">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition"
+                      :class="step === 6 ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'">
+                    <span>6</span>
+                </span>
+                <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-bold uppercase tracking-wider leading-none"
+                         :class="step === 6 ? 'text-emerald-700' : 'text-slate-400'">Step 6</div>
+                    <div class="text-xs font-bold truncate leading-tight mt-1"
+                         :class="step === 6 ? 'text-slate-900 font-extrabold' : 'text-slate-500'">Konfirmasi</div>
+                </div>
             </button>
         </div>
     </div>
@@ -708,13 +845,14 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-between pt-5 border-t border-slate-100">
                     <button type="button" @click="step = 1"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
-                        &larr; Kembali ke Langkah 1
+                            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer transition">
+                        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                        <span>Kembali ke Langkah 1</span>
                     </button>
                     <button type="button" @click="step = 3; recalculateGrid()"
-                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer transition">
+                            class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs cursor-pointer transition">
                         <span>Lanjut ke Langkah 3: Kegiatan Non-KBM</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
@@ -913,13 +1051,14 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-between pt-5 border-t border-slate-100">
                     <button type="button" @click="step = 2"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
-                        &larr; Kembali ke Langkah 2
+                            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer transition">
+                        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                        <span>Kembali ke Langkah 2</span>
                     </button>
                     <button type="button" @click="step = 4"
-                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer transition">
+                            class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs cursor-pointer transition">
                         <span>Lanjut ke Langkah 4: Beban Guru</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
@@ -1229,13 +1368,14 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-between pt-5 border-t border-slate-100">
                     <button type="button" @click="step = 3"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
-                        &larr; Kembali ke Langkah 3
+                            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer transition">
+                        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                        <span>Kembali ke Langkah 3</span>
                     </button>
                     <button type="button" @click="step = 5"
-                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer transition">
+                            class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs cursor-pointer transition">
                         <span>Lanjut ke Langkah 5: Pilihan Metode</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
@@ -1298,13 +1438,14 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-between pt-5 border-t border-slate-100">
                     <button type="button" @click="step = 4"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
-                        &larr; Kembali ke Langkah 4
+                            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer transition">
+                        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                        <span>Kembali ke Langkah 4</span>
                     </button>
                     <button type="button" @click="step = 6"
-                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer transition">
+                            class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs cursor-pointer transition">
                         <span>Lanjut ke Langkah 6: Konfirmasi</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
@@ -1327,44 +1468,69 @@
                     </p>
                 </div>
 
-                {{-- Card Ringkasan Konfigurasi --}}
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {{-- Card Ringkasan Konfigurasi Modern --}}
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                     {{-- 1. Model Shift --}}
-                    <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                        <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">MODEL SHIFT</span>
-                        <div class="text-base font-black text-slate-900 mt-1"
-                             x-text="shiftMode === 'double' ? '2 Shift (Pagi & Siang)' : '1 Shift Reguler'"></div>
-                        <span class="text-xs text-slate-600 font-semibold"
-                              x-text="shiftMode === 'double' ? (classesSiang.length + ' Siang, ' + (availableClasses.length - classesSiang.length) + ' Pagi') : 'Semua Pagi'"></span>
+                    <div class="p-4 rounded-2xl bg-white border border-slate-200 hover:border-emerald-300 hover:shadow-xs transition space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Model Shift</span>
+                            <span class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center text-sm">🏢</span>
+                        </div>
+                        <div>
+                            <div class="text-sm font-black text-slate-900"
+                                 x-text="shiftMode === 'double' ? '2 Shift (Pagi & Siang)' : '1 Shift Reguler'"></div>
+                            <p class="text-xs text-slate-500 font-semibold mt-0.5 truncate"
+                               x-text="shiftMode === 'double' ? (classesSiang.length + ' Siang, ' + (availableClasses.length - classesSiang.length) + ' Pagi') : 'Semua 21 Rombel Pagi'"></p>
+                        </div>
                     </div>
 
                     {{-- 2. Waktu Belajar --}}
-                    <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                        <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">WAKTU BELAJAR</span>
-                        <div class="text-base font-black text-slate-900 mt-1" x-text="jpDuration + ' Menit / JP'"></div>
-                        <span class="text-xs text-slate-600 font-semibold"
-                              x-text="shiftMode === 'double' ? ('Pagi: ' + startTime + ' | Siang: ' + startTimeSiang) : ('Mulai ' + startTime + ' WIB')"></span>
+                    <div class="p-4 rounded-2xl bg-white border border-slate-200 hover:border-blue-300 hover:shadow-xs transition space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Waktu Belajar</span>
+                            <span class="w-7 h-7 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center text-sm">⏱️</span>
+                        </div>
+                        <div>
+                            <div class="text-sm font-black text-slate-900" x-text="jpDuration + ' Menit / JP'"></div>
+                            <p class="text-xs text-slate-500 font-semibold mt-0.5 truncate"
+                               x-text="shiftMode === 'double' ? ('Pagi ' + startTime + ' | Siang ' + startTimeSiang) : ('Mulai ' + startTime + ' WIB')"></p>
+                        </div>
                     </div>
 
                     {{-- 3. Kegiatan & Istirahat --}}
-                    <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                        <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">KEGIATAN &amp; ISTIRAHAT</span>
-                        <div class="text-base font-black text-slate-900 mt-1" x-text="activities.length + ' Kegiatan Khusus'"></div>
-                        <span class="text-xs text-slate-600 font-semibold">Terkunci otomatis di jadwal</span>
+                    <div class="p-4 rounded-2xl bg-white border border-slate-200 hover:border-amber-300 hover:shadow-xs transition space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Kegiatan Khusus</span>
+                            <span class="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-sm">☕</span>
+                        </div>
+                        <div>
+                            <div class="text-sm font-black text-slate-900" x-text="activities.length + ' Kegiatan Khusus'"></div>
+                            <p class="text-xs text-slate-500 font-semibold mt-0.5 truncate">Terkunci di jadwal</p>
+                        </div>
                     </div>
 
                     {{-- 4. Rombel & Beban JP --}}
-                    <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                        <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">ROMBEL &amp; BEBAN JP</span>
-                        <div class="text-base font-black text-slate-900 mt-1" x-text="availableClasses.length + ' Rombel Kelas'"></div>
-                        <span class="text-xs text-slate-600 font-semibold" x-text="getTotalJpAllocated() + ' JP terdaftar'"></span>
+                    <div class="p-4 rounded-2xl bg-white border border-slate-200 hover:border-purple-300 hover:shadow-xs transition space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Beban Guru</span>
+                            <span class="w-7 h-7 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center text-sm">👥</span>
+                        </div>
+                        <div>
+                            <div class="text-sm font-black text-slate-900" x-text="getTeacherSummary().length + ' Guru Terdaftar'"></div>
+                            <p class="text-xs text-slate-500 font-semibold mt-0.5 truncate" x-text="getTotalJpAllocated() + ' JP terdistribusi'"></p>
+                        </div>
                     </div>
 
                     {{-- 5. Metode Pembuatan --}}
-                    <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                        <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">METODE PEMBUATAN</span>
-                        <div class="text-sm font-black text-emerald-800 mt-1" x-text="generationMode === 'auto' ? '⚡ Generate Otomatis' : '📝 Kerangka Kosong'"></div>
-                        <span class="text-xs text-slate-600 font-semibold" x-text="generationMode === 'auto' ? 'Anti-Bentrok CSP' : 'Isi Manual'"></span>
+                    <div class="p-4 rounded-2xl bg-white border border-slate-200 hover:border-teal-300 hover:shadow-xs transition space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Metode Penjadwalan</span>
+                            <span class="w-7 h-7 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center text-sm">⚡</span>
+                        </div>
+                        <div>
+                            <div class="text-sm font-black text-emerald-800" x-text="generationMode === 'auto' ? 'Generate Otomatis' : 'Kerangka Kosong'"></div>
+                            <p class="text-xs text-slate-500 font-semibold mt-0.5 truncate" x-text="generationMode === 'auto' ? 'Anti-Bentrok CSP' : 'Isi Manual'"></p>
+                        </div>
                     </div>
                 </div>
 
@@ -1381,15 +1547,16 @@
                     </ul>
                 </div>
 
-                <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-between pt-5 border-t border-slate-100">
                     <button type="button" @click="step = 5"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
-                        &larr; Kembali ke Langkah 5
+                            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-slate-900 cursor-pointer transition">
+                        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                        <span>Kembali ke Langkah 5</span>
                     </button>
                     <button type="submit"
-                            class="px-8 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-md transition flex items-center gap-2.5 cursor-pointer">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                        <span>🚀 Buat &amp; Terapkan Jadwal Sekarang</span>
+                            class="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-black text-sm shadow-md hover:shadow-lg transition cursor-pointer">
+                        <span class="text-base">🚀</span>
+                        <span>Buat &amp; Terapkan Jadwal Sekarang</span>
                     </button>
                 </div>
             </div>
