@@ -104,9 +104,23 @@
         applyUniformJp(val) {
             val = parseInt(val) || 8;
             for (let d = 1; d <= 6; d++) {
-                this.dailyJp[d] = (d === 5) ? Math.min(val, 5) : val; // Jumat maksimal 5 JP sebelum sholat jumat
+                this.dailyJp[d] = (d === 5) ? Math.min(val, 5) : val;
             }
             this.recalculateGrid();
+        },
+
+        // Helper: Hitung jam selesai hari yang dipilih di preview
+        getCurrentDayEndTime() {
+            let day = this.gridPreview[this.previewDay];
+            if (!day) return '';
+            let slots = (this.shiftMode === 'double' && this.previewShiftTab === 'siang')
+                ? (day.slots_siang || [])
+                : (day.slots || []);
+            if (slots.length === 0) return '';
+            let lastSlot = slots[slots.length - 1];
+            if (!lastSlot || !lastSlot.time_range) return '';
+            let parts = lastSlot.time_range.split('-');
+            return (parts[1] || '').trim();
         },
 
         // AJAX recalculate time grid
@@ -294,13 +308,13 @@
                     </span>
                 </h1>
                 <p class="text-xs text-slate-500 max-w-2xl">
-                    Wizard pembuatan jadwal KBM dari awal: tentukan model shift, durasi JP &amp; jam belajar, kegiatan non-KBM, tetapkan beban JP guru, lalu generate otomatis tanpa bentrok.
+                    Wizard penyusunan jadwal KBM sekolah dari awal: tentukan model shift, durasi JP &amp; jam belajar, kegiatan non-KBM, beban mengajar guru, lalu generate otomatis tanpa bentrok.
                 </p>
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
                 <a href="{{ route('admin.schedules.master.index') }}"
-                   class="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
+                   class="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer">
                     Batal
                 </a>
             </div>
@@ -311,7 +325,7 @@
     <div class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-2xs">
         <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
             <button type="button" @click="step = 1"
-                    class="p-2 sm:p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border"
+                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
                     :class="step === 1 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 1 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
                 <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
                       :class="step === 1 ? 'bg-white text-emerald-800' : (step > 1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">1</span>
@@ -319,7 +333,7 @@
             </button>
 
             <button type="button" @click="step = 2; recalculateGrid()"
-                    class="p-2 sm:p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border"
+                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
                     :class="step === 2 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 2 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
                 <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
                       :class="step === 2 ? 'bg-white text-emerald-800' : (step > 2 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">2</span>
@@ -327,7 +341,7 @@
             </button>
 
             <button type="button" @click="step = 3; recalculateGrid()"
-                    class="p-2 sm:p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border"
+                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
                     :class="step === 3 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 3 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
                 <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
                       :class="step === 3 ? 'bg-white text-emerald-800' : (step > 3 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">3</span>
@@ -335,7 +349,7 @@
             </button>
 
             <button type="button" @click="step = 4"
-                    class="p-2 sm:p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border"
+                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
                     :class="step === 4 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 4 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
                 <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
                       :class="step === 4 ? 'bg-white text-emerald-800' : (step > 4 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">4</span>
@@ -343,7 +357,7 @@
             </button>
 
             <button type="button" @click="step = 5"
-                    class="p-2 sm:p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border"
+                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
                     :class="step === 5 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : (step > 5 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200')">
                 <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
                       :class="step === 5 ? 'bg-white text-emerald-800' : (step > 5 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600')">5</span>
@@ -351,7 +365,7 @@
             </button>
 
             <button type="button" @click="step = 6"
-                    class="p-2 sm:p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border"
+                    class="p-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 border cursor-pointer"
                     :class="step === 6 ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-slate-50 text-slate-400 border-slate-200'">
                 <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
                       :class="step === 6 ? 'bg-white text-emerald-800' : 'bg-slate-200 text-slate-600')">6</span>
@@ -392,7 +406,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {{-- Pilihan 1: 1 Shift Reguler --}}
                     <label class="p-5 rounded-2xl border-2 cursor-pointer transition flex items-start gap-4"
-                           :class="shiftMode === 'single' ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-300/40' : 'border-slate-200 bg-white hover:border-slate-300'">
+                           :class="shiftMode === 'single' ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-300/40 shadow-xs' : 'border-slate-200 bg-white hover:border-slate-300'">
                         <input type="radio" name="shift_select" value="single" x-model="shiftMode" class="mt-1 text-emerald-600">
                         <div class="space-y-2">
                             <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-extrabold text-[10px]">
@@ -411,7 +425,7 @@
 
                     {{-- Pilihan 2: 2 Shift Pagi & Siang --}}
                     <label class="p-5 rounded-2xl border-2 cursor-pointer transition flex items-start gap-4"
-                           :class="shiftMode === 'double' ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-300/40' : 'border-slate-200 bg-white hover:border-slate-300'">
+                           :class="shiftMode === 'double' ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-300/40 shadow-xs' : 'border-slate-200 bg-white hover:border-slate-300'">
                         <input type="radio" name="shift_select" value="double" x-model="shiftMode" class="mt-1 text-emerald-600">
                         <div class="space-y-2">
                             <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold text-[10px]">
@@ -443,15 +457,15 @@
                         <div class="flex items-center gap-1.5 flex-wrap">
                             <span class="text-[11px] font-bold text-slate-600">Pintasan Cepat:</span>
                             <button type="button" @click="resetDefaultShiftClasses()"
-                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-amber-300 text-amber-900 hover:bg-amber-100/60 transition">
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-amber-300 text-amber-900 hover:bg-amber-100/60 transition cursor-pointer">
                                 Standar (Kelas 8 Siang)
                             </button>
                             <button type="button" @click="setGradeShift('8', true); setGradeShift('9', true)"
-                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-amber-300 text-amber-900 hover:bg-amber-100/60 transition">
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-amber-300 text-amber-900 hover:bg-amber-100/60 transition cursor-pointer">
                                 8 &amp; 9 Siang
                             </button>
                             <button type="button" @click="classesSiang = []"
-                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition">
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition cursor-pointer">
                                 Kosongkan Siang
                             </button>
                         </div>
@@ -460,15 +474,15 @@
                     {{-- Grid Kelas dengan Toggle Pill --}}
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         @foreach(['7' => 'Kelas VII', '8' => 'Kelas VIII', '9' => 'Kelas IX'] as $grade => $gradeLabel)
-                            <div class="p-3.5 rounded-xl bg-white border border-amber-200/80 space-y-2.5">
+                            <div class="p-3.5 rounded-xl bg-white border border-amber-200/80 space-y-2.5 shadow-2xs">
                                 <div class="flex items-center justify-between">
                                     <span class="text-xs font-extrabold text-slate-800">{{ $gradeLabel }}</span>
                                     <div class="flex items-center gap-1">
                                         <button type="button" @click="setGradeShift('{{ $grade }}', false)"
-                                                class="text-[10px] font-bold text-emerald-700 hover:underline">Semua Pagi</button>
+                                                class="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer">Semua Pagi</button>
                                         <span class="text-slate-300 text-[10px]">&bull;</span>
                                         <button type="button" @click="setGradeShift('{{ $grade }}', true)"
-                                                class="text-[10px] font-bold text-amber-800 hover:underline">Semua Siang</button>
+                                                class="text-[10px] font-bold text-amber-800 hover:underline cursor-pointer">Semua Siang</button>
                                     </div>
                                 </div>
                                 <div class="flex flex-wrap gap-1.5">
@@ -476,7 +490,7 @@
                                         <button type="button" @click="toggleShiftClass(c)"
                                                 class="px-2.5 py-1 rounded-lg text-xs font-black transition flex items-center gap-1.5 border cursor-pointer"
                                                 :class="classesSiang.includes(c)
-                                                    ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                                                    ? 'bg-amber-500 text-white border-amber-600 shadow-2xs hover:bg-amber-600'
                                                     : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'">
                                             <span x-text="c"></span>
                                             <span class="text-[9px] uppercase px-1 py-0.2 rounded font-bold"
@@ -511,7 +525,7 @@
                 <div class="flex items-center justify-between pt-4 border-t border-slate-100">
                     <span class="text-xs text-slate-500">Langkah 1 dari 6</span>
                     <button type="button" @click="step = 2; recalculateGrid()"
-                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer">
+                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer transition">
                         <span>Lanjut ke Langkah 2: Waktu Belajar</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
@@ -548,17 +562,17 @@
                         <div class="flex flex-wrap gap-1.5 pt-1">
                             <button type="button" @click="jpDuration = 35; recalculateGrid()"
                                     class="px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer"
-                                    :class="jpDuration === 35 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
+                                    :class="jpDuration === 35 ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
                                 35 Menit
                             </button>
                             <button type="button" @click="jpDuration = 40; recalculateGrid()"
                                     class="px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer"
-                                    :class="jpDuration === 40 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
+                                    :class="jpDuration === 40 ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
                                 40 Menit (Standar)
                             </button>
                             <button type="button" @click="jpDuration = 45; recalculateGrid()"
                                     class="px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer"
-                                    :class="jpDuration === 45 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
+                                    :class="jpDuration === 45 ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
                                 45 Menit
                             </button>
                         </div>
@@ -593,22 +607,22 @@
                         <div class="flex flex-wrap gap-1 pt-0.5">
                             <button type="button" @click="startTimeSiang = '12:00'; recalculateGrid()"
                                     class="px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer"
-                                    :class="startTimeSiang === '12:00' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
+                                    :class="startTimeSiang === '12:00' ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
                                 12:00
                             </button>
                             <button type="button" @click="startTimeSiang = '12:15'; recalculateGrid()"
                                     class="px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer"
-                                    :class="startTimeSiang === '12:15' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
+                                    :class="startTimeSiang === '12:15' ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
                                 12:15 (Default)
                             </button>
                             <button type="button" @click="startTimeSiang = '12:30'; recalculateGrid()"
                                     class="px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer"
-                                    :class="startTimeSiang === '12:30' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
+                                    :class="startTimeSiang === '12:30' ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
                                 12:30
                             </button>
                             <button type="button" @click="startTimeSiang = '13:00'; recalculateGrid()"
                                     class="px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer"
-                                    :class="startTimeSiang === '13:00' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
+                                    :class="startTimeSiang === '13:00' ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'">
                                 13:00
                             </button>
                         </div>
@@ -667,11 +681,11 @@
 
                 <div class="flex items-center justify-between pt-4 border-t border-slate-100">
                     <button type="button" @click="step = 1"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer">
+                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
                         &larr; Kembali ke Langkah 1
                     </button>
                     <button type="button" @click="step = 3; recalculateGrid()"
-                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer">
+                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer transition">
                         <span>Lanjut ke Langkah 3: Kegiatan Non-KBM</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
@@ -690,120 +704,151 @@
                         <span>Langkah 3: Tentukan Kegiatan di Luar JP (Upacara, Dhuha, Istirahat) &amp; Posisinya</span>
                     </h2>
                     <p class="text-xs text-slate-500 mt-1">
-                        Slot kegiatan khusus akan otomatis terkunci di jadwal sehingga tidak akan tertimpa atau bentrok dengan pelajaran guru.
+                        Slot kegiatan khusus akan otomatis terkunci di jadwal sehingga tidak akan tertimpa atau bentrok dengan jam pelajaran guru.
                     </p>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    {{-- Form Daftar Kegiatan Non-KBM --}}
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    {{-- Form Daftar Kegiatan Non-KBM (Kiri, Luas dan Lega) --}}
                     <div class="lg:col-span-7 space-y-4">
                         <div class="flex items-center justify-between">
-                            <h3 class="text-xs font-extrabold text-slate-900">Daftar Kegiatan Terkunci:</h3>
+                            <h3 class="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                                <span>📋 Daftar Kegiatan Terkunci:</span>
+                                <span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-black"
+                                      x-text="activities.length + ' Kegiatan'"></span>
+                            </h3>
                             <button type="button" @click="addActivity()"
-                                    class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                                <span>+ Tambah Kegiatan</span>
+                                    class="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                                <span>Tambah Kegiatan</span>
                             </button>
                         </div>
 
+                        {{-- Card Kegiatan yang Responsif & Rapi --}}
                         <div class="space-y-3">
                             <template x-for="(act, idx) in activities" :key="idx">
-                                <div class="p-3.5 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center gap-3">
-                                    <div class="w-full sm:w-28 shrink-0">
-                                        <select x-model="act.day" @change="recalculateGrid()"
-                                                class="w-full rounded-xl border border-slate-300 py-1.5 px-2.5 text-xs font-bold bg-white">
-                                            <option value="all">Setiap Hari</option>
-                                            <option value="1">Senin</option>
-                                            <option value="2">Selasa</option>
-                                            <option value="3">Rabu</option>
-                                            <option value="4">Kamis</option>
-                                            <option value="5">Jum'at</option>
-                                            <option value="6">Sabtu</option>
-                                        </select>
+                                <div class="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 shadow-2xs space-y-3 transition">
+                                    {{-- Baris 1: Nama Kegiatan & Tombol Hapus --}}
+                                    <div class="flex items-center justify-between gap-3">
+                                        <div class="flex items-center gap-2 flex-1 min-w-0">
+                                            <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>
+                                            <input type="text" x-model="act.name" @input.debounce.300ms="recalculateGrid()"
+                                                   placeholder="Nama Kegiatan (misal: UPACARA BENDERA, SHOLAT DHUHA, ISTIRAHAT)"
+                                                   class="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-black text-slate-900 uppercase bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition">
+                                        </div>
+                                        <button type="button" @click="removeActivity(idx)" title="Hapus Kegiatan"
+                                                class="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                        </button>
                                     </div>
 
-                                    <div class="flex-1">
-                                        <input type="text" x-model="act.name" @change="recalculateGrid()"
-                                               placeholder="Nama Kegiatan (misal: UPACARA)"
-                                               class="w-full rounded-xl border border-slate-300 py-1.5 px-3 text-xs font-bold bg-white uppercase">
-                                    </div>
+                                    {{-- Baris 2: Detail Pengaturan (Hari, Posisi, Durasi) --}}
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-100 text-xs">
+                                        <div>
+                                            <label class="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">Berlaku Hari</label>
+                                            <select x-model="act.day" @change="recalculateGrid()"
+                                                    class="w-full rounded-xl border border-slate-200 py-1.5 px-2.5 text-xs font-bold bg-slate-50 text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                                <option value="all">Setiap Hari</option>
+                                                <option value="1">Senin</option>
+                                                <option value="2">Selasa</option>
+                                                <option value="3">Rabu</option>
+                                                <option value="4">Kamis</option>
+                                                <option value="5">Jum'at</option>
+                                                <option value="6">Sabtu</option>
+                                            </select>
+                                        </div>
 
-                                    <div class="w-full sm:w-36 shrink-0">
-                                        <select x-model="act.position" @change="recalculateGrid()"
-                                                class="w-full rounded-xl border border-slate-300 py-1.5 px-2.5 text-xs font-bold bg-white">
-                                            <option value="before_jp_1">Sebelum JP 1</option>
-                                            <option value="after_jp_3">Setelah JP 3</option>
-                                            <option value="after_jp_4">Setelah JP 4</option>
-                                            <option value="after_jp_5">Setelah JP 5</option>
-                                            <option value="after_jp_6">Setelah JP 6</option>
-                                        </select>
-                                    </div>
+                                        <div>
+                                            <label class="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">Posisi Jam</label>
+                                            <select x-model="act.position" @change="recalculateGrid()"
+                                                    class="w-full rounded-xl border border-slate-200 py-1.5 px-2.5 text-xs font-bold bg-slate-50 text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                                <option value="before_jp_1">Sebelum JP 1</option>
+                                                <option value="after_jp_1">Setelah JP 1</option>
+                                                <option value="after_jp_2">Setelah JP 2</option>
+                                                <option value="after_jp_3">Setelah JP 3</option>
+                                                <option value="after_jp_4">Setelah JP 4</option>
+                                                <option value="after_jp_5">Setelah JP 5</option>
+                                                <option value="after_jp_6">Setelah JP 6</option>
+                                                <option value="after_jp_7">Setelah JP 7</option>
+                                            </select>
+                                        </div>
 
-                                    <div class="flex items-center gap-1.5 w-full sm:w-28 shrink-0">
-                                        <input type="number" min="5" max="120" x-model.number="act.duration" @change="recalculateGrid()"
-                                               class="w-16 rounded-xl border border-slate-300 py-1.5 text-center text-xs font-black bg-white">
-                                        <span class="text-[11px] font-bold text-slate-500">Mnt</span>
+                                        <div>
+                                            <label class="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">Durasi Waktu</label>
+                                            <div class="flex items-center gap-1.5">
+                                                <input type="number" min="5" max="120" x-model.number="act.duration" @input.debounce.300ms="recalculateGrid()"
+                                                       class="w-full rounded-xl border border-slate-200 py-1.5 px-2.5 text-center text-xs font-black bg-slate-50 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                                <span class="text-[11px] font-bold text-slate-500 shrink-0">Menit</span>
+                                            </div>
+                                        </div>
                                     </div>
-
-                                    <button type="button" @click="removeActivity(idx)"
-                                            class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer self-end sm:self-center">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                    </button>
                                 </div>
                             </template>
                         </div>
                     </div>
 
-                    {{-- Live Preview Timeline Waktu (Pagi & Siang) --}}
-                    <div class="lg:col-span-5 space-y-3">
+                    {{-- Live Preview Timeline Waktu (Kanan, Clean & Modern) --}}
+                    <div class="lg:col-span-5 space-y-3 sticky top-4">
                         <div class="flex items-center justify-between">
-                            <h3 class="text-xs font-extrabold text-slate-900">Live Preview Timeline Waktu:</h3>
+                            <h3 class="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                                <span>⏱️ Live Preview Timeline:</span>
+                                <span x-show="isCalculating" class="inline-block animate-spin text-[10px] text-emerald-600">⌛</span>
+                            </h3>
                             <div class="flex items-center gap-1">
                                 <template x-for="d in daysCount" :key="d">
                                     <button type="button" @click="previewDay = d"
                                             class="w-7 h-7 rounded-lg text-[11px] font-extrabold transition cursor-pointer"
-                                            :class="previewDay === d ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                            :class="previewDay === d ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
                                             x-text="['Sen','Sel','Rab','Kam','Jum','Sab'][d-1]"></button>
                                 </template>
                             </div>
                         </div>
 
-                        {{-- Tab Switcher: Pagi vs Siang (Jika 2 Shift) --}}
+                        {{-- Tab Switcher Shift Pagi vs Siang (Jika 2 Shift) --}}
                         <div x-show="shiftMode === 'double'" class="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-bold">
                             <button type="button" @click="previewShiftTab = 'pagi'"
                                     class="flex-1 py-1.5 rounded-lg transition text-center flex items-center justify-center gap-1.5 cursor-pointer"
                                     :class="previewShiftTab === 'pagi' ? 'bg-white text-emerald-800 shadow-2xs font-extrabold' : 'text-slate-500 hover:text-slate-800'">
-                                <span>🌅 Shift Pagi (07:00)</span>
+                                <span>🌅 Shift Pagi (<span x-text="startTime"></span>)</span>
                             </button>
                             <button type="button" @click="previewShiftTab = 'siang'"
                                     class="flex-1 py-1.5 rounded-lg transition text-center flex items-center justify-center gap-1.5 cursor-pointer"
                                     :class="previewShiftTab === 'siang' ? 'bg-white text-amber-800 shadow-2xs font-extrabold' : 'text-slate-500 hover:text-slate-800'">
-                                <span x-text="'☀️ Shift Siang (' + startTimeSiang + ')'"></span>
+                                <span>☀️ Shift Siang (<span x-text="startTimeSiang"></span>)</span>
                             </button>
                         </div>
 
                         {{-- Tabel Timeline Preview --}}
                         <div class="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-2xs">
                             <div class="px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-xs">
-                                <span class="font-extrabold text-slate-800" x-text="gridPreview[previewDay]?.day_name || 'Senin'"></span>
-                                <span class="font-mono text-[11px] text-slate-500"
+                                <div class="flex items-center gap-2">
+                                    <span class="font-extrabold text-slate-800" x-text="gridPreview[previewDay]?.day_name || 'Senin'"></span>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black"
+                                          :class="shiftMode === 'double' && previewShiftTab === 'siang' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'"
+                                          x-text="shiftMode === 'double' && previewShiftTab === 'siang' ? 'Shift Siang' : 'Shift Pagi'"></span>
+                                </div>
+                                <span class="font-mono text-[11px] font-bold text-slate-600"
                                       x-text="shiftMode === 'double' && previewShiftTab === 'siang' ? 'Mulai ' + startTimeSiang + ' WIB' : 'Mulai ' + startTime + ' WIB'"></span>
                             </div>
 
-                            <div class="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                            <div class="divide-y divide-slate-100 max-h-96 overflow-y-auto">
                                 {{-- Preview Pagi --}}
                                 <template x-if="shiftMode === 'single' || previewShiftTab === 'pagi'">
                                     <div>
                                         <template x-for="(slot, sIdx) in (gridPreview[previewDay]?.slots || [])" :key="'pagi_' + sIdx">
-                                            <div class="px-4 py-2 flex items-center justify-between text-xs"
-                                                 :class="slot.is_activity ? 'bg-amber-50/70 text-amber-900 font-bold' : 'hover:bg-slate-50'">
-                                                <div class="flex items-center gap-2.5">
-                                                    <span class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-black"
+                                            <div class="px-4 py-2.5 flex items-center justify-between text-xs transition"
+                                                 :class="slot.is_activity ? 'bg-amber-50/60 text-amber-950 font-bold border-l-4 border-amber-400' : 'hover:bg-slate-50'">
+                                                <div class="flex items-center gap-2.5 min-w-0">
+                                                    <span class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-black shrink-0"
                                                           :class="slot.is_activity ? 'bg-amber-200 text-amber-900' : 'bg-slate-100 text-slate-700'"
                                                           x-text="slot.is_activity ? '★' : slot.period_order"></span>
-                                                    <span x-text="slot.is_activity ? slot.activity : ('Jam Pelajaran Ke-' + slot.period_order)"></span>
+                                                    <span class="truncate font-semibold"
+                                                          :class="slot.is_activity ? 'text-amber-950' : 'text-slate-800'"
+                                                          x-text="slot.is_activity ? slot.activity : ('Jam Pelajaran Ke-' + slot.period_order)"></span>
                                                 </div>
-                                                <span class="font-mono text-[11px] font-bold text-slate-600" x-text="slot.time_range"></span>
+                                                <span class="font-mono text-[11px] font-extrabold shrink-0"
+                                                      :class="slot.is_activity ? 'text-amber-900' : 'text-slate-600'"
+                                                      x-text="slot.time_range"></span>
                                             </div>
                                         </template>
                                     </div>
@@ -813,19 +858,27 @@
                                 <template x-if="shiftMode === 'double' && previewShiftTab === 'siang'">
                                     <div>
                                         <template x-for="(slot, sIdx) in (gridPreview[previewDay]?.slots_siang || [])" :key="'siang_' + sIdx">
-                                            <div class="px-4 py-2 flex items-center justify-between text-xs"
-                                                 :class="slot.is_activity ? 'bg-amber-50/70 text-amber-900 font-bold' : 'hover:bg-slate-50'">
-                                                <div class="flex items-center gap-2.5">
-                                                    <span class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-black"
+                                            <div class="px-4 py-2.5 flex items-center justify-between text-xs transition"
+                                                 :class="slot.is_activity ? 'bg-amber-50/60 text-amber-950 font-bold border-l-4 border-amber-400' : 'hover:bg-slate-50'">
+                                                <div class="flex items-center gap-2.5 min-w-0">
+                                                    <span class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-black shrink-0"
                                                           :class="slot.is_activity ? 'bg-amber-200 text-amber-900' : 'bg-amber-100 text-amber-900'"
                                                           x-text="slot.is_activity ? '★' : slot.period_order"></span>
-                                                    <span x-text="slot.is_activity ? slot.activity : ('Jam Pelajaran Ke-' + slot.period_order)"></span>
+                                                    <span class="truncate font-semibold text-amber-950"
+                                                          x-text="slot.is_activity ? slot.activity : ('Jam Pelajaran Ke-' + slot.period_order)"></span>
                                                 </div>
-                                                <span class="font-mono text-[11px] font-bold text-amber-900" x-text="slot.time_range"></span>
+                                                <span class="font-mono text-[11px] font-extrabold text-amber-900 shrink-0" x-text="slot.time_range"></span>
                                             </div>
                                         </template>
                                     </div>
                                 </template>
+                            </div>
+
+                            {{-- Footer Ringkasan Timeline --}}
+                            <div class="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
+                                <span x-text="(gridPreview[previewDay]?.total_jp || 0) + ' Jam Pelajaran'"></span>
+                                <span class="font-bold text-slate-700"
+                                      x-text="'Selesai Pukul: ' + (getCurrentDayEndTime() || '-') + ' WIB'"></span>
                             </div>
                         </div>
                     </div>
@@ -833,11 +886,11 @@
 
                 <div class="flex items-center justify-between pt-4 border-t border-slate-100">
                     <button type="button" @click="step = 2"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer">
+                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
                         &larr; Kembali ke Langkah 2
                     </button>
                     <button type="button" @click="step = 4"
-                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer">
+                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer transition">
                         <span>Lanjut ke Langkah 4: Beban Guru</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
@@ -869,7 +922,11 @@
                     <div class="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
                         {{-- 1. Pilih Guru --}}
                         <div class="sm:col-span-4 space-y-1">
-                            <label class="text-[11px] font-bold text-slate-700">1. Nama Guru Pengampu</label>
+                            <div class="flex items-center justify-between">
+                                <label class="text-[11px] font-bold text-slate-700">1. Nama Guru Pengampu</label>
+                                <span x-show="wlTeacherName" class="text-[10px] text-emerald-800 font-bold bg-emerald-100 px-2 py-0.2 rounded-full"
+                                      x-text="'Alokasi: ' + (getTeacherSummary().find(x => x.name === wlTeacherName)?.totalJp || 0) + ' JP'"></span>
+                            </div>
                             <select x-model="wlTeacherId" @change="onSelectTeacher($event.target.value)"
                                     class="w-full rounded-xl border border-slate-300 py-2 px-3 text-xs font-bold bg-white focus:ring-emerald-500">
                                 <option value="">-- Pilih Guru --</option>
@@ -1015,11 +1072,11 @@
 
                 <div class="flex items-center justify-between pt-4 border-t border-slate-100">
                     <button type="button" @click="step = 3"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer">
+                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
                         &larr; Kembali ke Langkah 3
                     </button>
                     <button type="button" @click="step = 5"
-                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer">
+                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer transition">
                         <span>Lanjut ke Langkah 5: Pilihan Metode</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
@@ -1049,7 +1106,7 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {{-- Opsi A: Generate Otomatis Anti-Bentrok --}}
                         <label class="p-5 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3.5"
-                               :class="generationMode === 'auto' ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-300/40' : 'border-slate-200 bg-white hover:border-slate-300'">
+                               :class="generationMode === 'auto' ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-300/40 shadow-xs' : 'border-slate-200 bg-white hover:border-slate-300'">
                             <input type="radio" name="gen_choice" value="auto" x-model="generationMode" class="mt-1 text-emerald-600">
                             <div class="space-y-1.5">
                                 <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold text-[10px]">
@@ -1059,7 +1116,7 @@
                                 <p class="text-xs text-slate-600 leading-relaxed">
                                     Sistem menggunakan algoritma anti-bentrok cerdas (CSP) untuk memetakan penugasan guru ke kelas-kelas dalam bentuk blok jam berurutan (2–3 JP) dan menyebarkan jam secara proporsional.
                                 </p>
-                                <p x-show="shiftMode === 'double'" class="text-[11px] text-emerald-700 font-bold bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                                <p x-show="shiftMode === 'double'" class="text-[11px] text-emerald-800 font-bold bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
                                     ✨ <strong>Multi-Shift Aware:</strong> Guru yang mengajar di Shift Pagi JP 1 dan Shift Siang JP 1 tidak dihitung bentrok karena jam fisiknya berbeda.
                                 </p>
                             </div>
@@ -1067,7 +1124,7 @@
 
                         {{-- Opsi B: Kerangka Kosong --}}
                         <label class="p-5 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3.5"
-                                :class="generationMode === 'manual' ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-300/40' : 'border-slate-200 bg-white hover:border-slate-300'">
+                               :class="generationMode === 'manual' ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-300/40 shadow-xs' : 'border-slate-200 bg-white hover:border-slate-300'">
                             <input type="radio" name="gen_choice" value="manual" x-model="generationMode" class="mt-1 text-emerald-600">
                             <div class="space-y-1.5">
                                 <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-extrabold text-[10px]">
@@ -1084,11 +1141,11 @@
 
                 <div class="flex items-center justify-between pt-4 border-t border-slate-100">
                     <button type="button" @click="step = 4"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer">
+                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
                         &larr; Kembali ke Langkah 4
                     </button>
                     <button type="button" @click="step = 6"
-                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer">
+                            class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-2 cursor-pointer transition">
                         <span>Lanjut ke Langkah 6: Konfirmasi</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
@@ -1167,7 +1224,7 @@
 
                 <div class="flex items-center justify-between pt-4 border-t border-slate-100">
                     <button type="button" @click="step = 5"
-                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer">
+                            class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition">
                         &larr; Kembali ke Langkah 5
                     </button>
                     <button type="submit"
