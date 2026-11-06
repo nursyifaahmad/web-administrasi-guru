@@ -485,4 +485,141 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertDontSee('Kelas RABU');
         $response->assertSee('TETI OKTAVIANI, S.Pd'); // Tampil di bagian Jadwal Guru Piket Hari RABU
     }
+
+    public function test_admin_can_swap_cells_across_different_days_in_same_class(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+        /** @var SchoolScheduleService $service */
+        $service = app(SchoolScheduleService::class);
+        $service->importFromWakasekCsv($year);
+
+        // Slot 1: Kelas 7A di Hari Senin (day 1) Jam 1
+        $item1 = SchoolScheduleItem::query()
+            ->where('academic_year_id', $year->id)
+            ->where('day_of_week', 1)
+            ->where('class_name', '7A')
+            ->where('period_order', 1)
+            ->firstOrFail();
+
+        // Slot 2: Kelas 7A di Hari Rabu (day 3) Jam 3
+        $item2 = SchoolScheduleItem::query()
+            ->where('academic_year_id', $year->id)
+            ->where('day_of_week', 3)
+            ->where('class_name', '7A')
+            ->where('period_order', 3)
+            ->firstOrFail();
+
+        $code1 = $item1->teacher_code;
+        $code2 = $item2->teacher_code;
+
+        // Hitung total JP Kelas 7A sebelum penukaran
+        $totalJpBefore = SchoolScheduleItem::query()
+            ->where('academic_year_id', $year->id)
+            ->where('class_name', '7A')
+            ->whereNotNull('teacher_code')
+            ->where('teacher_code', '!=', '')
+            ->count();
+
+        // Lakukan penukaran slot antar hari di kelas yang sama
+        $response = $this->actingAs($admin)->post(route('admin.schedules.master.swap'), [
+            'item_id_1' => $item1->id,
+            'item_id_2' => $item2->id,
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('status');
+
+        // Nilai sel tertukar
+        $this->assertEquals($code2, $item1->fresh()->teacher_code);
+        $this->assertEquals($code1, $item2->fresh()->teacher_code);
+
+        // Verifikasi bahwa total JP Kelas 7A tetap 100% sama persis (tidak berkurang atau bertambah)
+        $totalJpAfter = SchoolScheduleItem::query()
+            ->where('academic_year_id', $year->id)
+            ->where('class_name', '7A')
+            ->whereNotNull('teacher_code')
+            ->where('teacher_code', '!=', '')
+            ->count();
+
+        $this->assertEquals($totalJpBefore, $totalJpAfter, 'Total JP Kelas 7A harus tetap sama setelah penukaran antar-hari');
+    }
+
+    public function test_admin_cannot_swap_cells_between_different_classes(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+        /** @var SchoolScheduleService $service */
+        $service = app(SchoolScheduleService::class);
+        $service->importFromWakasekCsv($year);
+
+        // Slot 1: Kelas 7A
+        $item1 = SchoolScheduleItem::query()
+            ->where('academic_year_id', $year->id)
+            ->where('class_name', '7A')
+            ->where('period_order', 1)
+            ->firstOrFail();
+
+        // Slot 2: Kelas 7B
+        $item2 = SchoolScheduleItem::query()
+            ->where('academic_year_id', $year->id)
+            ->where('class_name', '7B')
+            ->where('period_order', 1)
+            ->firstOrFail();
+
+        // Test via Session POST -> Ditolak dengan session error
+        $response = $this->actingAs($admin)->post(route('admin.schedules.master.swap'), [
+            'item_id_1' => $item1->id,
+            'item_id_2' => $item2->id,
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+
+        // Test via JSON API -> Ditolak dengan status 422
+        $responseJson = $this->actingAs($admin)->postJson(route('admin.schedules.master.swap'), [
+            'item_id_1' => $item1->id,
+            'item_id_2' => $item2->id,
+        ]);
+
+        $responseJson->assertStatus(422);
+        $responseJson->assertJsonFragment(['success' => false]);
+    }
+
+    public function test_swap_targets_endpoint_returns_only_same_class_non_common_slots(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+        /** @var SchoolScheduleService $service */
+        $service = app(SchoolScheduleService::class);
+        $service->importFromWakasekCsv($year);
+
+        $item1 = SchoolScheduleItem::query()
+            ->where('academic_year_id', $year->id)
+            ->where('class_name', '7A')
+            ->where('period_order', 1)
+            ->firstOrFail();
+
+        $response = $this->actingAs($admin)->getJson(route('admin.schedules.master.swap-targets', [
+            'item_id' => $item1->id,
+        ]));
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('source.class_name', '7A');
+
+        $slots = $response->json('slots');
+        $this->assertNotEmpty($slots);
+
+        // Seluruh slot target harus memiliki label dan bukan dirinya sendiri
+        foreach ($slots as $slot) {
+            $this->assertNotEquals($item1->id, $slot['id']);
+            $this->assertArrayHasKey('day_name', $slot);
+            $this->assertArrayHasKey('period_order', $slot);
+            $this->assertArrayHasKey('time_range', $slot);
+            $this->assertArrayHasKey('label', $slot);
+
+            // Pastikan bukan kegiatan umum seperti istirahat
+            if ($slot['teacher_code']) {
+                $this->assertNotContains(strtoupper(trim($slot['teacher_code'])), ['ISTIRAHAT', 'UPACARA BENDERA', 'UPACARA']);
+            }
+        }
+    }
 }

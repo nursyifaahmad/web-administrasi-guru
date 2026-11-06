@@ -16,6 +16,9 @@
         selectedSubjectName: '',
         swapItem1: null,
         swapItem2Id: '',
+        swapTargetSlots: [],
+        loadingSwapTargets: false,
+        swapFilterDay: 'all',
         teachersList: @js($teachers->values()),
         activeDay: {{ $activeDay }},
 
@@ -39,10 +42,40 @@
             }
         },
 
-        openSwap(item) {
+        async openSwap(item) {
             this.swapItem1 = item;
             this.swapItem2Id = '';
+            this.swapTargetSlots = [];
+            this.loadingSwapTargets = true;
+            this.swapFilterDay = 'all';
             this.swapModal = true;
+
+            try {
+                let resp = await fetch('{{ route('admin.schedules.master.swap-targets') }}?item_id=' + item.id, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                let data = await resp.json();
+                if (data.success && data.slots) {
+                    this.swapTargetSlots = data.slots;
+                }
+            } catch (err) {
+                console.error('Gagal memuat slot target penukaran:', err);
+            } finally {
+                this.loadingSwapTargets = false;
+            }
+        },
+
+        get filteredSwapTargets() {
+            if (this.swapFilterDay === 'all') {
+                return this.swapTargetSlots;
+            }
+            return this.swapTargetSlots.filter(s => String(s.day_of_week) === String(this.swapFilterDay));
+        },
+
+        isCommonActivity(item) {
+            if (!item || !item.teacher_code) return false;
+            let code = String(item.teacher_code).trim().toUpperCase();
+            return ['UPACARA BENDERA', 'UPACARA', 'SHOLAT DHUHA', 'DHUHA', 'ISTIRAHAT', 'KEGIATAN KEAGAMAAN', 'SABTU BERSIH / OR', 'SABTU BERSIH', 'LITERASI'].includes(code);
         }
      }">
 
@@ -515,6 +548,7 @@
 
                         <div class="pt-3 flex items-center justify-between border-t border-slate-100">
                             <button type="button" @click="openSwap(selectedItem); editModal = false"
+                                    x-show="!isCommonActivity(selectedItem)"
                                     class="px-3 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs transition">
                                 ⇄ Tukar dengan Sel Lain
                             </button>
@@ -542,14 +576,16 @@
          x-transition:enter-end="opacity-100">
         <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-xs" @click="swapModal = false"></div>
         <div class="min-h-full flex items-center justify-center p-4">
-            <div class="relative bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 overflow-hidden border border-slate-100"
+            <div class="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 overflow-hidden border border-slate-100"
                  @click.stop>
                 <div class="flex items-start justify-between pb-3 border-b border-slate-100 mb-4">
                     <div>
-                        <span class="text-[11px] font-bold text-amber-700">Fitur Penyelesai Bentrok Cepat</span>
+                        <span class="text-[11px] font-bold text-amber-700 flex items-center gap-1.5">
+                            <span>⚡ Pengaturan Fleksibel &amp; Anti-Bentrok</span>
+                        </span>
                         <h3 class="text-base font-extrabold text-slate-900">Tukar Jadwal (Swap Slot)</h3>
                     </div>
-                    <button type="button" @click="swapModal = false" class="text-slate-400 hover:text-slate-600 p-1">
+                    <button type="button" @click="swapModal = false" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
@@ -559,41 +595,86 @@
                         @csrf
                         <input type="hidden" name="item_id_1" :value="swapItem1.id">
 
-                        <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs">
-                            <span class="font-bold text-amber-900">Slot 1 yang Dipilih:</span>
-                            <div class="mt-1 font-bold text-slate-800" x-text="'Kelas ' + swapItem1.class_name + ' &bull; Jam ' + swapItem1.period_order + ' (' + swapItem1.time_range + ')'"></div>
-                            <div class="text-[11px] text-slate-600" x-text="'Isi: Kode ' + (swapItem1.teacher_code || '-') + ' (' + (swapItem1.teacher_name || 'Kosong') + ')'"></div>
+                        {{-- Slot 1 Terpilih --}}
+                        <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs space-y-1">
+                            <span class="font-extrabold text-amber-900 uppercase tracking-wider text-[10px] block">Slot 1 yang Dipilih:</span>
+                            <div class="font-black text-slate-900 text-sm flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded-lg bg-amber-200/80 text-amber-950 font-black" x-text="'Kelas ' + swapItem1.class_name"></span>
+                                <span x-text="(swapItem1.day_name || ('Hari ' + swapItem1.day_of_week)) + ' &bull; Jam ' + swapItem1.period_order + ' (' + swapItem1.time_range + ')'"></span>
+                            </div>
+                            <div class="text-[11px] text-slate-600 pt-0.5">
+                                Isi: <strong class="text-slate-800" x-text="swapItem1.teacher_code ? ('Kode ' + swapItem1.teacher_code + ' (' + (swapItem1.teacher_name || '-') + (swapItem1.subject_name ? ' - ' + swapItem1.subject_name : '') + ')') : '⚪ Slot Kosong'"></strong>
+                            </div>
                         </div>
 
+                        {{-- Jaminan Konsistensi JP --}}
+                        <div class="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 space-y-1">
+                            <div class="font-bold flex items-center gap-1.5 text-emerald-900">
+                                <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                                <span>Jumlah JP Kelas Dijamin Aman &amp; Konsisten</span>
+                            </div>
+                            <p class="text-[11px] text-emerald-800 leading-relaxed">
+                                Target penukaran khusus dibatasi untuk <strong>Kelas <span x-text="swapItem1.class_name"></span></strong> saja (bisa hari yang sama atau berbeda hari). Hal ini memastikan total JP per mapel dan beban belajar kelas tetap persis sama.
+                            </p>
+                        </div>
+
+                        {{-- Filter Hari Cepat --}}
+                        <div class="space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <label class="block text-xs font-bold text-slate-800">
+                                    Pilih Slot Target di Kelas <span class="text-amber-800 font-extrabold" x-text="swapItem1.class_name"></span>:
+                                </label>
+                                <span class="text-[10px] text-slate-400 font-bold" x-show="!loadingSwapTargets"
+                                      x-text="filteredSwapTargets.length + ' Slot Tersedia'"></span>
+                            </div>
+
+                            <div class="flex items-center gap-1 flex-wrap">
+                                <button type="button" @click="swapFilterDay = 'all'"
+                                        class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer"
+                                        :class="swapFilterDay === 'all' ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'">
+                                    Semua Hari
+                                </button>
+                                @foreach([1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis', 5 => "Jum'at", 6 => 'Sabtu'] as $dNum => $dName)
+                                    <button type="button" @click="swapFilterDay = '{{ $dNum }}'"
+                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer"
+                                            :class="swapFilterDay === '{{ $dNum }}' ? 'bg-amber-600 text-white border-amber-600 shadow-2xs' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'">
+                                        {{ $dName }}
+                                    </button>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        {{-- Dropdown Pilihan Slot Target --}}
                         <div>
-                            <label class="block text-xs font-bold text-slate-700 mb-1.5">Tukar dengan Slot Lain di Hari yang Sama:</label>
-                            <select name="item_id_2" required x-model="swapItem2Id"
-                                    class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-bold focus:ring-emerald-500 focus:border-emerald-500">
-                                <option value="">-- Pilih Slot Target Penukaran --</option>
-                                @foreach($matrixData['matrix_by_day'][$activeDay]['pagi_slots'] ?? [] as $sl)
-                                    @foreach($sl['classes'] ?? [] as $itm)
-                                        <option value="{{ $itm->id }}">
-                                            Shift Pagi: Kelas {{ $itm->class_name }} &bull; Jam {{ $itm->period_order }} ({{ $itm->time_range }}) — Kode {{ $itm->teacher_code ?: 'Kosong' }} ({{ $itm->teacher_name ?: '-' }})
-                                        </option>
-                                    @endforeach
-                                @endforeach
-                                @foreach($matrixData['matrix_by_day'][$activeDay]['siang_slots'] ?? [] as $sl)
-                                    @foreach($sl['classes'] ?? [] as $itm)
-                                        <option value="{{ $itm->id }}">
-                                            Shift Siang: Kelas {{ $itm->class_name }} &bull; Jam {{ $itm->period_order }} ({{ $itm->time_range }}) — Kode {{ $itm->teacher_code ?: 'Kosong' }} ({{ $itm->teacher_name ?: '-' }})
-                                        </option>
-                                    @endforeach
-                                @endforeach
-                            </select>
+                            {{-- State Loading --}}
+                            <div x-show="loadingSwapTargets" class="py-4 text-center text-xs text-slate-400 font-bold flex items-center justify-center gap-2">
+                                <svg class="animate-spin w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                                <span>Memuat slot Kelas <span x-text="swapItem1.class_name"></span> dari database...</span>
+                            </div>
+
+                            {{-- Select Dropdown --}}
+                            <div x-show="!loadingSwapTargets">
+                                <select name="item_id_2" required x-model="swapItem2Id"
+                                        class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-bold bg-white focus:ring-amber-500 focus:border-amber-500">
+                                    <option value="">-- Pilih Slot Target di Kelas <span x-text="swapItem1.class_name"></span> --</option>
+                                    <template x-for="target in filteredSwapTargets" :key="target.id">
+                                        <option :value="target.id" x-text="target.label"></option>
+                                    </template>
+                                </select>
+                                <p x-show="filteredSwapTargets.length === 0" class="text-[11px] text-slate-400 italic mt-1.5">
+                                    Tidak ada slot target yang tersedia pada filter hari yang dipilih.
+                                </p>
+                            </div>
                         </div>
 
                         <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
                             <button type="button" @click="swapModal = false"
-                                    class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                                    class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">
                                 Batal
                             </button>
                             <button type="submit"
-                                    class="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs">
+                                    :disabled="!swapItem2Id"
+                                    class="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-extrabold shadow-xs cursor-pointer transition">
                                 Lakukan Penukaran Slot
                             </button>
                         </div>

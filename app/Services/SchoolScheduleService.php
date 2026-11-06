@@ -1138,6 +1138,10 @@ CSV;
         $item1 = SchoolScheduleItem::query()->findOrFail($itemId1);
         $item2 = SchoolScheduleItem::query()->findOrFail($itemId2);
 
+        if ($item1->class_name !== $item2->class_name) {
+            throw new \InvalidArgumentException('Penukaran slot hanya diperbolehkan pada kelas yang sama.');
+        }
+
         DB::transaction(function () use ($item1, $item2) {
             $tmpCode = $item1->teacher_code;
             $tmpName = $item1->teacher_name;

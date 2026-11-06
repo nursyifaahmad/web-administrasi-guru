@@ -252,7 +252,66 @@ class SchoolScheduleController extends Controller
     }
 
     /**
-     * Tukar jadwal antar dua sel (Swap Slot)
+     * Ambil seluruh slot target penukaran untuk kelas yang sama (bisa berbeda hari)
+     */
+    public function swapTargets(Request $request): JsonResponse
+    {
+        $itemId = (int) $request->query('item_id');
+        $sourceItem = SchoolScheduleItem::query()->find($itemId);
+
+        if (!$sourceItem) {
+            return response()->json(['success' => false, 'message' => 'Slot sumber tidak ditemukan.'], 404);
+        }
+
+        $targets = SchoolScheduleItem::query()
+            ->where('academic_year_id', $sourceItem->academic_year_id)
+            ->where('class_name', $sourceItem->class_name)
+            ->where('id', '!=', $sourceItem->id)
+            ->orderBy('day_of_week')
+            ->orderBy('period_order')
+            ->get();
+
+        // Saring slot kegiatan umum sekolah (istirahat/upacara)
+        $validTargets = $targets->filter(function (SchoolScheduleItem $item) {
+            return !$item->isCommonActivity();
+        })->map(function (SchoolScheduleItem $item) {
+            $teacherLabel = $item->teacher_code
+                ? "Kode {$item->teacher_code} ({$item->teacher_name} - {$item->subject_name})"
+                : '⚪ Slot Kosong';
+
+            return [
+                'id' => $item->id,
+                'day_of_week' => $item->day_of_week,
+                'day_name' => $item->day_name,
+                'period_order' => $item->period_order,
+                'time_range' => $item->time_range,
+                'teacher_code' => $item->teacher_code,
+                'teacher_name' => $item->teacher_name,
+                'subject_name' => $item->subject_name,
+                'is_empty' => empty($item->teacher_code),
+                'label' => "{$item->day_name} • Jam {$item->period_order} ({$item->time_range}) — {$teacherLabel}",
+            ];
+        })->values();
+
+        return response()->json([
+            'success' => true,
+            'source' => [
+                'id' => $sourceItem->id,
+                'class_name' => $sourceItem->class_name,
+                'day_of_week' => $sourceItem->day_of_week,
+                'day_name' => $sourceItem->day_name,
+                'period_order' => $sourceItem->period_order,
+                'time_range' => $sourceItem->time_range,
+                'teacher_code' => $sourceItem->teacher_code,
+                'teacher_name' => $sourceItem->teacher_name,
+                'subject_name' => $sourceItem->subject_name,
+            ],
+            'slots' => $validTargets,
+        ]);
+    }
+
+    /**
+     * Tukar jadwal antar dua sel (Swap Slot) khusus dalam rombel kelas yang sama
      */
     public function swapCells(Request $request): JsonResponse|RedirectResponse
     {
@@ -261,13 +320,46 @@ class SchoolScheduleController extends Controller
             'item_id_2' => ['required', 'integer', 'exists:school_schedule_items,id'],
         ]);
 
-        $this->scheduleService->swapSlots($validated['item_id_1'], $validated['item_id_2']);
+        $item1 = SchoolScheduleItem::query()->findOrFail($validated['item_id_1']);
+        $item2 = SchoolScheduleItem::query()->findOrFail($validated['item_id_2']);
 
-        if ($request->wantsJson()) {
-            return response()->json(['success' => true]);
+        // Jaminan integritas: Rombel kelas harus sama agar total JP kelas terjaga
+        if ($item1->class_name !== $item2->class_name) {
+            $msg = 'Penukaran jadwal hanya dapat dilakukan pada rombel kelas yang sama (' . $item1->class_name . ') agar jumlah JP kelas tetap terjaga.';
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+            return redirect()->back()->with('error', $msg);
         }
 
-        return redirect()->back()->with('status', 'Dua slot jadwal berhasil ditukar.');
+        if ($item1->academic_year_id !== $item2->academic_year_id) {
+            $msg = 'Slot jadwal harus berada pada tahun ajaran yang sama.';
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+            return redirect()->back()->with('error', $msg);
+        }
+
+        if ($item1->isCommonActivity() || $item2->isCommonActivity()) {
+            $msg = 'Kegiatan non-KBM sekolah (seperti Istirahat/Upacara/Sholat Dhuha) tidak dapat ditukar.';
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+            return redirect()->back()->with('error', $msg);
+        }
+
+        $this->scheduleService->swapSlots($validated['item_id_1'], $validated['item_id_2']);
+
+        $successMsg = "Dua slot jadwal di Kelas {$item1->class_name} berhasil ditukar: ({$item1->day_name} Jam {$item1->period_order}) ⇄ ({$item2->day_name} Jam {$item2->period_order}). Total JP kelas tetap sama.";
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $successMsg,
+            ]);
+        }
+
+        return redirect()->back()->with('status', $successMsg);
     }
 
     /**

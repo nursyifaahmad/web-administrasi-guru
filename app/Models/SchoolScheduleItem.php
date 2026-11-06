@@ -24,6 +24,10 @@ class SchoolScheduleItem extends Model
         'conflict_notes',
     ];
 
+    protected $appends = [
+        'day_name',
+    ];
+
     protected function casts(): array
     {
         return [
@@ -31,6 +35,19 @@ class SchoolScheduleItem extends Model
             'period_order' => 'integer',
             'is_conflict' => 'boolean',
         ];
+    }
+
+    public function getDayNameAttribute(): string
+    {
+        return match ((int) $this->day_of_week) {
+            1 => 'Senin',
+            2 => 'Selasa',
+            3 => 'Rabu',
+            4 => 'Kamis',
+            5 => "Jum'at",
+            6 => 'Sabtu',
+            default => 'Hari ' . $this->day_of_week,
+        };
     }
 
     public function academicYear(): BelongsTo

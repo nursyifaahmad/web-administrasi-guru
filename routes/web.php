@@ -101,6 +101,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/jadwal-master/create-scratch', [SchoolScheduleController::class, 'createScratch'])->name('schedules.master.scratch');
         Route::post('/jadwal-master/load-wakasek', [SchoolScheduleController::class, 'loadWakasekTemplate'])->name('schedules.master.load-wakasek');
         Route::put('/jadwal-master/item/{item}', [SchoolScheduleController::class, 'updateCell'])->name('schedules.master.update-cell');
+        Route::get('/jadwal-master/swap-targets', [SchoolScheduleController::class, 'swapTargets'])->name('schedules.master.swap-targets');
         Route::post('/jadwal-master/swap', [SchoolScheduleController::class, 'swapCells'])->name('schedules.master.swap');
         Route::post('/jadwal-master/sync-classes', [SchoolScheduleController::class, 'syncClasses'])->name('schedules.master.sync-classes');
         Route::delete('/jadwal-master/clear', [SchoolScheduleController::class, 'clearSchedule'])->name('schedules.master.clear');
