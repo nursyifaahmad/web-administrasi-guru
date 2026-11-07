@@ -18,6 +18,31 @@
         editStudent: null,
         wkSigData: '',
         wkPad: null,
+        selectedStudents: [],
+        selectAll: false,
+        allStudentIds: @js($students->pluck('id')->all()),
+        duplicateStudentIds: @js($duplicateStudentIds ?? []),
+        toggleSelectAll() {
+            if (this.selectAll) {
+                this.selectedStudents = [...this.allStudentIds];
+            } else {
+                this.selectedStudents = [];
+            }
+        },
+        updateSelectAllState() {
+            this.selectAll = this.allStudentIds.length > 0 && this.selectedStudents.length === this.allStudentIds.length;
+        },
+        selectDuplicates() {
+            this.selectedStudents = [...this.duplicateStudentIds];
+            this.updateSelectAllState();
+        },
+        confirmBulkDelete() {
+            if (!this.selectedStudents.length) return;
+            const count = this.selectedStudents.length;
+            if (confirm(`Apakah Anda yakin ingin MENGHAPUS ${count} murid yang dipilih dari Rombel ini?\n\nTindakan ini tidak dapat dibatalkan.`)) {
+                this.$refs.bulkDeleteForm.submit();
+            }
+        },
         init() {
             this.$nextTick(() => {
                 if (this.$refs.wkCanvas) {
@@ -47,6 +72,14 @@
                    class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold hover:bg-slate-50 transition">
                     Unduh Template
                 </a>
+                @if(!empty($duplicateStudentIds) && count($duplicateStudentIds) > 0)
+                    <button type="button" @click="selectDuplicates()"
+                            class="px-3 py-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-300 font-bold hover:bg-amber-100 transition inline-flex items-center gap-1.5"
+                            title="Otomatis centang {{ count($duplicateStudentIds) }} data baris duplikat">
+                        <svg class="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        <span>Pilih Duplikat ({{ count($duplicateStudentIds) }})</span>
+                    </button>
+                @endif
                 @if($students->count() > 1)
                     <form method="POST" action="{{ route('admin.classes.students.sort', $schoolClass) }}">
                         @csrf
@@ -58,11 +91,53 @@
             </div>
         </div>
 
+        {{-- Bulk Actions Bar saat ada murid yang dicentang --}}
+        <div x-show="selectedStudents.length > 0" x-cloak
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 -translate-y-1"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 -translate-y-1"
+             class="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs">
+            <div class="flex items-center gap-2.5 text-rose-950 font-bold">
+                <span class="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs font-mono font-bold" x-text="selectedStudents.length"></span>
+                <span>Peserta didik dipilih untuk dihapus sekaligus</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" @click="selectedStudents = []; selectAll = false"
+                        class="px-3.5 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-700 font-semibold hover:bg-slate-50 transition cursor-pointer">
+                    Batal Pilih
+                </button>
+                <button type="button" @click="confirmBulkDelete()"
+                        class="px-4 py-1.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 transition shadow-2xs cursor-pointer inline-flex items-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    <span>Hapus (<span x-text="selectedStudents.length"></span>) Murid Terpilih</span>
+                </button>
+            </div>
+        </div>
+
+        {{-- Hidden Form untuk Bulk Delete --}}
+        <form x-ref="bulkDeleteForm" method="POST" action="{{ route('admin.classes.students.bulk-destroy', $schoolClass) }}" class="hidden">
+            @csrf
+            @method('DELETE')
+            <template x-for="id in selectedStudents" :key="id">
+                <input type="hidden" name="student_ids[]" :value="id">
+            </template>
+        </form>
+
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-xs text-left">
                     <thead class="bg-slate-50 text-slate-600 uppercase text-[11px] border-b border-slate-200">
                         <tr>
+                            <th class="px-3 py-3 w-10 text-center">
+                                <input type="checkbox"
+                                       x-model="selectAll"
+                                       @change="toggleSelectAll()"
+                                       class="rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer w-4 h-4"
+                                       title="Pilih Semua Murid">
+                            </th>
                             <th class="px-3 py-3 w-14 text-center">No</th>
                             <th class="px-3 py-3 w-28">NIS / NISN</th>
                             <th class="px-4 py-3">Nama Lengkap</th>
@@ -72,7 +147,14 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($students as $st)
-                            <tr class="hover:bg-slate-50/70">
+                            <tr class="hover:bg-slate-50/70 transition" :class="selectedStudents.includes({{ $st->id }}) ? 'bg-rose-50/40' : ''">
+                                <td class="px-3 py-2.5 text-center">
+                                    <input type="checkbox"
+                                           :value="{{ $st->id }}"
+                                           x-model.number="selectedStudents"
+                                           @change="updateSelectAllState()"
+                                           class="rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer w-4 h-4">
+                                </td>
                                 <td class="px-3 py-2.5 text-center font-bold text-slate-700">{{ $st->order_number }}</td>
                                 <td class="px-3 py-2.5 font-mono text-slate-600">{{ $st->nis_nisn ?: '-' }}</td>
                                 <td class="px-4 py-2.5 font-bold text-slate-900">{{ $st->full_name }}</td>

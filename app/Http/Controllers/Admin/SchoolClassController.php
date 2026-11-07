@@ -101,10 +101,25 @@ class SchoolClassController extends Controller
 
         $school = SchoolSetting::current();
 
+        // Deteksi ID duplikat berdasarkan nama lengkap atau NIS/NISN yang berulang
+        $duplicates = [];
+        $seen = [];
+        foreach ($schoolClass->students as $st) {
+            $nameKey = mb_strtolower(trim($st->full_name));
+            $nisnKey = trim((string) $st->nis_nisn);
+            $key = $nisnKey !== '' ? "nis:{$nisnKey}" : "name:{$nameKey}";
+            if (isset($seen[$key])) {
+                $duplicates[] = $st->id;
+            } else {
+                $seen[$key] = $st->id;
+            }
+        }
+
         return view('admin.classes.show', [
             'schoolClass' => $schoolClass,
             'students' => $schoolClass->students,
             'gradeLevels' => $school->gradeLevels(),
+            'duplicateStudentIds' => $duplicates,
         ]);
     }
 
@@ -216,6 +231,27 @@ class SchoolClassController extends Controller
         }
 
         return back()->with('success', "Murid {$name} berhasil dihapus dari Rombel {$schoolClass->name}.");
+    }
+
+    public function bulkDestroyStudents(Request $request, SchoolClass $schoolClass, GradeCalculationService $gradeService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'student_ids' => ['required', 'array', 'min:1'],
+            'student_ids.*' => ['required', 'integer'],
+        ]);
+
+        $ids = array_map('intval', $validated['student_ids']);
+
+        $deletedCount = ClassStudent::query()
+            ->where('school_class_id', $schoolClass->id)
+            ->whereIn('id', $ids)
+            ->delete();
+
+        foreach ($schoolClass->teachingClasses as $tc) {
+            $gradeService->recalculateClass($tc);
+        }
+
+        return back()->with('success', "Berhasil menghapus {$deletedCount} peserta didik dari Rombel {$schoolClass->name}.");
     }
 
     public function sortStudentsAlphabetically(SchoolClass $schoolClass): RedirectResponse

@@ -67,6 +67,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/rombel/{schoolClass}/murid', [SchoolClassController::class, 'storeStudent'])->name('classes.students.store');
         Route::put('/rombel/{schoolClass}/murid/{student}', [SchoolClassController::class, 'updateStudent'])->name('classes.students.update');
         Route::delete('/rombel/{schoolClass}/murid/{student}', [SchoolClassController::class, 'destroyStudent'])->name('classes.students.destroy');
+        Route::delete('/rombel/{schoolClass}/murid-massal', [SchoolClassController::class, 'bulkDestroyStudents'])->name('classes.students.bulk-destroy');
         Route::post('/rombel/{schoolClass}/murid/sort-az', [SchoolClassController::class, 'sortStudentsAlphabetically'])->name('classes.students.sort');
         Route::get('/rombel/{schoolClass}/murid/template', [SchoolClassController::class, 'downloadStudentTemplate'])->name('classes.students.template');
         Route::post('/rombel/{schoolClass}/murid/import', [SchoolClassController::class, 'importStudents'])->name('classes.students.import');
