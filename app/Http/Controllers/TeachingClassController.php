@@ -369,18 +369,15 @@ class TeachingClassController extends Controller
     {
         $user = $request->user();
 
-        // 1. Larang keras Admin menghapus Buku Administrasi Guru
-        abort_if(
-            $user->isAdmin(),
-            403,
-            'Akses ditolak. Administrator tidak memiliki wewenang untuk menghapus Buku Administrasi Guru. Hanya guru pengampu bersangkutan yang berhak menghapus buku kelas ini.'
-        );
-
-        // 2. Pastikan hanya guru pemilik sah kelas ini yang berhak menghapus
+        // Pastikan hanya guru pengampu sah pemilik buku kelas ini yang berhak menghapus.
+        // Guru yang merangkap Admin/Wakasek (misal: Muhammad Irfan) tetap berhak penuh menghapus kelas miliknya sendiri.
+        // Admin dilarang menghapus buku kelas milik guru lain.
         abort_unless(
             (int) $teachingClass->teacher_id === (int) $user->id,
             403,
-            'Anda tidak memiliki izin untuk menghapus buku administrasi guru ini.'
+            $user->isAdmin()
+                ? 'Akses ditolak. Administrator tidak memiliki wewenang untuk menghapus Buku Administrasi milik guru lain. Hanya guru pengampu bersangkutan yang berhak menghapus buku kelas ini.'
+                : 'Anda tidak memiliki izin untuk menghapus buku administrasi guru ini.'
         );
 
         $name = $teachingClass->class_name;

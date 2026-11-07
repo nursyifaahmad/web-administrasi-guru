@@ -49,7 +49,7 @@ class GradebookController extends Controller
         $user = $request->user();
         $this->authorizeClassAccess($user, $teachingClass);
 
-        $isGradeLockedForAdmin = $user->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin;
+        $isGradeLockedForAdmin = $user->isAdmin() && (int) $teachingClass->teacher_id !== (int) $user->id && ! (bool) $teachingClass->is_grade_shared_with_admin;
 
         $gradebook = $gradeService->buildGradebookData($teachingClass, $attendanceService);
 
@@ -90,7 +90,7 @@ class GradebookController extends Controller
             'alpineRows' => $alpineRows,
             'siblingClasses' => $siblingClassesQuery->get(),
             'isGradeLockedForAdmin' => $isGradeLockedForAdmin,
-            'isAdminReadOnly' => $user->isAdmin(),
+            'isAdminReadOnly' => $user->isAdmin() && (int) $teachingClass->teacher_id !== (int) $user->id,
         ]);
     }
 
@@ -103,9 +103,9 @@ class GradebookController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru lain.'
         );
 
         $teachingClass->ensureDefaultsInitialized();
@@ -219,9 +219,9 @@ class GradebookController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru lain.'
         );
 
         $validated = $request->validate([
@@ -256,9 +256,9 @@ class GradebookController extends Controller
         abort_unless((int) $column->teaching_class_id === (int) $teachingClass->id, 404);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru lain.'
         );
 
         $validated = $request->validate([
@@ -284,9 +284,9 @@ class GradebookController extends Controller
         abort_unless((int) $column->teaching_class_id === (int) $teachingClass->id, 404);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru lain.'
         );
 
         $deletedId = (string) $column->id;
@@ -318,9 +318,9 @@ class GradebookController extends Controller
         $this->authorizeClassAccess($user, $teachingClass);
 
         abort_if(
-            $user->isAdmin(),
+            $user->isAdmin() && (int) $teachingClass->teacher_id !== (int) $user->id,
             403,
-            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru lain.'
         );
 
         $teachingClass->ensureDefaultsInitialized();
@@ -398,7 +398,7 @@ class GradebookController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id && ! (bool) $teachingClass->is_grade_shared_with_admin,
             403,
             'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
         );
@@ -414,9 +414,9 @@ class GradebookController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru.'
+            'Akses ditolak. Administrator/Wakasek tidak memiliki izin untuk mengubah nilai guru lain.'
         );
 
         $request->validate([

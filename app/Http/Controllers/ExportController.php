@@ -75,7 +75,7 @@ class ExportController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id && ! (bool) $teachingClass->is_grade_shared_with_admin,
             403,
             'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
         );
@@ -93,7 +93,7 @@ class ExportController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id && ! (bool) $teachingClass->is_grade_shared_with_admin,
             403,
             'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
         );
@@ -106,7 +106,7 @@ class ExportController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id && ! (bool) $teachingClass->is_grade_shared_with_admin,
             403,
             'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
         );
@@ -127,7 +127,7 @@ class ExportController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin() && ! (bool) $teachingClass->is_grade_shared_with_admin,
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id && ! (bool) $teachingClass->is_grade_shared_with_admin,
             403,
             'Akses ditolak. Guru pengampu belum memberikan izin akses detail nilai kepada Administrator/Wakasek.'
         );

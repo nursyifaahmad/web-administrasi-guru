@@ -161,9 +161,9 @@ class DailyJournalController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian, tidak dapat menambah catatan jurnal guru.'
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian guru lain, tidak dapat menambah catatan KBM guru lain.'
         );
 
         $validated = $request->validate([
@@ -213,9 +213,9 @@ class DailyJournalController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian, tidak dapat mengubah catatan jurnal guru.'
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian guru lain, tidak dapat mengubah catatan KBM guru lain.'
         );
 
         abort_unless((int) $journal->teaching_class_id === (int) $teachingClass->id, 404);
@@ -268,9 +268,9 @@ class DailyJournalController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian.'
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian guru lain.'
         );
 
         abort_unless((int) $journal->teaching_class_id === (int) $teachingClass->id, 404);
@@ -288,9 +288,9 @@ class DailyJournalController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian, tidak dapat menghapus catatan jurnal guru.'
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) jurnal harian guru lain, tidak dapat menghapus catatan KBM guru lain.'
         );
 
         abort_unless((int) $journal->teaching_class_id === (int) $teachingClass->id, 404);

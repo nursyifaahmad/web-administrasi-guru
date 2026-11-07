@@ -7,7 +7,7 @@
 @section('content')
 @include('partials.class-workspace-tabs')
 
-@if(! auth()->user()->isAdmin())
+@if((int) $teachingClass->teacher_id === (int) auth()->id())
     {{-- Panel Hak Akses Supervisi Nilai untuk Administrator / Wakasek (Khusus Guru Pengampu) --}}
     <div class="mb-4 rounded-2xl border p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 {{ $teachingClass->is_grade_shared_with_admin ? 'bg-emerald-50/70 border-emerald-200' : 'bg-slate-50 border-slate-200' }}">
         <div class="flex items-start sm:items-center gap-3">
@@ -78,7 +78,7 @@
     </div>
 @else
 
-@if(auth()->user()->isAdmin())
+@if(auth()->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) auth()->id())
     {{-- Banner Mode Supervisi Nilai untuk Admin --}}
     <div class="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-2xs flex items-start gap-3">
         <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs">
@@ -145,7 +145,7 @@
                     <strong>SAS {{ rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.') }}%</strong> = 100%
                 </div>
                 @if($isAutoAtt)
-                    @if(! auth()->user()->isAdmin())
+                    @if(! $isAdminReadOnly)
                         <button type="button" @click="openWeightsModal()"
                                 class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold hover:bg-emerald-100 transition cursor-pointer"
                                 title="Klik untuk mengubah mode atau batas toleransi Sakit/Izin">
@@ -157,7 +157,7 @@
                         </span>
                     @endif
                 @else
-                    @if(! auth()->user()->isAdmin())
+                    @if(! $isAdminReadOnly)
                         <button type="button" @click="openWeightsModal()"
                                 class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-bold hover:bg-amber-100 transition cursor-pointer"
                                 title="Klik untuk mengaktifkan Nilai Kehadiran otomatis dengan toleransi Sakit/Izin">
@@ -172,7 +172,7 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
-                @if(! auth()->user()->isAdmin())
+                @if(! $isAdminReadOnly)
                     <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
                         Belum disimpan (<span x-text="dirtyCount"></span> nilai / <span x-text="dirtyStudentCount"></span> murid)
                     </span>
@@ -201,7 +201,7 @@
         {{-- Baris Kontrol Kolom Dinamis PH & NT + Statistik Real-time --}}
         <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div class="flex flex-wrap items-center gap-2">
-                @if(! auth()->user()->isAdmin())
+                @if(! $isAdminReadOnly)
                     <form method="POST" action="{{ route('grades.columns.store', $teachingClass) }}" data-skip-dirty-guard="1" @submit.prevent="submitColumnAdd($event)">
                         @csrf
                         <input type="hidden" name="type" value="PH">
@@ -288,7 +288,7 @@
                     <tr class="bg-slate-50 text-slate-700 text-[11px] border-b border-slate-300">
                         @foreach($phColumns as $col)
                             <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-sky-50/50 min-w-[68px]">
-                                @if(! auth()->user()->isAdmin())
+                                @if(! $isAdminReadOnly)
                                     <button type="button"
                                             @click="openEditCol(@js([
                                                 'label' => $col->label,
@@ -319,7 +319,7 @@
 
                         @foreach($ntColumns as $col)
                             <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-purple-50/50 min-w-[68px]">
-                                @if(! auth()->user()->isAdmin())
+                                @if(! $isAdminReadOnly)
                                     <button type="button"
                                             @click="openEditCol(@js([
                                                 'label' => $col->label,
@@ -479,7 +479,7 @@
         </div>
     </div>
 
-    @if(! auth()->user()->isAdmin())
+    @if(! $isAdminReadOnly)
     {{-- Kartu & Tombol Simpan Panjang di Bawah Tabel Daftar Nilai --}}
     <div x-show="rows.length > 0"
          class="rounded-2xl border p-4 shadow-2xs transition"

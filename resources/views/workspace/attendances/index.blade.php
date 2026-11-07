@@ -9,9 +9,11 @@
 
 @php
     $monthName = \App\Support\IndonesianDate::monthName($month);
+    $isOwner = (int) $teachingClass->teacher_id === (int) auth()->id();
+    $isAdminMonitoring = auth()->user()->isAdmin() && ! $isOwner;
 @endphp
 
-@if(auth()->user()->isAdmin())
+@if($isAdminMonitoring)
     <div class="mb-4 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 shadow-2xs flex items-start gap-3">
         <div class="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs">
             👁️
@@ -45,7 +47,7 @@
         saveUrl: @js(route('attendances.bulk-save', $teachingClass)),
         csrf: @js(csrf_token()),
         daysMeta: @js($alpineDaysMeta),
-        isAdmin: @js(auth()->user()->isAdmin()),
+        isAdmin: @js($isAdminMonitoring),
      })">
 
     {{-- Sub-tab Bulanan vs Rekap Semester + Pemilih Bulan & Ekspor --}}
@@ -91,7 +93,7 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
-            @if(! auth()->user()->isAdmin())
+            @if($isOwner)
                 @if($tab === 'monthly')
                     <span x-show="isDirty" x-cloak class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px]">
                         Belum disimpan (<span x-text="dirtyCount"></span> perubahan)
@@ -112,7 +114,7 @@
     </div>
 
     @if($tab === 'monthly')
-        @if(! auth()->user()->isAdmin())
+        @if($isOwner)
             {{-- Panduan Kode & Mode Sentuh Cepat HP (Tap-to-Fill) --}}
             <div class="bg-slate-900 text-slate-200 rounded-2xl px-4 py-3 text-xs space-y-2.5">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -315,7 +317,7 @@
             @endif
         </div>
 
-        @if(! auth()->user()->isAdmin())
+        @if($isOwner)
             {{-- Kartu & Tombol Simpan Panjang di Bawah Tabel Absensi --}}
             <div x-show="students.length > 0"
                  class="rounded-2xl border p-4 shadow-2xs transition"

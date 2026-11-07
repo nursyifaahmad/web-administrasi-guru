@@ -7,7 +7,12 @@
 @section('content')
 @include('partials.class-workspace-tabs')
 
-@if(auth()->user()->isAdmin())
+@php
+    $isOwner = (int) $teachingClass->teacher_id === (int) auth()->id();
+    $isAdminMonitoring = auth()->user()->isAdmin() && ! $isOwner;
+@endphp
+
+@if($isAdminMonitoring)
     <div class="mb-4 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 shadow-2xs flex items-start gap-3">
         <div class="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs">
             👁️
@@ -55,7 +60,7 @@
         </form>
 
         <div class="flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
-            @if(! auth()->user()->isAdmin())
+            @if($isOwner)
                 <button type="button" @click="openCreate()"
                         class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-2xs transition">
                     <span>+ Tambah Jurnal Harian</span>
@@ -81,7 +86,7 @@
                         <th colspan="2" class="px-3 py-2 text-center border-b border-r border-slate-200 w-40 bg-emerald-50/70 text-emerald-950">Jumlah Murid</th>
                         <th rowspan="2" class="px-4 py-3 border-r border-slate-200 min-w-[140px] w-56">Catatan</th>
                         <th rowspan="2" class="px-3 py-3 text-center border-r border-slate-200 w-28">Paraf</th>
-                        @if(! auth()->user()->isAdmin())
+                        @if($isOwner)
                             <th rowspan="2" class="px-3 py-3 text-right min-w-[140px] w-36">Aksi</th>
                         @endif
                     </tr>
@@ -140,7 +145,7 @@
                                     <span class="text-[10px] text-slate-400 italic">Paraf Basah</span>
                                 @endif
                             </td>
-                            @if(! auth()->user()->isAdmin())
+                            @if($isOwner)
                                 <td class="px-3 py-3 text-right">
                                     <div class="inline-flex items-center justify-end gap-1 whitespace-nowrap">
                                         <form method="POST" action="{{ route('journals.resync', [$teachingClass, $journal]) }}" title="Tarik ulang jumlah Hadir/Tidak Hadir dari Menu Absensi">
@@ -178,9 +183,9 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ auth()->user()->isAdmin() ? 8 : 9 }}" class="px-5 py-12 text-center text-slate-500">
+                            <td colspan="{{ $isOwner ? 9 : 8 }}" class="px-5 py-12 text-center text-slate-500">
                                 Belum ada entri Jurnal Harian pada filter ini.
-                                @if(! auth()->user()->isAdmin())
+                                @if($isOwner)
                                     Klik <strong>+ Tambah Jurnal Harian</strong> untuk mencatat kegiatan belajar.
                                 @endif
                             </td>
@@ -191,7 +196,7 @@
         </div>
     </div>
 
-    @if(! auth()->user()->isAdmin())
+    @if($isOwner)
         {{-- Modal Tambah / Edit Jurnal Harian --}}
         <div x-show="formModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
             <div @click.away="formModal = false" class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden max-h-[92vh] flex flex-col">

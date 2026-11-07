@@ -68,9 +68,9 @@ class AttendanceController extends Controller
         $this->authorizeClassAccess($request->user(), $teachingClass);
 
         abort_if(
-            $request->user()->isAdmin(),
+            $request->user()->isAdmin() && (int) $teachingClass->teacher_id !== (int) $request->user()->id,
             403,
-            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) absensi, tidak dapat mengubah data absensi guru.'
+            'Akses ditolak. Administrator/Wakasek hanya memiliki izin untuk melihat (monitoring) absensi kelas guru lain, tidak dapat mengubah data absensi guru lain.'
         );
 
         $validated = $request->validate([

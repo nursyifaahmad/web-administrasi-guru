@@ -94,24 +94,8 @@
         </div>
 
         {{-- Area Bahaya / Proteksi: Hapus Buku Kelas --}}
-        @if(auth()->user()->isAdmin())
-            <div class="bg-amber-50/80 rounded-2xl border border-amber-200 p-5 md:p-6 space-y-2 shadow-2xs">
-                <div class="flex items-start gap-3">
-                    <div class="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                    </div>
-                    <div class="space-y-1">
-                        <h3 class="text-sm font-bold text-amber-950">Proteksi Buku Administrasi Guru (Terkunci untuk Admin)</h3>
-                        <p class="text-xs text-amber-800 leading-relaxed">
-                            Sebagai <strong>Administrator Sekolah</strong>, Anda dapat melihat dan membantu pengelolaan identitas rombel, namun <strong>tidak dapat menghapus</strong> Buku Administrasi Guru ini demi melindungi integritas seluruh rekam jejak penilaian, absensi, dan jurnal harian guru pengampu.
-                        </p>
-                        <p class="text-[11px] text-amber-700 font-semibold">
-                            * Penghapusan buku kelas hanya dapat dilakukan secara mandiri oleh guru pengampu: <strong>{{ $teachingClass->teacher?->name ?? 'Guru Pengampu' }}</strong>.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        @elseif((int) $teachingClass->teacher_id === (int) auth()->id())
+        @if((int) $teachingClass->teacher_id === (int) auth()->id())
+            {{-- Guru Pengampu (termasuk Guru yang merangkap Admin/Wakasek seperti Muhammad Irfan) berhak penuh menghapus buku kelas miliknya --}}
             <div class="bg-rose-50/70 rounded-2xl border border-rose-200 p-5 md:p-6 space-y-3">
                 <div class="flex items-start gap-3">
                     <div class="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -137,6 +121,24 @@
                             Hapus Buku Kelas
                         </button>
                     </form>
+                </div>
+            </div>
+        @elseif(auth()->user()->isAdmin())
+            {{-- Admin yang bukan guru pengampu: Diberi proteksi integritas akademik --}}
+            <div class="bg-amber-50/80 rounded-2xl border border-amber-200 p-5 md:p-6 space-y-2 shadow-2xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="text-sm font-bold text-amber-950">Proteksi Buku Administrasi Guru (Terkunci untuk Admin)</h3>
+                        <p class="text-xs text-amber-800 leading-relaxed">
+                            Sebagai <strong>Administrator Sekolah</strong>, Anda dapat melihat dan membantu pengelolaan identitas rombel, namun <strong>tidak dapat menghapus</strong> Buku Administrasi Guru milik guru lain demi melindungi integritas seluruh rekam jejak penilaian, absensi, dan jurnal harian guru pengampu.
+                        </p>
+                        <p class="text-[11px] text-amber-700 font-semibold">
+                            * Penghapusan buku kelas hanya dapat dilakukan secara mandiri oleh guru pengampu: <strong>{{ $teachingClass->teacher?->name ?? 'Guru Pengampu' }}</strong>.
+                        </p>
+                    </div>
                 </div>
             </div>
         @endif
