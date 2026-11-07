@@ -45,7 +45,7 @@
                         const label = window.__workspaceDirtyLabel || 'data';
                         const saveNow = window.confirm(
                             'Ada perubahan ' + label + ' di halaman ini yang belum disimpan.\n\n' +
-                            'Klik \"OK\" untuk MENYIMPAN perubahan sekarang lalu membuka Cetak Bundel Lengkap, atau klik \"Batal\" untuk kembali ke tabel.'
+                            'Klik OK untuk MENYIMPAN perubahan sekarang lalu membuka Cetak Bundel Lengkap, atau klik Batal untuk kembali ke tabel.'
                         );
                         if (!saveNow) return;
                         const ok = await window.__workspaceSaveFn();

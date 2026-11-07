@@ -1,6 +1,6 @@
-<div x-show="{{ $modalVar }}" x-cloak
+<div x-show="{{ $modalVar }}" x-cloak @click.self="{{ $modalVar }} = false"
      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-    <div @click.away="{{ $modalVar }} = false"
+    <div @click.outside="{{ $modalVar }} = false"
          class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden"
          x-data="{
             city: @js($globalSchool->default_city ?? 'Lemahabang'),
@@ -40,6 +40,15 @@
         </div>
 
         <div class="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+            @if(auth()->user()?->isAdmin() && isset($teachingClass) && ! $teachingClass->is_grade_shared_with_admin && str_contains($modalTitle, 'Bundel'))
+            <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-2.5">
+                <svg class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                <div class="text-[11px] leading-relaxed">
+                    <strong>Catatan Supervisi:</strong> Guru pengampu belum membuka akses buku nilai untuk kelas ini. Dokumen bundel lengkap mencakup buku nilai, sehingga untuk mengekspor bundel ini diperlukan pembukaan izin oleh guru pengampu di menu <em>Pengaturan Kelas</em>.
+                </div>
+            </div>
+            @endif
+
             @if(!empty($showMonthSelector))
             <div class="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
                 <div>
