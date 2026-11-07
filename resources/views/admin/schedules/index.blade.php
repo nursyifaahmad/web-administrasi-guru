@@ -132,6 +132,125 @@
         </div>
     </div>
 
+    {{-- Banner Status Kesiapan 2 Pilar Master Data (Master Guru & Master Rombel) --}}
+    @if(isset($prerequisites))
+        @if(!$prerequisites['is_ready'])
+            <div class="rounded-2xl bg-amber-50 border border-amber-300 p-4 md:p-5 shadow-2xs space-y-3" x-data="{ detailOpen: false }">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3 min-w-0">
+                        <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 font-bold text-base shadow-xs">
+                            ⚠️
+                        </div>
+                        <div class="min-w-0">
+                            <h3 class="text-sm font-extrabold text-amber-950 flex items-center gap-2 flex-wrap">
+                                <span>Perhatian: Data Master Prasyarat Belum Lengkap untuk Pembuatan Jadwal Baru</span>
+                            </h3>
+                            <p class="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                                Master Jadwal Sekolah membutuhkan <strong>Data Master Guru</strong> dan <strong>Master Rombel &amp; Murid</strong> yang lengkap sebelum jadwal baru dapat disusun dari awal.
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" @click="detailOpen = !detailOpen"
+                            class="px-3 py-1.5 rounded-lg bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-bold text-xs transition shrink-0 cursor-pointer">
+                        <span x-text="detailOpen ? 'Tutup Checklist' : 'Lihat Checklist Kesiapan'"></span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    {{-- Status Pilar 1: Master Guru --}}
+                    <div class="p-3.5 rounded-xl bg-white border {{ $prerequisites['teachers']['is_ready'] ? 'border-emerald-200 bg-emerald-50/30' : 'border-amber-300 bg-amber-50/50' }} space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                @if($prerequisites['teachers']['is_ready'])
+                                    <span class="text-emerald-600">✅</span>
+                                @else
+                                    <span class="text-amber-600">⚠️</span>
+                                @endif
+                                <span>1. Data Master Guru</span>
+                            </span>
+                            <span class="text-[11px] font-bold px-2 py-0.5 rounded {{ $prerequisites['teachers']['is_ready'] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900' }}">
+                                {{ $prerequisites['teachers']['complete'] }}/{{ $prerequisites['teachers']['total'] }} Guru Siap
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-600">
+                            @if($prerequisites['teachers']['is_ready'])
+                                Seluruh guru telah memiliki mata pelajaran dan kode mengajar di Master Guru.
+                            @elseif($prerequisites['teachers']['total'] === 0)
+                                Belum ada data guru aktif di Master Guru.
+                            @else
+                                Terdapat <strong>{{ $prerequisites['teachers']['incomplete_count'] }}</strong> guru yang belum memiliki kode mengajar / mapel.
+                            @endif
+                        </p>
+                        <div class="pt-1">
+                            <a href="{{ route('admin.teachers.index') }}"
+                               class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline">
+                                <span>Buka Menu Master Guru &rarr;</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    {{-- Status Pilar 2: Master Rombel & Murid --}}
+                    <div class="p-3.5 rounded-xl bg-white border {{ $prerequisites['classes']['is_ready'] ? 'border-emerald-200 bg-emerald-50/30' : 'border-amber-300 bg-amber-50/50' }} space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                @if($prerequisites['classes']['is_ready'])
+                                    <span class="text-emerald-600">✅</span>
+                                @else
+                                    <span class="text-amber-600">⚠️</span>
+                                @endif
+                                <span>2. Master Rombel &amp; Murid</span>
+                            </span>
+                            <span class="text-[11px] font-bold px-2 py-0.5 rounded {{ $prerequisites['classes']['is_ready'] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900' }}">
+                                {{ $prerequisites['classes']['total'] }} Rombel Terkunci
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-600">
+                            @if($prerequisites['classes']['is_ready'])
+                                Daftar rombel kelas terkunci dari database (Tingkat: {{ collect($prerequisites['classes']['by_grade'])->map(fn($v, $k) => "$k: $v rombel")->join(', ') }}).
+                            @else
+                                Belum ada rombel kelas yang terdaftar pada tahun ajaran ini di Master Rombel.
+                            @endif
+                        </p>
+                        <div class="pt-1">
+                            <a href="{{ route('admin.classes.index') }}"
+                               class="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-800 hover:underline">
+                                <span>Buka Master Rombel &amp; Murid &rarr;</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Detail Guru yang Belum Lengkap (Expandable) --}}
+                @if(!$prerequisites['teachers']['is_ready'] && !empty($prerequisites['teachers']['incomplete_list']))
+                    <div x-show="detailOpen" x-cloak class="mt-2 pt-3 border-t border-amber-200/80 space-y-2">
+                        <h4 class="text-xs font-extrabold text-amber-950">Daftar Guru yang Perlu Dilengkapi di Master Guru:</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                            @foreach($prerequisites['teachers']['incomplete_list'] as $inc)
+                                <div class="p-2 rounded-lg bg-white border border-amber-200 text-xs">
+                                    <div class="font-bold text-slate-900 truncate">{{ $inc['name'] }}</div>
+                                    <div class="text-[11px] text-rose-600 font-semibold">{{ $inc['missing'] }}</div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+            </div>
+        @else
+            <div class="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm">✅</span>
+                    <span class="font-bold">Prasyarat Master Data Siap &amp; Terkunci:</span>
+                    <span>{{ $prerequisites['teachers']['complete'] }} Guru Master Lengkap &bull; {{ $prerequisites['classes']['total'] }} Rombel Kelas Terkunci dari Master Rombel</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{{ route('admin.teachers.index') }}" class="font-semibold text-emerald-700 hover:underline text-[11px]">Master Guru</a>
+                    <span>&bull;</span>
+                    <a href="{{ route('admin.classes.index') }}" class="font-semibold text-emerald-700 hover:underline text-[11px]">Master Rombel</a>
+                </div>
+            </div>
+        @endif
+    @endif
+
     {{-- Banner Peringatan Jadwal Bertabrakan (Conflict Detection Engine) --}}
     @if(count($conflicts) > 0)
         <div class="rounded-2xl bg-rose-50 border border-rose-200 p-4 md:p-5 shadow-2xs" x-data="{ expanded: false }">

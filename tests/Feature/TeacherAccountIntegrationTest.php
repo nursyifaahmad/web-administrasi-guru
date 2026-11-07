@@ -66,42 +66,47 @@ class TeacherAccountIntegrationTest extends TestCase
         return [$admin, $year, $subPai, $subDaerah, $class7A, $class8B];
     }
 
-    public function test_admin_teachers_index_displays_consolidated_schedule_teachers(): void
+    public function test_admin_teachers_index_displays_master_teachers_with_subjects(): void
     {
-        [$admin, $year] = $this->createEnvironment();
+        [$admin, $year, $subPai, $subDaerah] = $this->createEnvironment();
 
-        // Buat 2 record guru di master jadwal untuk 1 orang (multi-mapel: 14A PAI dan 14B Bahasa Daerah)
-        SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '14A',
+        $teacher = User::query()->create([
             'name' => 'ISMAIL, S.Pd. I',
-            'subject' => 'a.PAI',
-            'homeroom_class' => '7G',
-            'piket_day' => 'Selasa',
+            'email' => 'ismail@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'nip' => '198712032014021002',
+            'password' => bcrypt('guru123'),
+            'is_active' => true,
         ]);
 
-        SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '14B',
-            'name' => 'ISMAIL, S.Pd. I',
-            'subject' => 'b. B. DAERAH',
+        \App\Models\TeacherSubject::query()->create([
+            'user_id' => $teacher->id,
+            'subject_id' => $subPai->id,
+            'teaching_code' => '14A',
+        ]);
+
+        \App\Models\TeacherSubject::query()->create([
+            'user_id' => $teacher->id,
+            'subject_id' => $subDaerah->id,
+            'teaching_code' => '14B',
         ]);
 
         $response = $this->actingAs($admin)->get(route('admin.teachers.index'));
         $response->assertOk();
 
-        // Pastikan halaman memuat data dropdown integrasi jadwal
-        $response->assertSee('Pilih Guru dari Master Jadwal Sekolah (Otomatis)');
+        // Pastikan halaman memuat data master guru dan mapel/kode mengajar
         $response->assertSee('ISMAIL, S.Pd. I');
-        $response->assertSee('PAI, B. DAERAH');
-        $response->assertSee('Kode 14A, 14B');
+        $response->assertSee('PAI');
+        $response->assertSee('SND');
+        $response->assertSee('14A');
+        $response->assertSee('14B');
     }
 
-    public function test_admin_creates_multi_subject_teacher_from_schedule_and_auto_syncs_teaching_classes(): void
+    public function test_admin_creates_multi_subject_teacher_and_auto_syncs_teaching_classes(): void
     {
         [$admin, $year, $subPai, $subDaerah, $class7A, $class8B] = $this->createEnvironment();
 
-        // 1. Siapkan master guru jadwal: Pak Ismail mengajar 14A (PAI) dan 14B (Bahasa Daerah)
+        // 1. Siapkan master guru jadwal awal (sebelumnya ada atau belum)
         SchoolScheduleTeacher::query()->create([
             'academic_year_id' => $year->id,
             'code' => '14A',
@@ -149,16 +154,18 @@ class TeacherAccountIntegrationTest extends TestCase
             'subject_id' => $subDaerah->id,
         ]);
 
-        // 3. Admin membuat akun guru Pak Ismail melalui form terintegrasi
+        // 3. Admin membuat akun guru Pak Ismail melalui form Master Guru dengan teacher_subjects
         $response = $this->actingAs($admin)->post(route('admin.teachers.store'), [
             'name' => 'ISMAIL, S.Pd. I',
             'email' => 'ismail@smpn2lemahabang.sch.id',
             'nip' => '198712032014021002',
             'role' => 'guru',
             'phone' => '081234567890',
-            'default_subject' => 'Pendidikan Agama Islam, Bahasa Daerah',
-            'password' => 'password123',
-            'schedule_codes' => '14A, 14B',
+            'password' => 'guru123',
+            'teacher_subjects' => [
+                ['subject_id' => $subPai->id, 'teaching_code' => '14A'],
+                ['subject_id' => $subDaerah->id, 'teaching_code' => '14B'],
+            ],
         ]);
 
         $response->assertRedirect();

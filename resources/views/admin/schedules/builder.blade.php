@@ -36,20 +36,13 @@
         gridPreview: @js($initialGrid),
         isCalculating: false,
 
-        // Step 4: Rombel & Beban Guru
-        availableClasses: [
-            '7A', '7B', '7C', '7D', '7E', '7F', '7G',
-            '8A', '8B', '8C', '8D', '8E', '8F', '8G',
-            '9A', '9B', '9C', '9D', '9E', '9F', '9G'
-        ],
-        selectedClasses: [
-            '7A', '7B', '7C', '7D', '7E', '7F', '7G',
-            '8A', '8B', '8C', '8D', '8E', '8F', '8G',
-            '9A', '9B', '9C', '9D', '9E', '9F', '9G'
-        ],
+        // Step 4: Rombel & Beban Guru (Terkunci dari Master Rombel & Master Guru)
+        lockedClasses: @js($lockedClasses ?? []),
+        availableClasses: @js(collect($lockedClasses ?? [])->pluck('code')->all()),
+        selectedClasses: @js(collect($lockedClasses ?? [])->pluck('code')->all()),
         teachersList: @js($teachers->values()),
-        scheduleTeachers: @js($scheduleTeachers->values()),
         subjectsList: @js($subjects->values()),
+        teacherSubjectsList: [],
 
         // Input form workload
         wlTeacherId: '',
@@ -170,24 +163,52 @@
             this.recalculateGrid();
         },
 
-        // Handler saat memilih guru di form workload
+        // Handler saat memilih guru di form workload (Terkunci dari Master Guru)
         onSelectTeacher(tId) {
             this.wlTeacherId = tId;
             let t = this.teachersList.find(x => String(x.id) === String(tId));
             if (t) {
                 this.wlTeacherName = t.name;
-                let st = this.scheduleTeachers.find(s => s.user_id === t.id || s.name.toLowerCase().includes(t.name.toLowerCase()));
-                this.wlTeacherCode = st ? st.code : t.name.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
+                this.teacherSubjectsList = t.subjects || [];
+
+                // Jika guru hanya mengampu 1 mapel, otomatis pilih mapel dan set kode mengajarnya
+                if (this.teacherSubjectsList.length === 1) {
+                    let singleSubj = this.teacherSubjectsList[0];
+                    this.wlSubjectId = singleSubj.subject_id;
+                    this.wlSubjectName = singleSubj.subject_name;
+                    this.wlTeacherCode = singleSubj.teaching_code || (t.teaching_codes_list && t.teaching_codes_list[0] ? t.teaching_codes_list[0] : '');
+                } else if (this.teacherSubjectsList.length > 1) {
+                    // Reset pilihan mapel agar admin memilih mapel spesifik
+                    this.wlSubjectId = '';
+                    this.wlSubjectName = '';
+                    this.wlTeacherCode = '';
+                } else {
+                    // Guru belum memiliki relasi teacherSubjects tapi mungkin punya default_subject
+                    this.wlSubjectId = '';
+                    this.wlSubjectName = t.default_subject || '';
+                    this.wlTeacherCode = (t.teaching_codes_list && t.teaching_codes_list[0]) ? t.teaching_codes_list[0] : '';
+                }
             } else {
                 this.wlTeacherName = '';
                 this.wlTeacherCode = '';
+                this.teacherSubjectsList = [];
+                this.wlSubjectId = '';
+                this.wlSubjectName = '';
             }
         },
 
         onSelectSubject(sId) {
             this.wlSubjectId = sId;
-            let s = this.subjectsList.find(x => String(x.id) === String(sId));
-            this.wlSubjectName = s ? s.name : '';
+            let matched = this.teacherSubjectsList.find(x => String(x.subject_id) === String(sId));
+            if (matched) {
+                this.wlSubjectName = matched.subject_name;
+                if (matched.teaching_code) {
+                    this.wlTeacherCode = matched.teaching_code;
+                }
+            } else {
+                let s = this.subjectsList.find(x => String(x.id) === String(sId));
+                this.wlSubjectName = s ? s.name : '';
+            }
         },
 
         toggleAllClasses() {
@@ -349,6 +370,35 @@
             </div>
         </div>
     </div>
+
+    {{-- Banner Peringatan Kesiapan 2 Pilar di Builder --}}
+    @if(isset($prerequisites) && !$prerequisites['is_ready'])
+        <div class="rounded-2xl bg-amber-50 border border-amber-300 p-4 md:p-5 shadow-2xs space-y-3">
+            <div class="flex items-start gap-3">
+                <span class="text-xl">⚠️</span>
+                <div class="space-y-1">
+                    <h3 class="text-sm font-extrabold text-amber-950">Prasyarat Master Data Belum Lengkap</h3>
+                    <p class="text-xs text-amber-800">
+                        Untuk hasil jadwal terbaik yang bebas bentrok dan langsung sinkron ke buku kelas administrasi guru, pastikan kedua pilar data berikut telah siap:
+                    </p>
+                    <div class="flex flex-wrap gap-2 pt-2">
+                        @if(!$prerequisites['teachers']['is_ready'])
+                            <a href="{{ route('admin.teachers.index') }}"
+                               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-200 text-amber-950 font-bold text-xs hover:bg-amber-300">
+                                <span>Lengkapi Master Guru ({{ $prerequisites['teachers']['complete'] }}/{{ $prerequisites['teachers']['total'] }} Siap) &rarr;</span>
+                            </a>
+                        @endif
+                        @if(!$prerequisites['classes']['is_ready'])
+                            <a href="{{ route('admin.classes.index') }}"
+                               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-200 text-amber-950 font-bold text-xs hover:bg-amber-300">
+                                <span>Buat Rombel di Master Rombel &amp; Murid (0 Rombel) &rarr;</span>
+                            </a>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     {{-- PROGRESS STEPPER 6 LANGKAH --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3.5">
@@ -1097,9 +1147,9 @@
                             </div>
                             <select x-model="wlTeacherId" @change="onSelectTeacher($event.target.value)"
                                     class="w-full rounded-xl border border-slate-300 py-2 px-3 text-xs font-bold bg-white focus:ring-emerald-500">
-                                <option value="">-- Pilih Guru --</option>
+                                <option value="">-- Pilih Guru dari Master Guru --</option>
                                 <template x-for="t in teachersList" :key="t.id">
-                                    <option :value="t.id" x-text="t.name"></option>
+                                    <option :value="t.id" x-text="(t.teaching_codes_string ? '[Kode ' + t.teaching_codes_string + '] ' : '') + t.name + (t.subject_codes_string ? ' — ' + t.subject_codes_string : '')"></option>
                                 </template>
                             </select>
                         </div>
@@ -1110,8 +1160,8 @@
                             <select x-model="wlSubjectId" @change="onSelectSubject($event.target.value)"
                                     class="w-full rounded-xl border border-slate-300 py-2 px-3 text-xs font-bold bg-white focus:ring-emerald-500">
                                 <option value="">-- Pilih Mata Pelajaran --</option>
-                                <template x-for="s in subjectsList" :key="s.id">
-                                    <option :value="s.id" x-text="s.name"></option>
+                                <template x-for="ts in (teacherSubjectsList.length > 0 ? teacherSubjectsList : subjectsList)" :key="ts.subject_id || ts.id">
+                                    <option :value="ts.subject_id || ts.id" x-text="(ts.subject_name || ts.name) + (ts.teaching_code ? ' (Kode: ' + ts.teaching_code + ')' : '')"></option>
                                 </template>
                             </select>
                         </div>
@@ -1126,16 +1176,28 @@
                             </div>
                         </div>
 
+                        {{-- Info Guru & Kode Mengajar Terkunci --}}
+                        <div class="sm:col-span-12 flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-xs flex-wrap" x-show="wlTeacherName">
+                            <span class="text-slate-500 font-semibold">Guru:</span>
+                            <span class="font-extrabold text-slate-900" x-text="wlTeacherName"></span>
+                            <span class="text-slate-300">&bull;</span>
+                            <span class="text-slate-500 font-semibold">Mata Pelajaran:</span>
+                            <span class="font-bold text-emerald-800" x-text="wlSubjectName || 'Belum dipilih'"></span>
+                            <span class="text-slate-300">&bull;</span>
+                            <span class="text-slate-500 font-semibold">Kode Mengajar Terkunci:</span>
+                            <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-mono font-extrabold text-[11px]" x-text="wlTeacherCode || '-'"></span>
+                        </div>
+
                         {{-- 4. Pilih Rombel Sasaran dengan Badge Shift --}}
                         <div class="sm:col-span-12 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                 <label class="text-[11px] font-bold text-slate-700">
-                                    4. Pilih Rombel Sasaran Mengajar (Bisa pilih lebih dari satu):
+                                    4. Pilih Rombel Sasaran Mengajar (Dikunci dari Master Rombel &amp; Murid):
                                 </label>
                                 <div class="flex items-center gap-1.5 flex-wrap">
                                     <button type="button" @click="wlClasses = [...availableClasses]"
-                                            class="text-[10px] font-bold text-slate-600 hover:text-emerald-700 bg-white px-2 py-0.5 rounded border border-slate-200 cursor-pointer">
-                                        Pilih Semua (21)
+                                            class="text-[10px] font-bold text-slate-600 hover:text-emerald-700 bg-white px-2 py-0.5 rounded border border-slate-200 cursor-pointer"
+                                            x-text="'Pilih Semua (' + availableClasses.length + ')'">
                                     </button>
                                     <button type="button" @click="wlClasses = availableClasses.filter(c => !classesSiang.includes(c))"
                                             x-show="shiftMode === 'double'"

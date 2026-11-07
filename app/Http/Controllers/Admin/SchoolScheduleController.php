@@ -52,6 +52,7 @@ class SchoolScheduleController extends Controller
         // Ambil data matriks
         $matrixData = $this->scheduleService->getMasterMatrix($academicYear, $activeDay);
         $conflicts = $this->scheduleService->detectConflicts($academicYear);
+        $prerequisites = $this->scheduleService->checkMasterPrerequisites($academicYear);
 
         $teachers = SchoolScheduleTeacher::query()
             ->where('academic_year_id', $academicYear->id)
@@ -70,6 +71,7 @@ class SchoolScheduleController extends Controller
             'activeShift' => $activeShift,
             'matrixData' => $matrixData,
             'conflicts' => $conflicts,
+            'prerequisites' => $prerequisites,
             'teachers' => $teachers,
             'allUsers' => $allUsers,
             'allSubjects' => $allSubjects,
@@ -92,22 +94,78 @@ class SchoolScheduleController extends Controller
             $academicYear = AcademicYear::query()->first();
         }
 
+        $prerequisites = $this->scheduleService->checkMasterPrerequisites($academicYear);
+
         $defaultConfig = $this->scheduleService->getDefaultTimeGridConfig();
         $initialGrid = $this->scheduleService->calculateTimeGrid($defaultConfig);
-        $defaultClassesSiang = ['8A', '8B', '8C', '8D', '8E', '8F', '8G'];
 
         $schoolClasses = SchoolClass::query()
             ->where('academic_year_id', $academicYear->id)
+            ->withCount(['students', 'activeStudents'])
+            ->orderBy('grade_level')
             ->orderBy('name')
             ->get();
 
+        // Kunci daftar rombel dari Master Rombel
+        $lockedClasses = $schoolClasses->map(function ($sc) {
+            $code = SchoolScheduleService::normalizeClassName($sc->name);
+            return [
+                'id' => $sc->id,
+                'name' => $sc->name,
+                'code' => $code,
+                'grade_level' => $sc->grade_level,
+                'students_count' => $sc->active_students_count ?: $sc->students_count,
+                'homeroom_teacher' => $sc->homeroom_teacher_name,
+            ];
+        })->values();
+
+        // Default kelas siang: kelas dengan grade_level VIII atau berawalan 8
+        $defaultClassesSiang = $lockedClasses->filter(function ($c) {
+            return $c['grade_level'] === 'VIII' || str_starts_with($c['code'], '8');
+        })->pluck('code')->values()->all();
+
+        // Data Guru dari Master Guru beserta mata pelajaran dan kode mengajar yang sah
         $teachers = User::query()
+            ->with(['teacherSubjects.subject'])
             ->where('is_active', true)
             ->where(function ($q) {
-                $q->where('role', 'guru')->orWhereNull('role');
+                $q->where('role', 'guru')->orWhereHas('teacherSubjects');
             })
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->map(function ($u) {
+                $subjects = $u->teacherSubjects->map(function ($ts) {
+                    return [
+                        'subject_id' => $ts->subject_id,
+                        'subject_name' => $ts->subject?->name,
+                        'subject_code' => $ts->subject?->code,
+                        'teaching_code' => $ts->teaching_code,
+                    ];
+                })->values()->all();
+
+                if (empty($subjects) && ! empty($u->default_subject)) {
+                    $subjects = [[
+                        'subject_id' => null,
+                        'subject_name' => $u->default_subject,
+                        'subject_code' => null,
+                        'teaching_code' => $u->teaching_codes_list[0] ?? null,
+                    ]];
+                }
+
+                return [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'nip' => $u->nip,
+                    'role' => $u->role,
+                    'default_subject' => $u->default_subject,
+                    'teaching_codes_list' => $u->teaching_codes_list,
+                    'teaching_codes_string' => $u->teaching_codes_string,
+                    'subject_codes_list' => $u->subject_codes_list,
+                    'subject_codes_string' => $u->subject_codes_string,
+                    'subjects' => $subjects,
+                    'has_complete_data' => ! empty($subjects) && ! empty($u->teaching_codes_list),
+                ];
+            });
 
         $scheduleTeachers = SchoolScheduleTeacher::query()
             ->where('academic_year_id', $academicYear->id)
@@ -123,7 +181,9 @@ class SchoolScheduleController extends Controller
 
         return view('admin.schedules.builder', [
             'academicYear' => $academicYear,
+            'prerequisites' => $prerequisites,
             'schoolClasses' => $schoolClasses,
+            'lockedClasses' => $lockedClasses,
             'teachers' => $teachers,
             'scheduleTeachers' => $scheduleTeachers,
             'subjects' => $subjects,
@@ -156,6 +216,22 @@ class SchoolScheduleController extends Controller
         $academicYear = $selectedYearId
             ? AcademicYear::query()->find($selectedYearId)
             : AcademicYear::active();
+
+        if (! $academicYear) {
+            $academicYear = AcademicYear::query()->first();
+        }
+
+        // Validasi Kesiapan 2 Pilar Master Data
+        $prerequisites = $this->scheduleService->checkMasterPrerequisites($academicYear);
+        if (! $prerequisites['classes']['is_ready']) {
+            return redirect()->route('admin.classes.index')
+                ->with('error', 'Belum ada rombel kelas yang terdaftar di Master Rombel & Murid untuk tahun ajaran ini. Silakan buat rombel kelas terlebih dahulu.');
+        }
+
+        if ($prerequisites['teachers']['total'] === 0) {
+            return redirect()->route('admin.teachers.index')
+                ->with('error', 'Belum ada data guru di Master Guru. Silakan lengkapi data guru terlebih dahulu.');
+        }
 
         $payload = $request->all();
 

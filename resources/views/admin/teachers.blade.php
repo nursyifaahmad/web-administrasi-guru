@@ -9,9 +9,7 @@
     createModal: false,
     editUser: null,
     quickSig: { open: false, user_id: null, user_name: '', signature_data: '', pad: null, sigData: '' },
-    scheduleTeachers: @js($scheduleTeachers ?? []),
     allSubjects: @js($subjects->map(fn($s) => ['id' => $s->id, 'code' => $s->code, 'name' => $s->name])->values()->all()),
-    selectedScheduleIdx: '',
     createPad: null,
     editPad: null,
     createSigData: '',
@@ -23,15 +21,11 @@
         email: '',
         phone: '',
         password: 'guru123',
-        schedule_codes: '',
         teacher_subjects: [
             { subject_id: '', teaching_code: '' }
         ],
     },
-    activeScheduleInfo: null,
     resetCreateForm() {
-        this.selectedScheduleIdx = '';
-        this.activeScheduleInfo = null;
         this.createSigData = '';
         if (this.createPad) this.createPad.clear();
         this.form = {
@@ -41,7 +35,6 @@
             email: '',
             phone: '',
             password: 'guru123',
-            schedule_codes: '',
             teacher_subjects: [
                 { subject_id: '', teaching_code: '' }
             ],
@@ -69,47 +62,6 @@
         } else {
             target[0].subject_id = '';
             target[0].teaching_code = '';
-        }
-    },
-    onSelectSchedule(idx) {
-        this.selectedScheduleIdx = idx;
-        if (idx === '' || !this.scheduleTeachers[idx]) {
-            this.activeScheduleInfo = null;
-            this.form.schedule_codes = '';
-            return;
-        }
-        const st = this.scheduleTeachers[idx];
-        this.activeScheduleInfo = st;
-        this.form.name = st.name;
-        this.form.role = 'guru';
-        this.form.schedule_codes = (st.codes || []).join(',');
-        if (!this.form.email && st.suggested_email) {
-            this.form.email = st.suggested_email;
-        }
-
-        // Petakan otomatis mapel jadwal ke baris teacher_subjects
-        const rows = [];
-        if (st.subjects && st.subjects.length > 0) {
-            st.subjects.forEach((subjStr, sIdx) => {
-                const cleanSubj = subjStr.toLowerCase().trim();
-                const matched = this.allSubjects.find(s => 
-                    cleanSubj.includes(s.name.toLowerCase()) || 
-                    s.name.toLowerCase().includes(cleanSubj) || 
-                    cleanSubj.includes(s.code.toLowerCase())
-                );
-                const codeForThis = (st.codes && st.codes[sIdx]) ? st.codes[sIdx] : (st.codes && st.codes[0] ? st.codes[0] : '');
-                rows.push({
-                    subject_id: matched ? matched.id : '',
-                    teaching_code: codeForThis
-                });
-            });
-        }
-        if (rows.length > 0) {
-            this.form.teacher_subjects = rows;
-        } else if (st.codes && st.codes.length > 0) {
-            this.form.teacher_subjects = [
-                { subject_id: '', teaching_code: st.codes[0] }
-            ];
         }
     },
     openEditModal(userData) {
@@ -519,26 +471,7 @@
 
             <form method="POST" action="{{ route('admin.teachers.store') }}" enctype="multipart/form-data" class="p-5 space-y-4 text-xs overflow-y-auto flex-1">
                 @csrf
-                <input type="hidden" name="schedule_codes" x-model="form.schedule_codes">
                 <input type="hidden" name="signature_data" :value="createSigData">
-
-                {{-- Bantuan Auto-Fill dari Master Jadwal Sekolah --}}
-                <div class="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1.5">
-                    <label class="block font-bold text-emerald-950 flex items-center gap-1.5">
-                        <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                        <span>Pilih Guru dari Master Jadwal Sekolah (Otomatis)</span>
-                    </label>
-                    <select x-model="selectedScheduleIdx" @change="onSelectSchedule($event.target.value)"
-                            class="w-full rounded-xl border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 shadow-2xs">
-                        <option value="">-- Ketik Manual atau Pilih Guru dari Master Jadwal --</option>
-                        @foreach($scheduleTeachers as $idx => $st)
-                            <option value="{{ $idx }}" {{ $st['has_account'] ? 'disabled class="text-slate-400 bg-slate-100"' : '' }}>
-                                [Kode {{ $st['codes_label'] }}] {{ $st['name'] }} — {{ $st['subjects_label'] }}
-                                @if($st['has_account']) (Sudah Ada Akun) @endif
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
 
                 {{-- Bagian 1: Data Identitas Pokok Guru --}}
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
