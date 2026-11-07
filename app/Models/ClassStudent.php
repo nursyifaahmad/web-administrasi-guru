@@ -36,12 +36,6 @@ class ClassStudent extends Model
                     $model->school_class_id = $tc->school_class_id;
                 }
             }
-            if (empty($model->teaching_class_id) && ! empty($model->school_class_id)) {
-                $firstTc = TeachingClass::where('school_class_id', $model->school_class_id)->value('id');
-                if ($firstTc) {
-                    $model->teaching_class_id = $firstTc;
-                }
-            }
         });
     }
 

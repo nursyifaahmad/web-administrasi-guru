@@ -385,7 +385,18 @@ class TeachingClassController extends Controller
 
         $name = $teachingClass->class_name;
         $subjectName = $teachingClass->subject?->name ?? '';
-        $teachingClass->delete();
+
+        DB::transaction(function () use ($teachingClass) {
+            // Pastikan seluruh relasi murid dilepaskan dari teaching_class_id sebelum penghapusan
+            // Data murid adalah data master Rombel yang wajib tetap utuh di Master Rombel & Murid
+            ClassStudent::query()
+                ->where('teaching_class_id', $teachingClass->id)
+                ->update(['teaching_class_id' => null]);
+
+            // Hapus buku administrasi kelas
+            // Cascade basis data hanya akan menghapus data internal buku: attendances, daily_journals, grade_columns, grade_weights, student_grades
+            $teachingClass->delete();
+        });
 
         return redirect()->route('classes.index')->with('success', "Buku Administrasi Kelas {$name} ({$subjectName}) berhasil dihapus.");
     }

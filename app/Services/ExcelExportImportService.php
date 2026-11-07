@@ -1131,7 +1131,6 @@ class ExcelExportImportService
 
                 ClassStudent::query()->create([
                     'school_class_id' => $teachingClass->school_class_id,
-                    'teaching_class_id' => $teachingClass->id,
                     'order_number' => $orderNo,
                     'nis_nisn' => $nisNisn,
                     'full_name' => $fullName,
@@ -1207,7 +1206,6 @@ class ExcelExportImportService
             }
 
             $nextOrder = (int) ($schoolClass->students()->max('order_number') ?? 0);
-            $firstTcId = $schoolClass->teachingClasses()->value('id');
 
             foreach ($rows as $idx => $row) {
                 if ($idx === 0) {
@@ -1233,7 +1231,6 @@ class ExcelExportImportService
 
                 ClassStudent::query()->create([
                     'school_class_id' => $schoolClass->id,
-                    'teaching_class_id' => $firstTcId,
                     'order_number' => $orderNo,
                     'nis_nisn' => $nisNisn,
                     'full_name' => $fullName,

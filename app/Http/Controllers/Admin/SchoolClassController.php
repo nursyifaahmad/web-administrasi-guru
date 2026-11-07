@@ -180,10 +180,8 @@ class SchoolClassController extends Controller
         ]);
 
         $nextOrder = $validated['order_number'] ?? (((int) $schoolClass->students()->max('order_number')) + 1);
-        $firstTcId = $schoolClass->teachingClasses()->value('id');
 
         $student = $schoolClass->students()->create([
-            'teaching_class_id' => $firstTcId,
             'order_number' => $nextOrder,
             'nis_nisn' => $validated['nis_nisn'] ?? null,
             'full_name' => trim($validated['full_name']),
