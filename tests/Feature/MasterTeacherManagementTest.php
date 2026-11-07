@@ -211,4 +211,72 @@ class MasterTeacherManagementTest extends TestCase
         $teacher->refresh();
         $this->assertNull($teacher->signature_data);
     }
+
+    public function test_admin_can_sort_teachers_by_name(): void
+    {
+        [$admin, $budi] = $this->createEnvironment();
+
+        $andi = User::query()->create([
+            'name' => 'Andi Wijaya, S.Pd.',
+            'email' => 'andi@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'password' => bcrypt('guru123'),
+            'is_active' => true,
+        ]);
+
+        $zaki = User::query()->create([
+            'name' => 'Zaki Mubarok, S.Pd.',
+            'email' => 'zaki@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'password' => bcrypt('guru123'),
+            'is_active' => true,
+        ]);
+
+        // Sort Name ASC: Andi must appear before Zaki
+        $responseAsc = $this->actingAs($admin)->get(route('admin.teachers.index', ['sort' => 'name', 'dir' => 'asc']));
+        $responseAsc->assertOk();
+        $usersAsc = $responseAsc->viewData('users');
+        $namesAsc = $usersAsc->pluck('name')->all();
+        $this->assertTrue(array_search('Andi Wijaya, S.Pd.', $namesAsc) < array_search('Zaki Mubarok, S.Pd.', $namesAsc));
+
+        // Sort Name DESC: Zaki must appear before Andi
+        $responseDesc = $this->actingAs($admin)->get(route('admin.teachers.index', ['sort' => 'name', 'dir' => 'desc']));
+        $responseDesc->assertOk();
+        $usersDesc = $responseDesc->viewData('users');
+        $namesDesc = $usersDesc->pluck('name')->all();
+        $this->assertTrue(array_search('Zaki Mubarok, S.Pd.', $namesDesc) < array_search('Andi Wijaya, S.Pd.', $namesDesc));
+    }
+
+    public function test_admin_can_sort_teachers_by_teaching_code(): void
+    {
+        [$admin, $teacher, , $subjectMtk, $subjectIpa] = $this->createEnvironment();
+
+        TeacherSubject::query()->create([
+            'user_id' => $teacher->id,
+            'subject_id' => $subjectMtk->id,
+            'teaching_code' => '25',
+        ]);
+
+        $guruDua = User::query()->create([
+            'name' => 'Guru Kode Kecil',
+            'email' => 'kecil@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'password' => bcrypt('guru123'),
+            'is_active' => true,
+        ]);
+
+        TeacherSubject::query()->create([
+            'user_id' => $guruDua->id,
+            'subject_id' => $subjectIpa->id,
+            'teaching_code' => '3',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.teachers.index', ['sort' => 'teaching_code', 'dir' => 'asc']));
+        $response->assertOk();
+        $users = $response->viewData('users');
+        $names = $users->pluck('name')->all();
+
+        // Kode '3' harus mendahului kode '25'
+        $this->assertTrue(array_search('Guru Kode Kecil', $names) < array_search('Budi Santoso, S.Pd.', $names));
+    }
 }

@@ -21,22 +21,27 @@ class TeacherAccountController extends Controller
     {
         $academicYear = $this->resolveAcademicYear($request);
         $search = $request->string('q')->trim()->toString();
+        $sort = $request->string('sort')->trim()->toString();
+        $dir = strtolower($request->string('dir')->trim()->toString()) === 'desc' ? 'desc' : 'asc';
 
         $query = User::query()
             ->with(['teacherSubjects.subject'])
             ->withCount([
                 'teachingClasses as total_classes_count',
                 'teachingClasses as semester_classes_count' => fn ($q) => $q->where('academic_year_id', $academicYear->id),
-            ])
-            ->orderByRaw("CASE WHEN role = 'admin' THEN 0 ELSE 1 END")
-            ->orderBy('name');
+            ]);
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
                     ->orWhere('nip', 'like', "%{$search}%")
-                    ->orWhere('default_subject', 'like', "%{$search}%");
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('default_subject', 'like', "%{$search}%")
+                    ->orWhereHas('teacherSubjects', function ($tsQ) use ($search) {
+                        $tsQ->where('teaching_code', 'like', "%{$search}%")
+                            ->orWhereHas('subject', fn ($sQ) => $sQ->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%"));
+                    });
             });
         }
 
@@ -166,9 +171,103 @@ class TeacherAccountController extends Controller
             return $a['has_account'] ? 1 : -1;
         });
 
+        $users = $query->get();
+
+        switch ($sort) {
+            case 'name':
+                $users = $dir === 'desc'
+                    ? $users->sortByDesc('name', SORT_NATURAL | SORT_FLAG_CASE)->values()
+                    : $users->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values();
+                break;
+            case 'nip':
+                $users = $users->sort(function ($a, $b) use ($dir) {
+                    $nA = trim((string)$a->nip);
+                    $nB = trim((string)$b->nip);
+                    if ($nA === '' && $nB === '') return 0;
+                    if ($nA === '') return 1;
+                    if ($nB === '') return -1;
+                    return $dir === 'desc' ? strnatcasecmp($nB, $nA) : strnatcasecmp($nA, $nB);
+                })->values();
+                break;
+            case 'phone':
+                $users = $users->sort(function ($a, $b) use ($dir) {
+                    $pA = trim((string)$a->phone);
+                    $pB = trim((string)$b->phone);
+                    if ($pA === '' && $pB === '') return 0;
+                    if ($pA === '') return 1;
+                    if ($pB === '') return -1;
+                    return $dir === 'desc' ? strnatcasecmp($pB, $pA) : strnatcasecmp($pA, $pB);
+                })->values();
+                break;
+            case 'mapel':
+            case 'subject':
+                $users = $users->sort(function ($a, $b) use ($dir) {
+                    $sA = $a->subject_codes_string ?: ($a->default_subject ?: '');
+                    $sB = $b->subject_codes_string ?: ($b->default_subject ?: '');
+                    if ($sA === '' && $sB === '') return 0;
+                    if ($sA === '') return 1;
+                    if ($sB === '') return -1;
+                    return $dir === 'desc' ? strnatcasecmp($sB, $sA) : strnatcasecmp($sA, $sB);
+                })->values();
+                break;
+            case 'teaching_code':
+            case 'kode':
+                $users = $users->sort(function ($a, $b) use ($dir) {
+                    $tA = $a->teaching_codes_string ?: '';
+                    $tB = $b->teaching_codes_string ?: '';
+                    if ($tA === '' && $tB === '') return 0;
+                    if ($tA === '') return 1;
+                    if ($tB === '') return -1;
+                    return $dir === 'desc' ? strnatcasecmp($tB, $tA) : strnatcasecmp($tA, $tB);
+                })->values();
+                break;
+            case 'ttd':
+            case 'signature':
+                $users = $users->sort(function ($a, $b) use ($dir) {
+                    $hasA = !empty($a->signature_data) ? 1 : 0;
+                    $hasB = !empty($b->signature_data) ? 1 : 0;
+                    if ($hasA !== $hasB) {
+                        return $dir === 'desc' ? ($hasA - $hasB) : ($hasB - $hasA);
+                    }
+                    return strnatcasecmp($a->name, $b->name);
+                })->values();
+                break;
+            case 'status':
+                $users = $users->sort(function ($a, $b) use ($dir) {
+                    $stA = $a->is_active ? 1 : 0;
+                    $stB = $b->is_active ? 1 : 0;
+                    if ($stA !== $stB) {
+                        return $dir === 'desc' ? ($stA - $stB) : ($stB - $stA);
+                    }
+                    return strnatcasecmp($a->name, $b->name);
+                })->values();
+                break;
+            case 'role':
+                $users = $users->sort(function ($a, $b) use ($dir) {
+                    if ($a->role !== $b->role) {
+                        return $dir === 'desc' ? strcmp($b->role, $a->role) : strcmp($a->role, $b->role);
+                    }
+                    return strnatcasecmp($a->name, $b->name);
+                })->values();
+                break;
+            default:
+                // Default: Admin paling atas, lalu urut nama A-Z
+                $users = $users->sort(function ($a, $b) {
+                    $adminA = $a->isAdmin() ? 0 : 1;
+                    $adminB = $b->isAdmin() ? 0 : 1;
+                    if ($adminA !== $adminB) {
+                        return $adminA - $adminB;
+                    }
+                    return strnatcasecmp($a->name, $b->name);
+                })->values();
+                break;
+        }
+
         return view('admin.teachers', [
-            'users' => $query->get(),
+            'users' => $users,
             'search' => $search,
+            'sort' => $sort,
+            'dir' => $dir,
             'scheduleTeachers' => $scheduleTeachers,
             'subjects' => Subject::query()->where('is_active', true)->orderBy('name')->get(),
         ]);

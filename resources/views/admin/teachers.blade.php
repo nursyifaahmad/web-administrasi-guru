@@ -139,18 +139,42 @@
         });
     }
 }">
-    {{-- Toolbar Atas: Pencarian & Tambah Master Guru --}}
+    {{-- Toolbar Atas: Pencarian, Pengurutan (Sort), & Tambah Master Guru --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <form method="GET" action="{{ route('admin.teachers.index') }}" class="flex items-center gap-2 flex-1 max-w-md">
+            @if($sort)
+                <input type="hidden" name="sort" value="{{ $sort }}">
+                <input type="hidden" name="dir" value="{{ $dir }}">
+            @endif
             <input type="text" name="q" value="{{ $search }}" placeholder="Cari nama guru, NIP, telepon, atau kode..."
                    class="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs focus:ring-2 focus:ring-emerald-500">
             <button type="submit" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 cursor-pointer">Cari</button>
             @if($search)
-                <a href="{{ route('admin.teachers.index') }}" class="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200">Reset</a>
+                <a href="{{ route('admin.teachers.index', request()->except('q')) }}" class="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200">Reset</a>
             @endif
         </form>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+            {{-- Dropdown Pengurutan (Sort) --}}
+            <div class="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+                <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/></svg>
+                <span class="hidden sm:inline">Urutkan:</span>
+                <select onchange="window.location.href=this.value"
+                        class="rounded-xl border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-emerald-500 shadow-2xs cursor-pointer">
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->except(['sort', 'dir']), [])) }}" {{ empty($sort) ? 'selected' : '' }}>Bawaan (Admin & Nama A-Z)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'name', 'dir' => 'asc'])) }}" {{ $sort === 'name' && $dir === 'asc' ? 'selected' : '' }}>Nama Lengkap (A → Z)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'name', 'dir' => 'desc'])) }}" {{ $sort === 'name' && $dir === 'desc' ? 'selected' : '' }}>Nama Lengkap (Z → A)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'nip', 'dir' => 'asc'])) }}" {{ $sort === 'nip' && $dir === 'asc' ? 'selected' : '' }}>NIP (Terkecil → Terbesar)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'nip', 'dir' => 'desc'])) }}" {{ $sort === 'nip' && $dir === 'desc' ? 'selected' : '' }}>NIP (Terbesar → Terkecil)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'phone', 'dir' => 'asc'])) }}" {{ $sort === 'phone' && $dir === 'asc' ? 'selected' : '' }}>Nomor Telepon</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'mapel', 'dir' => 'asc'])) }}" {{ $sort === 'mapel' && $dir === 'asc' ? 'selected' : '' }}>Kode Mapel (A → Z)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'teaching_code', 'dir' => 'asc'])) }}" {{ $sort === 'teaching_code' && $dir === 'asc' ? 'selected' : '' }}>Kode Mengajar (1 → 9)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'ttd', 'dir' => 'asc'])) }}" {{ $sort === 'ttd' && $dir === 'asc' ? 'selected' : '' }}>TTD (Belum Ada TTD Dulu)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'ttd', 'dir' => 'desc'])) }}" {{ $sort === 'ttd' && $dir === 'desc' ? 'selected' : '' }}>TTD (Sudah Ada TTD Dulu)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'status', 'dir' => 'asc'])) }}" {{ $sort === 'status' && $dir === 'asc' ? 'selected' : '' }}>Status (Aktif Dulu)</option>
+                </select>
+            </div>
+
             <button type="button" @click="openCreateModal()"
                     class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-2xs transition cursor-pointer">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -159,20 +183,153 @@
         </div>
     </div>
 
+    {{-- Indikator Urutan Aktif / Filter Pencarian --}}
+    @if($sort || $search)
+        <div class="flex items-center gap-2 flex-wrap text-xs text-slate-600 px-1">
+            <span>Menampilkan <strong>{{ $users->count() }}</strong> data guru</span>
+            @if($sort)
+                @php
+                    $sortLabels = [
+                        'name' => 'Nama Lengkap',
+                        'nip' => 'NIP',
+                        'phone' => 'Nomor Telepon',
+                        'mapel' => 'Kode Mapel',
+                        'subject' => 'Kode Mapel',
+                        'teaching_code' => 'Kode Mengajar',
+                        'kode' => 'Kode Mengajar',
+                        'ttd' => 'TTD Digital',
+                        'signature' => 'TTD Digital',
+                        'status' => 'Status',
+                    ];
+                    $sortName = $sortLabels[$sort] ?? ucfirst($sort);
+                @endphp
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                    <span>Urutan: <strong>{{ $sortName }}</strong> ({{ $dir === 'desc' ? 'Z-A / Terbesar' : 'A-Z / Terkecil' }})</span>
+                    <a href="{{ route('admin.teachers.index', request()->except(['sort', 'dir'])) }}" class="text-emerald-500 hover:text-emerald-900 font-bold ml-1 text-sm leading-none" title="Hapus Pengurutan">&times;</a>
+                </span>
+            @endif
+            @if($search)
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200 font-medium">
+                    <span>Cari: <strong>"{{ $search }}"</strong></span>
+                    <a href="{{ route('admin.teachers.index', request()->except('q')) }}" class="text-slate-400 hover:text-slate-700 font-bold ml-1 text-sm leading-none" title="Hapus Pencarian">&times;</a>
+                </span>
+            @endif
+            <a href="{{ route('admin.teachers.index') }}" class="text-xs text-rose-600 hover:text-rose-800 hover:underline font-semibold ml-auto">Reset Semua</a>
+        </div>
+    @endif
+
     {{-- Tabel Data Master Guru --}}
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         <div class="overflow-x-auto">
+            @php
+                $buildSortUrl = function($col) use ($sort, $dir) {
+                    $nextDir = ($sort === $col && $dir === 'asc') ? 'desc' : 'asc';
+                    return route('admin.teachers.index', array_merge(request()->query(), ['sort' => $col, 'dir' => $nextDir]));
+                };
+            @endphp
             <table class="w-full text-xs text-left border-collapse">
                 <thead class="bg-slate-50 text-slate-700 uppercase text-[11px] font-bold border-b border-slate-200">
                     <tr>
                         <th class="px-3 py-3 w-12 text-center border-r border-slate-200">No</th>
-                        <th class="px-4 py-3 min-w-[200px] border-r border-slate-200">Nama Lengkap</th>
-                        <th class="px-3 py-3 w-36 border-r border-slate-200">NIP / NUPTK</th>
-                        <th class="px-3 py-3 w-36 border-r border-slate-200">Nomor Telepon</th>
-                        <th class="px-3 py-3 min-w-[130px] border-r border-slate-200">Kode Mapel</th>
-                        <th class="px-3 py-3 w-32 border-r border-slate-200 text-center">Kode Mengajar</th>
-                        <th class="px-3 py-3 w-28 text-center border-r border-slate-200">TTD Digital</th>
-                        <th class="px-3 py-3 w-24 text-center border-r border-slate-200">Status</th>
+                        
+                        {{-- 2. Nama Lengkap (Sortable) --}}
+                        <th class="px-4 py-3 min-w-[200px] border-r border-slate-200">
+                            <a href="{{ $buildSortUrl('name') }}" class="group flex items-center justify-between gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan Nama Lengkap">
+                                <span>Nama Lengkap &amp; Gelar</span>
+                                <span class="inline-flex items-center text-xs">
+                                    @if($sort === 'name')
+                                        <span class="text-emerald-600 font-black">{{ $dir === 'asc' ? '▲' : '▼' }}</span>
+                                    @else
+                                        <span class="text-slate-300 group-hover:text-slate-500">⇅</span>
+                                    @endif
+                                </span>
+                            </a>
+                        </th>
+
+                        {{-- 3. NIP (Sortable) --}}
+                        <th class="px-3 py-3 w-36 border-r border-slate-200">
+                            <a href="{{ $buildSortUrl('nip') }}" class="group flex items-center justify-between gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan NIP">
+                                <span>NIP / NUPTK</span>
+                                <span class="inline-flex items-center text-xs">
+                                    @if($sort === 'nip')
+                                        <span class="text-emerald-600 font-black">{{ $dir === 'asc' ? '▲' : '▼' }}</span>
+                                    @else
+                                        <span class="text-slate-300 group-hover:text-slate-500">⇅</span>
+                                    @endif
+                                </span>
+                            </a>
+                        </th>
+
+                        {{-- 4. Nomor Telepon (Sortable) --}}
+                        <th class="px-3 py-3 w-36 border-r border-slate-200">
+                            <a href="{{ $buildSortUrl('phone') }}" class="group flex items-center justify-between gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan Nomor Telepon">
+                                <span>Nomor Telepon</span>
+                                <span class="inline-flex items-center text-xs">
+                                    @if($sort === 'phone')
+                                        <span class="text-emerald-600 font-black">{{ $dir === 'asc' ? '▲' : '▼' }}</span>
+                                    @else
+                                        <span class="text-slate-300 group-hover:text-slate-500">⇅</span>
+                                    @endif
+                                </span>
+                            </a>
+                        </th>
+
+                        {{-- 5. Kode Mapel (Sortable) --}}
+                        <th class="px-3 py-3 min-w-[130px] border-r border-slate-200">
+                            <a href="{{ $buildSortUrl('mapel') }}" class="group flex items-center justify-between gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan Kode Mapel">
+                                <span>Kode Mapel</span>
+                                <span class="inline-flex items-center text-xs">
+                                    @if($sort === 'mapel' || $sort === 'subject')
+                                        <span class="text-emerald-600 font-black">{{ $dir === 'asc' ? '▲' : '▼' }}</span>
+                                    @else
+                                        <span class="text-slate-300 group-hover:text-slate-500">⇅</span>
+                                    @endif
+                                </span>
+                            </a>
+                        </th>
+
+                        {{-- 6. Kode Mengajar (Sortable) --}}
+                        <th class="px-3 py-3 w-32 border-r border-slate-200 text-center">
+                            <a href="{{ $buildSortUrl('teaching_code') }}" class="group flex items-center justify-center gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan Kode Mengajar">
+                                <span>Kode Mengajar</span>
+                                <span class="inline-flex items-center text-xs">
+                                    @if($sort === 'teaching_code' || $sort === 'kode')
+                                        <span class="text-emerald-600 font-black">{{ $dir === 'asc' ? '▲' : '▼' }}</span>
+                                    @else
+                                        <span class="text-slate-300 group-hover:text-slate-500">⇅</span>
+                                    @endif
+                                </span>
+                            </a>
+                        </th>
+
+                        {{-- 7. TTD Digital (Sortable) --}}
+                        <th class="px-3 py-3 w-28 text-center border-r border-slate-200">
+                            <a href="{{ $buildSortUrl('ttd') }}" class="group flex items-center justify-center gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan Kelengkapan TTD">
+                                <span>TTD Digital</span>
+                                <span class="inline-flex items-center text-xs">
+                                    @if($sort === 'ttd' || $sort === 'signature')
+                                        <span class="text-emerald-600 font-black">{{ $dir === 'asc' ? '▲' : '▼' }}</span>
+                                    @else
+                                        <span class="text-slate-300 group-hover:text-slate-500">⇅</span>
+                                    @endif
+                                </span>
+                            </a>
+                        </th>
+
+                        {{-- 8. Status (Sortable) --}}
+                        <th class="px-3 py-3 w-24 text-center border-r border-slate-200">
+                            <a href="{{ $buildSortUrl('status') }}" class="group flex items-center justify-center gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan Status">
+                                <span>Status</span>
+                                <span class="inline-flex items-center text-xs">
+                                    @if($sort === 'status')
+                                        <span class="text-emerald-600 font-black">{{ $dir === 'asc' ? '▲' : '▼' }}</span>
+                                    @else
+                                        <span class="text-slate-300 group-hover:text-slate-500">⇅</span>
+                                    @endif
+                                </span>
+                            </a>
+                        </th>
+
                         <th class="px-4 py-3 w-32 text-right">Aksi</th>
                     </tr>
                 </thead>
