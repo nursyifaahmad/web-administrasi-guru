@@ -321,4 +321,198 @@ class AdminAsTeacherFullCapabilitiesTest extends TestCase
         ]);
         $scoreResp->assertStatus(403);
     }
+
+    public function test_admin_teacher_receives_master_schedule_allocations(): void
+    {
+        // Setup slot jadwal resmi Wakasek untuk Kode 12 (MUHAMMAD IRFAN, S.Pd)
+        \App\Models\SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'code' => '12',
+            'name' => 'MUHAMMAD IRFAN, S.Pd',
+            'subject' => 'B. INGGRIS',
+            'user_id' => null, // Belum tertaut langsung
+        ]);
+
+        \App\Models\SchoolScheduleItem::query()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'teacher_code' => '12',
+            'teacher_name' => 'MUHAMMAD IRFAN, S.Pd',
+            'subject_name' => 'B. INGGRIS',
+            'class_name' => '9E',
+            'day_of_week' => 1,
+            'period_order' => 1,
+            'time_range' => '07.40 - 08.20',
+        ]);
+        \App\Models\SchoolScheduleItem::query()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'teacher_code' => '12',
+            'teacher_name' => 'MUHAMMAD IRFAN, S.Pd',
+            'subject_name' => 'B. INGGRIS',
+            'class_name' => '9F',
+            'day_of_week' => 2,
+            'period_order' => 2,
+            'time_range' => '08.20 - 09.00',
+        ]);
+
+        // Muhammad Irfan (role: admin) memanggil API alokasi jadwal
+        $response = $this->actingAs($this->adminTeacher)->getJson(route('classes.schedule-allocations'));
+        $response->assertStatus(200);
+        $response->assertJson([
+            'status' => 'success',
+            'teacher_id' => $this->adminTeacher->id,
+            'total_allocations' => 2,
+        ]);
+
+        $allocations = $response->json('allocations');
+        $this->assertCount(2, $allocations);
+        $classCodes = collect($allocations)->pluck('class_code')->all();
+        $this->assertContains('9E', $classCodes);
+        $this->assertContains('9F', $classCodes);
+
+        // Pastikan relasi otomatis ditautkan ke user_id Muhammad Irfan
+        $scheduleTeacher = \App\Models\SchoolScheduleTeacher::query()
+            ->where('academic_year_id', $this->academicYear->id)
+            ->where('code', '12')
+            ->first();
+        $this->assertEquals($this->adminTeacher->id, $scheduleTeacher->user_id);
+    }
+
+    public function test_admin_teacher_sees_schedule_allocations_in_classes_index_page(): void
+    {
+        // Setup slot jadwal resmi untuk Muhammad Irfan
+        \App\Models\SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'code' => '12',
+            'name' => 'MUHAMMAD IRFAN, S.Pd',
+            'subject' => 'B. INGGRIS',
+            'user_id' => $this->adminTeacher->id,
+        ]);
+
+        \App\Models\SchoolScheduleItem::query()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'teacher_code' => '12',
+            'teacher_name' => 'MUHAMMAD IRFAN, S.Pd',
+            'subject_name' => 'B. INGGRIS',
+            'class_name' => '9G',
+            'day_of_week' => 3,
+            'period_order' => 1,
+            'time_range' => '07.30 - 08.10',
+            'user_id' => $this->adminTeacher->id,
+        ]);
+
+        $response = $this->actingAs($this->adminTeacher)->get(route('classes.index'));
+        $response->assertStatus(200);
+        $response->assertViewHas('scheduleAllocations');
+
+        $allocs = $response->viewData('scheduleAllocations');
+        $this->assertNotEmpty($allocs);
+        $this->assertEquals('9G', $allocs->first()['class_code']);
+
+        // Pastikan view memuat elemen Jadwal Resmi Wakasek
+        $response->assertSee('Jadwal Resmi Wakasek:');
+        $response->assertSee('Pilih Kelas Mengajar dari Master Jadwal Sekolah *');
+    }
+
+    public function test_name_matching_supports_single_m_spelling_variation_for_admin(): void
+    {
+        \App\Models\SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'code' => '12',
+            'name' => 'MUHAMMAD IRFAN, S.Pd',
+            'subject' => 'B. INGGRIS',
+            'user_id' => null,
+        ]);
+        \App\Models\SchoolScheduleItem::query()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'teacher_code' => '12',
+            'teacher_name' => 'MUHAMMAD IRFAN, S.Pd',
+            'subject_name' => 'B. INGGRIS',
+            'class_name' => '9E',
+            'day_of_week' => 1,
+            'period_order' => 1,
+            'time_range' => '07.40 - 08.20',
+        ]);
+
+        // Akun dengan ejaan 1 'm' (Muhamad Irfan)
+        $adminSingleM = User::query()->create([
+            'name' => 'Muhamad Irfan, S.Pd.',
+            'email' => 'muhamad.irfan@smpn2lemahabang.sch.id',
+            'role' => 'admin',
+            'password' => 'guru123',
+            'is_active' => true,
+        ]);
+
+        $service = app(\App\Services\SchoolScheduleService::class);
+        $allocations = $service->getTeacherClassAllocations($this->academicYear, $adminSingleM);
+        $this->assertCount(1, $allocations);
+        $this->assertEquals('9E', $allocations->first()['class_code']);
+
+        $schedule = $service->getTeacherSchedule($adminSingleM, $this->academicYear);
+        $this->assertEquals(1, $schedule['total_hours']);
+        $this->assertEquals('12', $schedule['teacher']['code']);
+    }
+
+    public function test_pure_admin_without_teaching_schedule_returns_zero_hours(): void
+    {
+        $pureAdmin = User::query()->create([
+            'name' => 'Drs. Hendra Wijaya, M.M.Pd.',
+            'email' => 'hendra@sekolah.sch.id',
+            'role' => 'admin',
+            'password' => 'guru123',
+            'is_active' => true,
+        ]);
+
+        $service = app(\App\Services\SchoolScheduleService::class);
+        $allocations = $service->getTeacherClassAllocations($this->academicYear, $pureAdmin);
+        $this->assertCount(0, $allocations);
+
+        $schedule = $service->getTeacherSchedule($pureAdmin, $this->academicYear);
+        $this->assertEquals(0, $schedule['total_hours']);
+        $this->assertTrue($schedule['is_admin']);
+    }
+
+    public function test_admin_teacher_can_sync_and_create_all_classes_from_schedule(): void
+    {
+        \App\Models\SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'code' => '12',
+            'name' => 'MUHAMMAD IRFAN, S.Pd',
+            'subject' => 'B. INGGRIS',
+            'user_id' => $this->adminTeacher->id,
+        ]);
+
+        \App\Models\SchoolScheduleItem::query()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'teacher_code' => '12',
+            'teacher_name' => 'MUHAMMAD IRFAN, S.Pd',
+            'subject_name' => 'B. INGGRIS',
+            'class_name' => '9E',
+            'day_of_week' => 1,
+            'period_order' => 1,
+            'time_range' => '07.40 - 08.20',
+            'user_id' => $this->adminTeacher->id,
+        ]);
+
+        $resp = $this->actingAs($this->adminTeacher)->post(route('classes.sync-from-schedule'), [
+            'teacher_id' => $this->adminTeacher->id,
+        ]);
+        $resp->assertRedirect(route('classes.index'));
+        $resp->assertSessionHas('success');
+
+        $createdClasses = TeachingClass::query()
+            ->where('academic_year_id', $this->academicYear->id)
+            ->where('teacher_id', $this->adminTeacher->id)
+            ->get();
+
+        $this->assertCount(2, $createdClasses); // VII-A from setUp + IX-E from sync
+        $class9E = $createdClasses->firstWhere('class_name', 'IX-E');
+        $this->assertNotNull($class9E);
+        $this->assertEquals($this->subjectEnglish->id, $class9E->subject_id);
+
+        // Alokasi sekarang statusnya already_created = true
+        $service = app(\App\Services\SchoolScheduleService::class);
+        $allocations = $service->getTeacherClassAllocations($this->academicYear, $this->adminTeacher);
+        $alloc9E = $allocations->firstWhere('class_code', '9E');
+        $this->assertTrue($alloc9E['already_created']);
+    }
 }

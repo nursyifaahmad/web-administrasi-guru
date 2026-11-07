@@ -139,6 +139,25 @@ class DatabaseSeeder extends Seeder
             );
         }
 
+        $irfan = User::query()->updateOrCreate(
+            ['email' => 'muhamad.irfan@smpn2lemahabang.sch.id'],
+            [
+                'name' => 'Muhammad Irfan, S.Pd.',
+                'role' => 'admin',
+                'phone' => '081377889900',
+                'default_subject' => 'Bahasa Inggris',
+                'is_active' => true,
+                'password' => Hash::make('password'),
+            ]
+        );
+
+        if (isset($subjectMap['BIG'])) {
+            \App\Models\TeacherSubject::query()->updateOrCreate(
+                ['user_id' => $irfan->id, 'subject_id' => $subjectMap['BIG']->id],
+                ['teaching_code' => '12']
+            );
+        }
+
         $sampleStudents = [
             ['nis' => '009812001', 'full' => 'Aditya Pratama Putra', 'g' => 'L'],
             ['nis' => '009812002', 'full' => 'Aisyah Putri Ramadhani', 'g' => 'P'],
