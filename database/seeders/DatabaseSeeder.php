@@ -108,7 +108,7 @@ class DatabaseSeeder extends Seeder
                 'phone' => '081322334455',
                 'default_subject' => 'Matematika',
                 'is_active' => true,
-                'password' => Hash::make('password'),
+                'password' => Hash::make('guru123'),
             ]
         );
 
@@ -128,7 +128,7 @@ class DatabaseSeeder extends Seeder
                 'phone' => '081388776655',
                 'default_subject' => 'Bahasa Indonesia',
                 'is_active' => true,
-                'password' => Hash::make('password'),
+                'password' => Hash::make('guru123'),
             ]
         );
 

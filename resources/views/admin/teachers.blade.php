@@ -22,7 +22,7 @@
         role: 'guru',
         email: '',
         phone: '',
-        password: 'password123',
+        password: 'guru123',
         schedule_codes: '',
         teacher_subjects: [
             { subject_id: '', teaching_code: '' }
@@ -40,7 +40,7 @@
             role: 'guru',
             email: '',
             phone: '',
-            password: 'password123',
+            password: 'guru123',
             schedule_codes: '',
             teacher_subjects: [
                 { subject_id: '', teaching_code: '' }
@@ -416,6 +416,7 @@
                         <label class="block font-bold text-slate-700 mb-1">Kata Sandi Awal Akun *</label>
                         <input type="text" name="password" x-model="form.password" required
                                class="w-full rounded-xl border border-slate-300 px-3 py-2 font-mono focus:ring-2 focus:ring-emerald-500">
+                        <p class="text-[11px] text-slate-400 mt-1">Standar kata sandi default untuk akun guru baru adalah <code class="px-1.5 py-0.5 rounded bg-slate-100 font-mono font-bold text-slate-700">guru123</code></p>
                     </div>
                 </div>
 

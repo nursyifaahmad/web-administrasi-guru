@@ -119,7 +119,7 @@ class MasterTeacherManagementTest extends TestCase
             'nip' => '198505052010012003',
             'phone' => '085211223344',
             'role' => 'guru',
-            'password' => 'password123',
+            'password' => 'guru123',
             'signature_data' => $dummySig,
             'teacher_subjects' => [
                 [
