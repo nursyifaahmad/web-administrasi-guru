@@ -42,7 +42,7 @@
                    sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
                    sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'
                ]"
-               class="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-screen h-dvh bg-slate-900 text-slate-100 flex flex-col transition-transform duration-200 ease-in-out shadow-2xl lg:shadow-none lg:static lg:h-auto lg:shrink-0 lg:relative">
+               class="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-screen h-dvh bg-slate-900 text-slate-100 flex flex-col transition-transform duration-200 ease-in-out shadow-2xl lg:shadow-none lg:sticky lg:top-0 lg:h-screen lg:shrink-0">
 
             {{-- Tombol Floating Kecilkan / Besarkan Sidebar (Desktop) --}}
             <button type="button"
@@ -267,7 +267,8 @@
             {{-- Topbar --}}
             <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3">
                 <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 sm:gap-3">
-                    <div class="flex items-center justify-between lg:justify-start gap-2 sm:gap-3 min-w-0">
+                    {{-- Sisi Kiri: Tombol sidebar (mobile/desktop collapse) & Judul / Subtitle Halaman --}}
+                    <div class="flex items-center justify-between lg:justify-start gap-2 sm:gap-3 min-w-0 flex-1">
                         <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                             {{-- Tombol Buka Sidebar (Mobile) --}}
                             <button type="button" @click="sidebarOpen = true" class="lg:hidden p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Buka Menu">
@@ -283,15 +284,19 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 4v16"/>
                                 </svg>
                             </button>
-                            <div class="min-w-0">
-                                <h1 class="text-sm sm:text-lg font-bold text-slate-900 leading-tight truncate">@yield('page_title', 'Dashboard Administrasi Guru')</h1>
+                            <div class="min-w-0 flex-1">
+                                <h1 class="text-sm sm:text-base lg:text-lg font-bold text-slate-900 leading-tight truncate" title="@yield('page_title', 'Dashboard Administrasi Guru')">
+                                    @yield('page_title', 'Dashboard Administrasi Guru')
+                                </h1>
                                 @hasSection('page_subtitle')
-                                    <p class="text-[11px] sm:text-xs text-slate-500 truncate">@yield('page_subtitle')</p>
+                                    <p class="text-[11px] sm:text-xs text-slate-500 truncate mt-0.5" title="@yield('page_subtitle')">
+                                        @yield('page_subtitle')
+                                    </p>
                                 @endif
                             </div>
                         </div>
 
-                        {{-- Mobile-only right icons: Clock & Profile --}}
+                        {{-- Mobile-only right icons: Clock & Profile Dropdown --}}
                         <div class="flex lg:hidden items-center gap-1.5 shrink-0">
                             {{-- Clock (Mobile compact) --}}
                             <div x-data="{
@@ -321,23 +326,68 @@
                                 <span class="text-xs font-black font-mono tracking-tight text-slate-900" x-text="timeFormatted"></span>
                             </div>
 
-                            <a href="{{ route('profile.edit') }}"
-                               class="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shrink-0"
-                               title="Profil & Tanda Tangan">
-                                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                            </a>
+                            {{-- Mobile User Profile Dropdown --}}
+                            <div x-data="{ mobileUserMenuOpen: false }" @click.outside="mobileUserMenuOpen = false" class="relative">
+                                <button type="button"
+                                        @click="mobileUserMenuOpen = !mobileUserMenuOpen"
+                                        class="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shrink-0"
+                                        title="Menu Akun: {{ auth()->user()->name }}">
+                                    <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                </button>
+                                <div x-show="mobileUserMenuOpen"
+                                     x-cloak
+                                     x-transition:enter="transition ease-out duration-150"
+                                     x-transition:enter-start="opacity-0 scale-95 translate-y-1"
+                                     x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                                     x-transition:leave="transition ease-in duration-100"
+                                     x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                                     x-transition:leave-end="opacity-0 scale-95 translate-y-1"
+                                     class="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-xl py-1.5 z-50 text-slate-700 divide-y divide-slate-100">
+                                    <div class="px-4 py-3 bg-slate-50/70 rounded-t-2xl">
+                                        <div class="flex items-center gap-2.5">
+                                            <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
+                                                {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-xs font-bold text-slate-900 truncate">{{ auth()->user()->name }}</p>
+                                                <p class="text-[11px] text-slate-500 truncate">{{ auth()->user()->isAdmin() ? 'Administrator' : ('NIP: ' . (auth()->user()->nip ?: '-')) }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="py-1">
+                                        <a href="{{ route('profile.edit') }}" class="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-emerald-700">
+                                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                            <span>Profil & TTD Digital</span>
+                                        </a>
+                                        <a href="{{ route('schedules.main.index') }}" class="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-emerald-700">
+                                            <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                            <span>Jadwal Utama</span>
+                                        </a>
+                                    </div>
+                                    <div class="p-1.5">
+                                        <form method="POST" action="{{ route('logout') }}">
+                                            @csrf
+                                            <button type="submit" class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition cursor-pointer">
+                                                <svg class="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                                                <span>Keluar (Logout)</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     {{-- Actions & Switchers: Desktop inline, Mobile secondary row or flex --}}
-                    <div class="flex flex-wrap lg:flex-nowrap items-center justify-between lg:justify-end gap-2 sm:gap-2.5">
+                    <div class="flex flex-wrap lg:flex-nowrap items-center justify-between lg:justify-end gap-2 sm:gap-2.5 shrink-0">
                         {{-- Quick Class Switcher Dropdown bila sedang membuka suatu kelas --}}
                         @if(isset($teachingClass) && $quickSwitcherClasses->count() > 1)
-                            <div class="flex items-center gap-1.5 flex-1 sm:flex-initial min-w-0">
-                                <span class="hidden sm:inline text-xs font-medium text-slate-500 shrink-0">Pindah Kelas:</span>
+                            <div class="flex items-center gap-1.5 flex-1 sm:flex-initial min-w-0 max-w-full sm:max-w-xs lg:max-w-[200px] xl:max-w-[240px] 2xl:max-w-[280px]">
+                                <span class="hidden 2xl:inline text-xs font-medium text-slate-500 shrink-0">Pindah Kelas:</span>
                                 <select data-prev-value="{{ route($currentSubMenu, $teachingClass) }}"
                                         onchange="window.handleGuardedSelectNavigate(this, 'href')"
-                                        class="w-full sm:w-auto text-xs font-semibold rounded-lg border-slate-300 bg-slate-50 py-1.5 pl-2.5 pr-7 text-slate-800 focus:border-emerald-500 focus:ring-emerald-500 truncate">
+                                        title="Pindah Kelas Mengajar"
+                                        class="w-full text-xs font-semibold rounded-lg border-slate-300 bg-slate-50 py-1.5 pl-2.5 pr-7 text-slate-800 focus:border-emerald-500 focus:ring-emerald-500 truncate">
                                     @foreach($quickSwitcherClasses as $qCls)
                                         <option value="{{ route($currentSubMenu, $qCls) }}" @selected($qCls->id === $teachingClass->id)>
                                             {{ $qCls->class_name }} — {{ $qCls->subject->name ?? '' }} {{ auth()->user()->isAdmin() ? '(' . strtok($qCls->teacher->name ?? '', ' ') . ')' : '' }}
@@ -348,12 +398,13 @@
                         @endif
 
                         {{-- Pemilih Tahun Ajaran & Semester --}}
-                        <form method="POST" action="{{ route('academic-year.switch') }}" data-skip-dirty-guard="1" class="flex items-center flex-1 sm:flex-initial min-w-0">
+                        <form method="POST" action="{{ route('academic-year.switch') }}" data-skip-dirty-guard="1" class="flex items-center flex-1 sm:flex-initial min-w-0 max-w-full sm:max-w-xs lg:max-w-[170px] xl:max-w-[195px]">
                             @csrf
                             <select name="academic_year_id"
                                     data-prev-value="{{ $selectedAcademicYear->id }}"
                                     onchange="window.handleGuardedSelectNavigate(this, 'submit')"
-                                    class="w-full sm:w-auto text-xs font-semibold rounded-lg border border-emerald-200 bg-emerald-50/70 py-1.5 pl-2.5 pr-7 text-emerald-900 focus:border-emerald-500 focus:ring-emerald-500 truncate">
+                                    title="Pilih Tahun Ajaran & Semester"
+                                    class="w-full text-xs font-semibold rounded-lg border border-emerald-200 bg-emerald-50/70 py-1.5 pl-2.5 pr-7 text-emerald-900 focus:border-emerald-500 focus:ring-emerald-500 truncate">
                                 @foreach($globalAcademicYears as $ay)
                                     <option value="{{ $ay->id }}" @selected($ay->id === $selectedAcademicYear->id)>
                                         TA {{ $ay->year_name }} • {{ $ay->semester }} {{ $ay->is_active ? '(Aktif)' : '(Arsip)' }}
@@ -362,14 +413,8 @@
                             </select>
                         </form>
 
-                        {{-- Desktop-only Profile & Clock --}}
-                        <div class="hidden lg:flex items-center gap-2.5 shrink-0">
-                            <a href="{{ route('profile.edit') }}"
-                               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                                <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                                <span>Profil & TTD</span>
-                            </a>
-
+                        {{-- Desktop-only Clock & User Profile Dropdown --}}
+                        <div class="hidden lg:flex items-center gap-2 sm:gap-2.5 shrink-0">
                             {{-- Widget Tanggal & Jam Realtime di Pojok Kanan Atas (Desktop) --}}
                             <div x-data="{
                                     now: new Date(),
@@ -398,16 +443,92 @@
                                     }
                                  }"
                                  title='Waktu Sistem Realtime (WIB)'
-                                 class="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 rounded-xl border border-slate-200 bg-slate-50/90 text-slate-700 select-none shadow-2xs">
+                                 class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50/90 text-slate-700 select-none shadow-2xs shrink-0">
                                 <div class="flex items-center justify-center shrink-0">
                                     <span class="relative flex h-2 w-2">
                                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                         <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                                     </span>
                                 </div>
-                                <div class="flex flex-col text-left leading-tight">
+                                <div class="hidden 2xl:flex flex-col text-left leading-tight">
                                     <span class="text-[10px] font-semibold text-slate-500 truncate" x-text="dateFormatted"></span>
                                     <span class="text-xs font-black font-mono tracking-tight text-slate-900" x-text="timeFormatted"></span>
+                                </div>
+                                <div class="flex 2xl:hidden flex-col text-left leading-tight">
+                                    <span class="text-xs font-black font-mono tracking-tight text-slate-900" x-text="timeFormatted"></span>
+                                </div>
+                            </div>
+
+                            {{-- User Profile & Logout Dropdown (Desktop) --}}
+                            <div x-data="{ userMenuOpen: false }" @click.outside="userMenuOpen = false" class="relative shrink-0">
+                                <button type="button"
+                                        @click="userMenuOpen = !userMenuOpen"
+                                        class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition text-slate-700 shadow-2xs cursor-pointer group"
+                                        title="Menu Akun: {{ auth()->user()->name }}">
+                                    <div class="w-7 h-7 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
+                                        {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
+                                    </div>
+                                    <div class="text-left hidden 2xl:block max-w-[130px]">
+                                        <div class="text-xs font-bold text-slate-800 truncate leading-tight">{{ strtok(auth()->user()->name, ' ') }}</div>
+                                        <div class="text-[10px] text-slate-500 truncate leading-tight">{{ auth()->user()->isAdmin() ? 'Administrator' : ('NIP: ' . (auth()->user()->nip ?: '-')) }}</div>
+                                    </div>
+                                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-transform duration-150 shrink-0" :class="userMenuOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                </button>
+
+                                {{-- Dropdown Menu (Desktop) --}}
+                                <div x-show="userMenuOpen"
+                                     x-cloak
+                                     x-transition:enter="transition ease-out duration-150"
+                                     x-transition:enter-start="opacity-0 scale-95 translate-y-1"
+                                     x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                                     x-transition:leave="transition ease-in duration-100"
+                                     x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                                     x-transition:leave-end="opacity-0 scale-95 translate-y-1"
+                                     class="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-xl py-1.5 z-50 text-slate-700 divide-y divide-slate-100">
+                                    <div class="px-4 py-3 bg-slate-50/70 rounded-t-2xl">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white font-bold text-base flex items-center justify-center shadow-xs shrink-0">
+                                                {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-xs font-bold text-slate-900 truncate">{{ auth()->user()->name }}</p>
+                                                <p class="text-[11px] text-slate-500 truncate">{{ auth()->user()->email ?? '-' }}</p>
+                                                <span class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold {{ auth()->user()->isAdmin() ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800' }}">
+                                                    {{ auth()->user()->isAdmin() ? 'Administrator' : ('NIP: ' . (auth()->user()->nip ?: '-')) }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="py-1">
+                                        <a href="{{ route('profile.edit') }}"
+                                           class="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition">
+                                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                            </svg>
+                                            <span>Profil & Tanda Tangan Digital</span>
+                                        </a>
+                                        <a href="{{ route('schedules.main.index') }}"
+                                           class="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition">
+                                            <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                                            </svg>
+                                            <span>Jadwal Utama Sekolah</span>
+                                        </a>
+                                    </div>
+                                    <div class="p-1.5">
+                                        <form method="POST" action="{{ route('logout') }}">
+                                            @csrf
+                                            <button type="submit"
+                                                    class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition cursor-pointer">
+                                                <svg class="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                                </svg>
+                                                <span>Keluar (Logout)</span>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
                             </div>
                         </div>
