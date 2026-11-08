@@ -11,6 +11,32 @@
         reviewModal: false,
         deleteModal: false,
 
+        // Data KBM yang secara resmi diampu guru
+        teacherSchoolClasses: @js($teacherSchoolClasses->map(fn($sc) => [
+            'id' => (string) $sc->id,
+            'name' => $sc->name,
+            'grade_level' => $sc->grade_level,
+        ])),
+        teacherGradeLevels: @js($teacherGradeLevels),
+        teacherSubjects: @js($teacherSubjects->map(fn($s) => [
+            'id' => (string) $s->id,
+            'name' => $s->name,
+            'code' => $s->code,
+        ])),
+
+        // Form state untuk modal unggah
+        createSubjectId: '{{ $teacherSubjects->count() === 1 ? (string)$teacherSubjects->first()->id : "" }}',
+        createGradeLevel: '{{ $teacherGradeLevels[0] ?? "VII" }}',
+        createSchoolClassId: '',
+
+        get filteredCreateSchoolClasses() {
+            return this.teacherSchoolClasses.filter(c => c.grade_level === this.createGradeLevel);
+        },
+
+        get filteredEditSchoolClasses() {
+            return this.teacherSchoolClasses.filter(c => c.grade_level === this.editData.grade_level);
+        },
+
         // Data modul yang sedang diedit
         editData: {
             id: null,
@@ -53,7 +79,7 @@
             this.editData = {
                 id: mod.id,
                 title: mod.title || '',
-                subject_id: mod.subject_id || '',
+                subject_id: mod.subject_id ? String(mod.subject_id) : '',
                 grade_level: mod.grade_level || 'VII',
                 school_class_id: mod.school_class_id ? String(mod.school_class_id) : '',
                 semester: mod.semester || '{{ $academicYear->semester }}',
@@ -235,7 +261,7 @@
             {{-- Filter Tingkat --}}
             <select name="grade_level" onchange="this.form.submit()" class="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-emerald-500">
                 <option value="">Semua Tingkat</option>
-                @foreach($gradeLevels as $lvl)
+                @foreach($filterGradeLevels as $lvl)
                     <option value="{{ $lvl }}" @selected($filters['grade_level'] === $lvl)>Tingkat {{ $lvl }}</option>
                 @endforeach
             </select>
@@ -243,7 +269,7 @@
             {{-- Filter Mata Pelajaran --}}
             <select name="subject_id" onchange="this.form.submit()" class="rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:ring-2 focus:ring-emerald-500">
                 <option value="">Semua Mata Pelajaran</option>
-                @foreach($subjects as $sub)
+                @foreach($filterSubjects as $sub)
                     <option value="{{ $sub->id }}" @selected((string)$filters['subject_id'] === (string)$sub->id)>
                         {{ $sub->name }}
                     </option>
@@ -575,22 +601,28 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">
-                            Mata Pelajaran *
+                            Mata Pelajaran yang Diampu *
                         </label>
-                        <select name="subject_id" required class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500">
-                            <option value="" disabled selected>— Pilih Mata Pelajaran —</option>
-                            @foreach($subjects as $sub)
-                                <option value="{{ $sub->id }}">{{ $sub->name }} ({{ $sub->code }})</option>
-                            @endforeach
-                        </select>
+                        @if($teacherSubjects->isEmpty())
+                            <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                                Anda belum memiliki mata pelajaran KBM aktif yang terdaftar.
+                            </div>
+                        @else
+                            <select name="subject_id" x-model="createSubjectId" required class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500">
+                                <option value="" disabled :selected="!createSubjectId">— Pilih Mata Pelajaran yang Anda Ampu —</option>
+                                @foreach($teacherSubjects as $sub)
+                                    <option value="{{ $sub->id }}">{{ $sub->name }} ({{ $sub->code }})</option>
+                                @endforeach
+                            </select>
+                        @endif
                     </div>
 
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">
                             Tingkat Kelas *
                         </label>
-                        <select name="grade_level" required class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500">
-                            @foreach($gradeLevels as $lvl)
+                        <select name="grade_level" x-model="createGradeLevel" required class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500">
+                            @foreach($teacherGradeLevels as $lvl)
                                 <option value="{{ $lvl }}">Kelas {{ $lvl }}</option>
                             @endforeach
                         </select>
@@ -601,15 +633,15 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">
-                            Target Rombel Belajar
+                            Target Rombel Belajar yang Diampu
                         </label>
-                        <select name="school_class_id" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500">
+                        <select name="school_class_id" x-model="createSchoolClassId" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500">
                             <option value="">— Berlaku Seluruh Rombel di Tingkat Terpilih —</option>
-                            @foreach($schoolClasses as $sc)
-                                <option value="{{ $sc->id }}">Kelas {{ $sc->name }} (Tingkat {{ $sc->grade_level }})</option>
-                            @endforeach
+                            <template x-for="sc in filteredCreateSchoolClasses" :key="sc.id">
+                                <option :value="sc.id" x-text="'Kelas ' + sc.name + ' (Tingkat ' + sc.grade_level + ')'"></option>
+                            </template>
                         </select>
-                        <p class="text-[10px] text-slate-400 mt-1">Kosongkan jika modul dapat digunakan untuk semua rombel di tingkat tersebut.</p>
+                        <p class="text-[10px] text-slate-400 mt-1">Kosongkan jika modul dapat digunakan untuk semua rombel Anda di tingkat tersebut.</p>
                     </div>
 
                     <div>
@@ -750,10 +782,10 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">
-                            Mata Pelajaran *
+                            Mata Pelajaran yang Diampu *
                         </label>
                         <select name="subject_id" x-model="editData.subject_id" required class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500">
-                            @foreach($subjects as $sub)
+                            @foreach($teacherSubjects as $sub)
                                 <option value="{{ $sub->id }}">{{ $sub->name }} ({{ $sub->code }})</option>
                             @endforeach
                         </select>
@@ -764,7 +796,7 @@
                             Tingkat Kelas *
                         </label>
                         <select name="grade_level" x-model="editData.grade_level" required class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500">
-                            @foreach($gradeLevels as $lvl)
+                            @foreach($teacherGradeLevels as $lvl)
                                 <option value="{{ $lvl }}">Kelas {{ $lvl }}</option>
                             @endforeach
                         </select>
@@ -775,14 +807,15 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">
-                            Target Rombel Belajar
+                            Target Rombel Belajar yang Diampu
                         </label>
                         <select name="school_class_id" x-model="editData.school_class_id" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500">
                             <option value="">— Berlaku Seluruh Rombel di Tingkat Terpilih —</option>
-                            @foreach($schoolClasses as $sc)
-                                <option value="{{ $sc->id }}">Kelas {{ $sc->name }} (Tingkat {{ $sc->grade_level }})</option>
-                            @endforeach
+                            <template x-for="sc in filteredEditSchoolClasses" :key="sc.id">
+                                <option :value="sc.id" x-text="'Kelas ' + sc.name + ' (Tingkat ' + sc.grade_level + ')'"></option>
+                            </template>
                         </select>
+                        <p class="text-[10px] text-slate-400 mt-1">Kosongkan jika modul dapat digunakan untuk semua rombel Anda di tingkat tersebut.</p>
                     </div>
 
                     <div>

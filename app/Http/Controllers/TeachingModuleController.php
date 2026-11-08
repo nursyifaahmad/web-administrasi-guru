@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\Subject;
+use App\Models\TeachingClass;
 use App\Models\TeachingModule;
 use App\Models\User;
+use App\Services\SchoolScheduleService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -138,6 +141,21 @@ class TeachingModuleController extends Controller
         $teachers = $user->isAdmin() ? User::query()->where('is_active', true)->orderBy('name')->get() : collect();
         $gradeLevels = ['VII', 'VIII', 'IX'];
 
+        // KBM spesifik yang secara resmi diampu oleh guru yang sedang login
+        $teacherKbm = $this->getTeacherAssignedKbm($user, $academicYear);
+        $teacherSubjects = $teacherKbm['subjects'];
+        $teacherSchoolClasses = $teacherKbm['schoolClasses'];
+        $teacherGradeLevels = $teacherKbm['gradeLevels'];
+
+        // Filter mapel & tingkat pada toolbar halaman
+        $filterSubjects = ($user->isAdmin() && $effectiveView === 'supervision')
+            ? $subjects
+            : $teacherSubjects;
+
+        $filterGradeLevels = ($user->isAdmin() && $effectiveView === 'supervision')
+            ? $gradeLevels
+            : $teacherGradeLevels;
+
         return view('workspace.modules.index', [
             'modules' => $modules,
             'academicYear' => $academicYear,
@@ -145,6 +163,11 @@ class TeachingModuleController extends Controller
             'schoolClasses' => $schoolClasses,
             'teachers' => $teachers,
             'gradeLevels' => $gradeLevels,
+            'teacherSubjects' => $teacherSubjects,
+            'teacherSchoolClasses' => $teacherSchoolClasses,
+            'teacherGradeLevels' => $teacherGradeLevels,
+            'filterSubjects' => $filterSubjects,
+            'filterGradeLevels' => $filterGradeLevels,
             'effectiveView' => $effectiveView,
             'myStats' => [
                 'total' => $myTotal,
@@ -168,6 +191,71 @@ class TeachingModuleController extends Controller
                 'view' => $viewMode,
             ],
         ]);
+    }
+
+    /**
+     * Ambil data Mata Pelajaran, Rombongan Belajar, dan Tingkat Kelas
+     * yang secara resmi diampu oleh guru pada tahun ajaran aktif.
+     */
+    public function getTeacherAssignedKbm(User $user, AcademicYear $academicYear): array
+    {
+        $scheduleService = app(SchoolScheduleService::class);
+
+        // 1. Dari TeachingClass (Buku Administrasi Kelas) tahun aktif
+        $teachingClasses = TeachingClass::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->where('teacher_id', $user->id)
+            ->with(['subject', 'schoolClass'])
+            ->get();
+
+        $subjectIds = $teachingClasses->pluck('subject_id')->filter()->all();
+        $schoolClassIds = $teachingClasses->pluck('school_class_id')->filter()->all();
+
+        // 2. Dari Master Jadwal Sekolah (SchoolScheduleService)
+        $allocations = $scheduleService->getTeacherClassAllocations($academicYear, $user);
+        foreach ($allocations as $alloc) {
+            if (! empty($alloc['subject_id'])) {
+                $subjectIds[] = (int) $alloc['subject_id'];
+            }
+            if (! empty($alloc['school_class_id'])) {
+                $schoolClassIds[] = (int) $alloc['school_class_id'];
+            }
+        }
+
+        // 3. Dari Penugasan Mapel Guru (teacher_subjects)
+        $userSubjectIds = $user->subjects()->pluck('subjects.id')->all();
+        $subjectIds = array_values(array_unique(array_filter(array_merge($subjectIds, $userSubjectIds))));
+        $schoolClassIds = array_values(array_unique(array_filter($schoolClassIds)));
+
+        $mySubjects = Subject::query()
+            ->where('is_active', true)
+            ->whereIn('id', $subjectIds)
+            ->orderBy('name')
+            ->get();
+
+        $mySchoolClasses = SchoolClass::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->whereIn('id', $schoolClassIds)
+            ->orderBy('grade_level')
+            ->orderBy('name')
+            ->get();
+
+        // Fallback untuk admin murni yang tidak memiliki jadwal KBM sama sekali
+        if ($user->isAdmin() && $mySubjects->isEmpty()) {
+            $mySubjects = Subject::query()->where('is_active', true)->orderBy('name')->get();
+            $mySchoolClasses = SchoolClass::query()->where('academic_year_id', $academicYear->id)->orderBy('grade_level')->orderBy('name')->get();
+        }
+
+        $gradeLevels = $mySchoolClasses->pluck('grade_level')->filter()->unique()->values()->all();
+        if (empty($gradeLevels)) {
+            $gradeLevels = $mySubjects->isNotEmpty() ? ['VII', 'VIII', 'IX'] : [];
+        }
+
+        return [
+            'subjects' => $mySubjects,
+            'schoolClasses' => $mySchoolClasses,
+            'gradeLevels' => $gradeLevels,
+        ];
     }
 
     /**
@@ -199,6 +287,21 @@ class TeachingModuleController extends Controller
         $ownerId = ($user->isAdmin() && ! empty($validated['teacher_id']))
             ? (int) $validated['teacher_id']
             : $user->id;
+        $targetTeacher = ($ownerId === $user->id) ? $user : (User::find($ownerId) ?? $user);
+
+        // Validasi: pastikan mapel dan rombel termasuk yang diampu oleh guru tersebut
+        $kbm = $this->getTeacherAssignedKbm($targetTeacher, $academicYear);
+        if ($kbm['subjects']->isNotEmpty() && ! $kbm['subjects']->pluck('id')->contains((int) $validated['subject_id'])) {
+            throw ValidationException::withMessages([
+                'subject_id' => 'Mata pelajaran yang dipilih tidak termasuk dalam mata pelajaran yang Anda ampu.',
+            ]);
+        }
+
+        if (! empty($validated['school_class_id']) && $kbm['schoolClasses']->isNotEmpty() && ! $kbm['schoolClasses']->pluck('id')->contains((int) $validated['school_class_id'])) {
+            throw ValidationException::withMessages([
+                'school_class_id' => 'Rombongan belajar yang dipilih tidak termasuk dalam kelas yang Anda ampu.',
+            ]);
+        }
 
         $file = $request->file('file');
         $originalFileName = $file->getClientOriginalName();
@@ -258,6 +361,20 @@ class TeachingModuleController extends Controller
             'file.mimes' => 'Format berkas harus berupa dokumen PDF (.pdf).',
             'file.max' => 'Ukuran berkas PDF tidak boleh melebihi 20 MB.',
         ]);
+
+        $academicYear = $module->academicYear ?: $this->resolveAcademicYear($request);
+        $kbm = $this->getTeacherAssignedKbm($module->teacher ?: $user, $academicYear);
+        if ($kbm['subjects']->isNotEmpty() && ! $kbm['subjects']->pluck('id')->contains((int) $validated['subject_id'])) {
+            throw ValidationException::withMessages([
+                'subject_id' => 'Mata pelajaran yang dipilih tidak termasuk dalam mata pelajaran yang Anda ampu.',
+            ]);
+        }
+
+        if (! empty($validated['school_class_id']) && $kbm['schoolClasses']->isNotEmpty() && ! $kbm['schoolClasses']->pluck('id')->contains((int) $validated['school_class_id'])) {
+            throw ValidationException::withMessages([
+                'school_class_id' => 'Rombongan belajar yang dipilih tidak termasuk dalam kelas yang Anda ampu.',
+            ]);
+        }
 
         $payload = [
             'subject_id' => (int) $validated['subject_id'],

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\Subject;
+use App\Models\TeachingClass;
 use App\Models\TeachingModule;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -63,6 +64,20 @@ class TeachingModuleCrudAndApprovalTest extends TestCase
             'grade_level' => 'VII',
             'homeroom_teacher_name' => 'Wali Kelas VII-A',
         ]);
+
+        // Berikan penugasan KBM resmi untuk guru
+        TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'school_class_id' => $schoolClass->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-A',
+            'homeroom_teacher_name' => 'Wali Kelas VII-A',
+        ]);
+
+        // Hubungkan admin ke subject Bahasa Inggris
+        $admin->subjects()->attach($subject->id, ['teaching_code' => '12']);
 
         return [$admin, $guru, $guruLain, $year, $subject, $schoolClass];
     }
@@ -448,5 +463,101 @@ class TeachingModuleCrudAndApprovalTest extends TestCase
         $deleteResponse = $this->actingAs($admin)->delete(route('teaching-modules.destroy', $adminMod));
         $deleteResponse->assertRedirect(route('teaching-modules.index'));
         $this->assertDatabaseMissing('teaching_modules', ['id' => $adminMod->id]);
+    }
+
+    public function test_teacher_only_sees_assigned_subjects_and_classes_in_module_view(): void
+    {
+        [, $guru, , $year, $subject, $schoolClass] = $this->setupEnvironment();
+
+        // Buat mapel dan kelas lain yang TIDAK diampu oleh guru
+        $mapelLain = Subject::query()->create([
+            'code' => 'MTK-01',
+            'name' => 'Matematika',
+            'order_number' => 2,
+            'is_active' => true,
+        ]);
+
+        $kelasLain = SchoolClass::query()->create([
+            'academic_year_id' => $year->id,
+            'name' => 'VIII-B',
+            'grade_level' => 'VIII',
+            'homeroom_teacher_name' => 'Wali Kelas VIII-B',
+        ]);
+
+        $response = $this->actingAs($guru)->get(route('teaching-modules.index'));
+        $response->assertOk();
+
+        // Variabel view harus hanya memuat mapel & rombel yang diampu guru
+        $teacherSubjects = $response->viewData('teacherSubjects');
+        $teacherSchoolClasses = $response->viewData('teacherSchoolClasses');
+
+        $this->assertTrue($teacherSubjects->pluck('id')->contains($subject->id));
+        $this->assertFalse($teacherSubjects->pluck('id')->contains($mapelLain->id));
+
+        $this->assertTrue($teacherSchoolClasses->pluck('id')->contains($schoolClass->id));
+        $this->assertFalse($teacherSchoolClasses->pluck('id')->contains($kelasLain->id));
+    }
+
+    public function test_teacher_cannot_upload_module_for_unassigned_subject_or_class(): void
+    {
+        [, $guru, , $year, $subject, $schoolClass] = $this->setupEnvironment();
+
+        $mapelLain = Subject::query()->create([
+            'code' => 'IPA-01',
+            'name' => 'Ilmu Pengetahuan Alam',
+            'order_number' => 3,
+            'is_active' => true,
+        ]);
+
+        $kelasLain = SchoolClass::query()->create([
+            'academic_year_id' => $year->id,
+            'name' => 'IX-C',
+            'grade_level' => 'IX',
+            'homeroom_teacher_name' => 'Wali Kelas IX-C',
+        ]);
+
+        $fakePdf = UploadedFile::fake()->create('modul-ilegal.pdf', 500, 'application/pdf');
+
+        // Coba upload dengan mapel yang bukan diampunya
+        $invalidSubjectResponse = $this->actingAs($guru)->post(route('teaching-modules.store'), [
+            'subject_id' => $mapelLain->id,
+            'grade_level' => 'VII',
+            'title' => 'Modul IPA Ilegal',
+            'file' => $fakePdf,
+        ]);
+        $invalidSubjectResponse->assertSessionHasErrors(['subject_id']);
+
+        // Coba upload dengan rombel yang bukan diampunya
+        $invalidClassResponse = $this->actingAs($guru)->post(route('teaching-modules.store'), [
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'school_class_id' => $kelasLain->id,
+            'title' => 'Modul Kelas Ilegal',
+            'file' => $fakePdf,
+        ]);
+        $invalidClassResponse->assertSessionHasErrors(['school_class_id']);
+    }
+
+    public function test_admin_who_teaches_is_restricted_to_assigned_kbm(): void
+    {
+        [$admin, , , $year, $subject] = $this->setupEnvironment();
+
+        $mapelLain = Subject::query()->create([
+            'code' => 'SBK-01',
+            'name' => 'Seni Budaya',
+            'order_number' => 4,
+            'is_active' => true,
+        ]);
+
+        $fakePdf = UploadedFile::fake()->create('modul-admin-sbk.pdf', 300, 'application/pdf');
+
+        // Admin (Muhammad Irfan) hanya memiliki mapel Bahasa Inggris. Jika upload Seni Budaya, harus ditolak.
+        $response = $this->actingAs($admin)->post(route('teaching-modules.store'), [
+            'subject_id' => $mapelLain->id,
+            'grade_level' => 'VII',
+            'title' => 'Modul Seni Budaya oleh Irfan',
+            'file' => $fakePdf,
+        ]);
+        $response->assertSessionHasErrors(['subject_id']);
     }
 }
