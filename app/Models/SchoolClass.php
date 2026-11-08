@@ -37,6 +37,11 @@ class SchoolClass extends Model
         return $this->hasMany(TeachingClass::class, 'school_class_id');
     }
 
+    public function teachingModules(): HasMany
+    {
+        return $this->hasMany(TeachingModule::class, 'school_class_id');
+    }
+
     /**
      * Sinkronkan identitas nama kelas & wali kelas ke seluruh kelas ajar guru yang terhubung
      */

@@ -15,6 +15,7 @@ use App\Http\Controllers\ExportController;
 use App\Http\Controllers\GradebookController;
 use App\Http\Controllers\MasterScheduleController;
 use App\Http\Controllers\TeachingClassController;
+use App\Http\Controllers\TeachingModuleController;
 use App\Http\Controllers\TeachingScheduleController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -110,10 +111,24 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/jadwal-master/sync-classes', [SchoolScheduleController::class, 'syncClasses'])->name('schedules.master.sync-classes');
         Route::delete('/jadwal-master/clear', [SchoolScheduleController::class, 'clearSchedule'])->name('schedules.master.clear');
         Route::get('/jadwal-master/export', [SchoolScheduleController::class, 'export'])->name('schedules.master.export');
+
+        // Supervisi & Verifikasi Modul Ajar (Admin / Wakasek)
+        Route::patch('/modul-ajar/{module}/approve', [TeachingModuleController::class, 'approve'])->name('teaching-modules.approve');
+        Route::patch('/modul-ajar/{module}/reject', [TeachingModuleController::class, 'reject'])->name('teaching-modules.reject');
+        Route::patch('/modul-ajar/{module}/reset', [TeachingModuleController::class, 'resetStatus'])->name('teaching-modules.reset');
     });
 
     // Menu Baru: Jadwal Utama (Guru & Admin)
     Route::get('/jadwal-utama', [MasterScheduleController::class, 'index'])->name('schedules.main.index');
+
+    // Modul Ajar (Perangkat Ajar Guru & Verifikasi PDF)
+    Route::get('/modul-ajar', [TeachingModuleController::class, 'index'])->name('teaching-modules.index');
+    Route::post('/modul-ajar', [TeachingModuleController::class, 'store'])->name('teaching-modules.store');
+    Route::put('/modul-ajar/{module}', [TeachingModuleController::class, 'update'])->name('teaching-modules.update');
+    Route::delete('/modul-ajar/{module}', [TeachingModuleController::class, 'destroy'])->name('teaching-modules.destroy');
+    Route::get('/modul-ajar/{module}/view', [TeachingModuleController::class, 'viewPdf'])->name('teaching-modules.view-pdf');
+    Route::get('/modul-ajar/{module}/download', [TeachingModuleController::class, 'download'])->name('teaching-modules.download');
+    Route::patch('/modul-ajar/{module}/submit', [TeachingModuleController::class, 'submitForReview'])->name('teaching-modules.submit');
 
     // Ruang Kerja Kelas Administrasi (Guru 1..15+ Kelas & Kontrol Admin)
     Route::get('/jadwal-mengajar', [TeachingScheduleController::class, 'index'])->name('schedules.index');

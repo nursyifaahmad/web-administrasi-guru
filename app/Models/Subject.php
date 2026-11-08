@@ -32,6 +32,11 @@ class Subject extends Model
         return $this->hasMany(TeachingClass::class);
     }
 
+    public function teachingModules(): HasMany
+    {
+        return $this->hasMany(TeachingModule::class);
+    }
+
     public function teacherSubjects(): HasMany
     {
         return $this->hasMany(TeacherSubject::class);

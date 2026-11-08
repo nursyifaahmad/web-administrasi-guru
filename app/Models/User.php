@@ -52,6 +52,16 @@ class User extends Authenticatable
         return $this->hasMany(TeachingClass::class, 'teacher_id');
     }
 
+    public function teachingModules(): HasMany
+    {
+        return $this->hasMany(TeachingModule::class, 'teacher_id');
+    }
+
+    public function approvedTeachingModules(): HasMany
+    {
+        return $this->hasMany(TeachingModule::class, 'approved_by');
+    }
+
     public function teacherSubjects(): HasMany
     {
         return $this->hasMany(TeacherSubject::class, 'user_id');

@@ -29,6 +29,11 @@ class AcademicYear extends Model
         return $this->hasMany(TeachingClass::class);
     }
 
+    public function teachingModules(): HasMany
+    {
+        return $this->hasMany(TeachingModule::class);
+    }
+
     public function schoolEvents(): HasMany
     {
         return $this->hasMany(SchoolEvent::class)->orderBy('event_date');
