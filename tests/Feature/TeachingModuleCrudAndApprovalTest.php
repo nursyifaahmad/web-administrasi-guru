@@ -560,4 +560,50 @@ class TeachingModuleCrudAndApprovalTest extends TestCase
         ]);
         $response->assertSessionHasErrors(['subject_id']);
     }
+
+    public function test_admin_cannot_edit_or_delete_other_teachers_module(): void
+    {
+        [$admin, $guru, , $year, $subject] = $this->setupEnvironment();
+
+        $fakePdf = UploadedFile::fake()->create('modul-guru.pdf', 300, 'application/pdf');
+        $filePath = $fakePdf->store("modul-ajar/{$year->id}", 'public');
+
+        $guruModule = TeachingModule::query()->create([
+            'academic_year_id' => $year->id,
+            'teacher_id' => $guru->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'semester' => 'Ganjil',
+            'title' => 'Modul Asli Milik Guru',
+            'file_path' => $filePath,
+            'file_name' => 'modul-guru.pdf',
+            'file_size' => 300 * 1024,
+            'status' => TeachingModule::STATUS_SUBMITTED,
+        ]);
+
+        // 1. Admin mencoba mengedit modul milik guru lain -> Harus 403 Forbidden
+        $editResponse = $this->actingAs($admin)->put(route('teaching-modules.update', $guruModule), [
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'title' => 'Modul Diedit Admin Tanpa Izin',
+        ]);
+        $editResponse->assertForbidden();
+
+        // 2. Admin mencoba menghapus modul milik guru lain -> Harus 403 Forbidden
+        $deleteResponse = $this->actingAs($admin)->delete(route('teaching-modules.destroy', $guruModule));
+        $deleteResponse->assertForbidden();
+
+        // 3. Tombol Edit & Hapus tidak boleh muncul pada tampilan supervisi admin untuk modul guru lain
+        $supervisionResponse = $this->actingAs($admin)->get(route('teaching-modules.index', ['view' => 'supervision']));
+        $supervisionResponse->assertOk();
+        $this->assertFalse($guruModule->canBeEditedBy($admin));
+        $this->assertFalse($guruModule->canBeDeletedBy($admin));
+
+        // 4. Namun Admin tetap bisa melihat/pratinjau PDF, mengunduh, dan melakukan verifikasi
+        $viewResponse = $this->actingAs($admin)->get(route('teaching-modules.view-pdf', $guruModule));
+        $viewResponse->assertOk();
+
+        $downloadResponse = $this->actingAs($admin)->get(route('teaching-modules.download', $guruModule));
+        $downloadResponse->assertOk();
+    }
 }

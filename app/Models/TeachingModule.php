@@ -120,12 +120,12 @@ class TeachingModule extends Model
 
     public function canBeEditedBy(User $user): bool
     {
-        return $user->isAdmin() || (int) $this->teacher_id === (int) $user->id;
+        return (int) $this->teacher_id === (int) $user->id;
     }
 
     public function canBeDeletedBy(User $user): bool
     {
-        return $user->isAdmin() || (int) $this->teacher_id === (int) $user->id;
+        return (int) $this->teacher_id === (int) $user->id;
     }
 
     public function getStatusLabelAttribute(): string
