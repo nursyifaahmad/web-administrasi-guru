@@ -69,11 +69,11 @@ class MultiClassAccessAndExportTest extends TestCase
             'default_kktp' => 78,
         ]);
 
-        // Uji login Guru A menggunakan NIP (tanpa spasi maupun dengan spasi)
+        // Uji login Guru A menggunakan NIP (tanpa spasi maupun dengan spasi) -> dialihkan ke menu Jadwal Hari Ini
         $this->post(route('login.post'), [
             'login' => '199205102019031012',
             'password' => 'secret123',
-        ])->assertRedirect(route('classes.index'));
+        ])->assertRedirect(route('schedules.index'));
 
         // Guru A membuat 15 Kelas Administrasi sekaligus
         for ($i = 1; $i <= 15; $i++) {

@@ -27,7 +27,7 @@ Route::get('/', function () {
 
     return Auth::user()->isAdmin()
         ? redirect()->route('admin.dashboard')
-        : redirect()->route('classes.index');
+        : redirect()->route('schedules.index');
 })->name('home');
 
 // Autentikasi

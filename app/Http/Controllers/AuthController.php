@@ -19,7 +19,7 @@ class AuthController extends Controller
         if (Auth::check()) {
             return Auth::user()->isAdmin()
                 ? redirect()->route('admin.dashboard')
-                : redirect()->route('classes.index');
+                : redirect()->route('schedules.index');
         }
 
         return view('auth.login', [
@@ -71,7 +71,7 @@ class AuthController extends Controller
 
         return $user->isAdmin()
             ? redirect()->intended(route('admin.dashboard'))
-            : redirect()->intended(route('classes.index'));
+            : redirect()->intended(route('schedules.index'));
     }
 
     public function logout(Request $request): RedirectResponse
