@@ -622,4 +622,53 @@ class SchoolScheduleMasterTest extends TestCase
             }
         }
     }
+
+    public function test_clashing_schedule_slots_appear_as_bentrok_instantly_on_first_load(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        // Buat 2 slot jadwal di hari Selasa jam ke-1 dengan guru yang SAMA (Kode 3) di kelas 7A & 7B
+        // Sengaja set is_conflict = false di database awal
+        $item1 = SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 2, // Selasa
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '07.30 - 08.00',
+            'class_name' => '7A',
+            'teacher_code' => '3',
+            'teacher_name' => 'Guru Tiga',
+            'subject_name' => 'Matematika',
+            'is_conflict' => false,
+        ]);
+
+        $item2 = SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 2, // Selasa
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '07.30 - 08.00',
+            'class_name' => '7B',
+            'teacher_code' => '3',
+            'teacher_name' => 'Guru Tiga',
+            'subject_name' => 'Matematika',
+            'is_conflict' => false,
+        ]);
+
+        // Request pertama kali ke halaman hari Selasa tanpa refresh sebelumnya
+        $response = $this->actingAs($admin)->get(route('admin.schedules.master.index', ['day' => 2]));
+
+        $response->assertOk();
+        // Memastikan label dan styling bentrok langsung tampil di HTML pada kunjungan pertama
+        $response->assertSee('BENTROK');
+        $response->assertSee('Terdeteksi 1 Titik Jadwal Bertabrakan');
+
+        // Verifikasi dari service bahwa getMasterMatrix langsung menghasilkan is_conflict = true
+        /** @var SchoolScheduleService $service */
+        $service = app(SchoolScheduleService::class);
+        $matrix = $service->getMasterMatrix($year, 2);
+        $slot1 = $matrix['matrix_by_day'][2]['pagi_slots']->first();
+        $this->assertTrue($slot1['classes']['7A']->is_conflict);
+        $this->assertTrue($slot1['classes']['7B']->is_conflict);
+    }
 }

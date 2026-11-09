@@ -49,9 +49,9 @@ class SchoolScheduleController extends Controller
 
         $activeShift = $request->query('shift', 'all'); // 'all', 'pagi', 'siang'
 
-        // Ambil data matriks
-        $matrixData = $this->scheduleService->getMasterMatrix($academicYear, $activeDay);
+        // Ambil data konflik & matriks jadwal (jalankan deteksi bentrok terlebih dahulu agar status bentrok langsung tampil di sel tanpa perlu di-refresh)
         $conflicts = $this->scheduleService->detectConflicts($academicYear);
+        $matrixData = $this->scheduleService->getMasterMatrix($academicYear, $activeDay, $conflicts);
         $prerequisites = $this->scheduleService->checkMasterPrerequisites($academicYear);
 
         $teachers = SchoolScheduleTeacher::query()

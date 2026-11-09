@@ -2061,13 +2061,27 @@ CSV;
     /**
      * Ambil struktur matriks lengkap seluruh sekolah untuk render tabel
      */
-    public function getMasterMatrix(AcademicYear $academicYear, ?int $dayOfWeek = null): array
+    public function getMasterMatrix(AcademicYear $academicYear, ?int $dayOfWeek = null, ?array $conflicts = null): array
     {
         // Sanitasi otomatis: bersihkan data residu jika pernah ada homeroom_class berupa nama hari
         SchoolScheduleTeacher::query()
             ->where('academic_year_id', $academicYear->id)
             ->whereIn('homeroom_class', ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'JUMAT', 'SABTU', 'HARI'])
             ->update(['homeroom_class' => null]);
+
+        // Jika $conflicts belum disediakan, jalankan deteksi bentrok agar status is_conflict di DB selalu segar
+        if ($conflicts === null) {
+            $conflicts = $this->detectConflicts($academicYear);
+        }
+
+        // Peta catatan bentrok untuk in-memory injection jaminan 100% langsung tampil di tabel tanpa perlu di-refresh
+        $conflictMap = [];
+        foreach ($conflicts as $c) {
+            $note = "⚠️ BENTROK: Kode {$c['teacher_code']} ({$c['teacher_name']}) dijadwalkan bersamaan di kelas " . implode(' & ', $c['clashing_classes']);
+            foreach ($c['item_ids'] ?? [] as $id) {
+                $conflictMap[$id] = $note;
+            }
+        }
 
         $query = SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id);
 
@@ -2076,6 +2090,15 @@ CSV;
         }
 
         $items = $query->orderBy('day_of_week')->orderBy('period_order')->get();
+
+        // Terapkan status bentrok ke seluruh item secara in-memory untuk memastikan tampilan instan
+        foreach ($items as $item) {
+            if (isset($conflictMap[$item->id])) {
+                $item->is_conflict = true;
+                $item->conflict_notes = $conflictMap[$item->id];
+            }
+        }
+
         $teachers = SchoolScheduleTeacher::query()->where('academic_year_id', $academicYear->id)->get()->keyBy('code');
 
         $days = $dayOfWeek ? [$dayOfWeek] : [1, 2, 3, 4, 5, 6];
