@@ -54,7 +54,7 @@
                    sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
                    sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'
                ]"
-               class="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-screen h-dvh bg-slate-900 text-slate-100 flex flex-col transition-transform duration-200 ease-in-out shadow-2xl lg:shadow-none lg:sticky lg:top-0 lg:h-screen lg:shrink-0 overflow-hidden">
+               class="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-screen h-dvh bg-slate-900 text-slate-100 flex flex-col transition-transform duration-200 ease-in-out shadow-2xl lg:shadow-none lg:sticky lg:top-0 lg:h-screen lg:shrink-0">
 
             {{-- Tombol Floating Kecilkan / Besarkan Sidebar (Desktop) --}}
             <button type="button"
