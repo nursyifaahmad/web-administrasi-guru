@@ -344,4 +344,85 @@ class DynamicGradebookAndKktpTest extends TestCase
             ->assertOk()
             ->assertSee('Toleransi S+I: 3x');
     }
+
+    public function test_bulk_save_scores_supports_38_students_from_excel_paste_with_decimals(): void
+    {
+        SchoolSetting::current();
+
+        $guru = User::query()->create([
+            'name' => 'Guru IPA',
+            'email' => 'guruipa@test.sch.id',
+            'role' => 'guru',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'IPA',
+            'name' => 'IPA Terpadu',
+            'default_kktp' => 75,
+        ]);
+
+        $class = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VIII',
+            'class_name' => 'VIII-C',
+            'homeroom_teacher_name' => 'Wali VIII-C',
+        ]);
+        $class->ensureDefaultsInitialized();
+
+        // Buat 38 murid aktif (absen 1 sampai 38)
+        $students = [];
+        $rowsPayload = [];
+        for ($i = 1; $i <= 38; $i++) {
+            $st = ClassStudent::query()->create([
+                'teaching_class_id' => $class->id,
+                'nis' => sprintf('2026%03d', $i),
+                'nisn' => sprintf('001122%04d', $i),
+                'full_name' => 'Siswa Absen ' . $i,
+                'gender' => ($i % 2 === 0) ? 'P' : 'L',
+                'is_active' => true,
+            ]);
+            $students[] = $st;
+
+            $rowsPayload[] = [
+                'student_id' => $st->id,
+                'sts_score' => 70.0 + ($i * 0.5), // Nilai desimal misal 70.5, 71.0, 71.5...
+                'sas_score' => 80.0,
+                'dynamic_scores' => [],
+            ];
+        }
+
+        // Simpan bulk 38 murid
+        $response = $this->actingAs($guru)->postJson(route('grades.bulk-save', $class), [
+            'rows' => $rowsPayload,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonStructure(['saved_at']);
+
+        // Verifikasi seluruh 38 data siswa tersimpan di database
+        $this->assertEquals(38, StudentGrade::query()->where('teaching_class_id', $class->id)->count());
+
+        $firstGrade = StudentGrade::query()->where('class_student_id', $students[0]->id)->firstOrFail();
+        $this->assertEquals(70.5, $firstGrade->sts_score);
+
+        $lastGrade = StudentGrade::query()->where('class_student_id', $students[37]->id)->firstOrFail();
+        $this->assertEquals(89.0, $lastGrade->sts_score);
+
+        // Akses halaman index dan pastikan view merender fitur Quick Paste
+        $viewResponse = $this->actingAs($guru)->get(route('grades.index', $class));
+        $viewResponse->assertOk();
+        $viewResponse->assertSee('Paste Excel');
+        $viewResponse->assertSee('handleCellPaste');
+        $viewResponse->assertSee('openQuickPasteModal');
+    }
 }

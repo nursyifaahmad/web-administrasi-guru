@@ -113,6 +113,8 @@
         rows: @js($alpineRows),
         phColIds: @js($phColumns->pluck('id')->map(fn($id) => (string)$id)->values()),
         ntColIds: @js($ntColumns->pluck('id')->map(fn($id) => (string)$id)->values()),
+        phColumns: @js($phColumns->map(fn($c) => ['id' => (string)$c->id, 'label' => $c->label])->values()),
+        ntColumns: @js($ntColumns->map(fn($c) => ['id' => (string)$c->id, 'label' => $c->label])->values()),
         weights: @js([
             'ph' => (float) $w->weight_ph,
             'attendance' => (float) $w->weight_attendance,
@@ -186,6 +188,12 @@
                             class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition text-center cursor-pointer">
                         Atur Persentase Rumus NA
                     </button>
+                    <button type="button" @click="openQuickPasteModal()"
+                            class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold hover:bg-emerald-100 transition text-center cursor-pointer flex items-center justify-center gap-1.5"
+                            title="Tempel puluhan nilai dari kolom Excel sekaligus">
+                        <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        <span>Paste Excel</span>
+                    </button>
                     <button type="button" @click="importModal = true"
                             class="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold hover:bg-indigo-100 cursor-pointer">
                         Import Excel
@@ -218,7 +226,7 @@
                             + Tambah Kolom NT ({{ $ntColumns->count() }})
                         </button>
                     </form>
-                    <span class="text-[11px] text-slate-500">Klik judul kolom <strong>PH / NT</strong> untuk ubah/hapus &bull; Tekan <strong>Enter</strong> / <strong>&darr;</strong> saat isi nilai untuk pindah ke murid berikutnya.</span>
+                    <span class="text-[11px] text-slate-500">Klik judul kolom <strong>PH / NT</strong> untuk ubah/hapus &bull; Tekan <strong>Enter</strong> / <strong>&darr;</strong> untuk murid berikutnya &bull; <strong class="text-emerald-700">Paste (Ctrl+V) di absen 1</strong> untuk mengisi otomatis satu kelas dari Excel.</span>
                 @else
                     <span class="text-[11px] text-slate-600 font-semibold flex items-center gap-1.5">
                         <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
@@ -374,11 +382,13 @@
                                            @input="markDirty()"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, `ph-${colId}`)"
+                                           @paste="handleCellPaste($event, rIdx, `ph-${colId}`)"
                                            placeholder="0"
-                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500 transition-colors"
                                            :class="[
+                                               pastedKeys[`${rIdx}-ph-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
-                                               (!isAdminReadOnly && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly ? 'bg-white text-slate-900' : '')
+                                               (!isAdminReadOnly && !pastedKeys[`${rIdx}-ph-${colId}`] && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly && !pastedKeys[`${rIdx}-ph-${colId}`] ? 'bg-white text-slate-900' : '')
                                            ]">
                                 </td>
                             </template>
@@ -406,9 +416,13 @@
                                            @input="markDirty()"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, 'att')"
+                                           @paste="handleCellPaste($event, rIdx, 'att')"
                                            placeholder="0"
-                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                           :class="isAdminReadOnly ? 'pointer-events-none cursor-default bg-emerald-50/40 select-none' : 'bg-emerald-50/25'">
+                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
+                                           :class="[
+                                               pastedKeys[`${rIdx}-att`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
+                                               isAdminReadOnly ? 'pointer-events-none cursor-default bg-emerald-50/40 select-none' : (!pastedKeys[`${rIdx}-att`] ? 'bg-emerald-50/25' : '')
+                                           ]">
                                 </template>
                             </td>
 
@@ -423,11 +437,13 @@
                                            @input="markDirty()"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, `nt-${colId}`)"
+                                           @paste="handleCellPaste($event, rIdx, `nt-${colId}`)"
                                            placeholder="0"
-                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
                                            :class="[
+                                               pastedKeys[`${rIdx}-nt-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
-                                               (!isAdminReadOnly && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly ? 'bg-white text-slate-900' : '')
+                                               (!isAdminReadOnly && !pastedKeys[`${rIdx}-nt-${colId}`] && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly && !pastedKeys[`${rIdx}-nt-${colId}`] ? 'bg-white text-slate-900' : '')
                                            ]">
                                 </td>
                             </template>
@@ -442,9 +458,13 @@
                                        @input="markDirty()"
                                        @focus="selectInput($event)"
                                        @keydown="handleGradeKey($event, rIdx, 'sts')"
+                                       @paste="handleCellPaste($event, rIdx, 'sts')"
                                        placeholder="0"
-                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                       :class="isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : 'bg-amber-50/15'">
+                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors"
+                                       :class="[
+                                           pastedKeys[`${rIdx}-sts`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
+                                           isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${rIdx}-sts`] ? 'bg-amber-50/15' : '')
+                                       ]">
                             </td>
                             <td class="p-0 border-r border-slate-200">
                                 <input type="number" inputmode="decimal" min="0" max="100" step="0.01" enterkeyhint="next"
@@ -455,9 +475,13 @@
                                        @input="markDirty()"
                                        @focus="selectInput($event)"
                                        @keydown="handleGradeKey($event, rIdx, 'sas')"
+                                       @paste="handleCellPaste($event, rIdx, 'sas')"
                                        placeholder="0"
-                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                       :class="isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : 'bg-amber-50/15'">
+                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors"
+                                       :class="[
+                                           pastedKeys[`${rIdx}-sas`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
+                                           isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${rIdx}-sas`] ? 'bg-amber-50/15' : '')
+                                       ]">
                             </td>
 
                             {{-- Nilai Akhir (NA) Real-time --}}
@@ -791,7 +815,103 @@
             </form>
         </div>
     </div>
+
+    {{-- Modal Quick Paste Nilai Excel --}}
+    <div x-show="quickPasteModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div @click.away="quickPasteModal = false" class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+            <div class="px-5 py-4 bg-emerald-700 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    <h3 class="text-sm font-bold">Paste Nilai dari Excel</h3>
+                </div>
+                <button type="button" @click="quickPasteModal = false" class="text-white/80 hover:text-white text-xl cursor-pointer leading-none">&times;</button>
+            </div>
+            <div class="p-5 space-y-4 text-xs">
+                <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-1">
+                    <div class="font-bold flex items-center gap-1.5 text-xs text-emerald-950">
+                        <span>💡 Cara Penggunaan Sangat Praktis:</span>
+                    </div>
+                    <p class="text-[11px] leading-relaxed text-emerald-900">
+                        1. Di Excel, sorot & salin 1 kolom nilai (misal 38 murid dari atas ke bawah).<br>
+                        2. Anda bisa langsung <strong>Paste (Ctrl+V) di tabel pada kotak nomor absen 1</strong>, ATAU tempel di kotak teks di bawah ini lalu klik tombol Terapkan.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Target Kolom Nilai *</label>
+                        <select x-model="quickPasteTargetCol" class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <template x-for="c in getEditableColumns()" :key="c.key">
+                                <option :value="c.key" x-text="c.label"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Mulai dari Murid *</label>
+                        <select x-model="quickPasteStartRow" @change="updateQuickPastePreview()" class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <template x-for="(r, idx) in rows" :key="r.student_id">
+                                <option :value="idx" x-text="`Absen ${r.no} - ${r.full_name}`"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block font-bold text-slate-700">Tempelkan Teks Nilai dari Excel di sini *</label>
+                        <span class="text-[10px] text-slate-500">Format: 1 nilai per baris</span>
+                    </div>
+                    <textarea x-model="quickPasteText" @input="updateQuickPastePreview()"
+                              rows="6"
+                              placeholder="Klik di sini lalu tekan Ctrl + V (Paste)...&#10;Contoh format:&#10;80&#10;70&#10;65&#10;65&#10;45&#10;90"
+                              class="w-full rounded-xl border border-slate-300 p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
+                </div>
+
+                <div x-show="quickPastePreviewCount > 0" class="p-2.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs flex items-center justify-between">
+                    <div>
+                        Terdeteksi: <strong class="text-emerald-700" x-text="quickPastePreviewCount"></strong> nilai
+                        (akan diterapkan ke murid absen <strong x-text="Number(quickPasteStartRow) + 1"></strong> s/d <strong x-text="Math.min(rows.length, Number(quickPasteStartRow) + quickPastePreviewCount)"></strong>)
+                    </div>
+                </div>
+
+                <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                    <button type="button" @click="quickPasteModal = false" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold cursor-pointer hover:bg-slate-50">Batal</button>
+                    <button type="button" @click="applyQuickPaste()" :disabled="quickPastePreviewCount === 0"
+                            class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 cursor-pointer shadow-2xs">
+                        Terapkan ke Tabel Nilai
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     @endif
+
+    {{-- Toast Notifikasi Berhasil Paste dari Excel --}}
+    <div x-show="pasteToast.show" x-cloak
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 translate-y-3 scale-95"
+         x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+         x-transition:leave-end="opacity-0 translate-y-3 scale-95"
+         class="fixed bottom-6 right-6 z-50 max-w-sm sm:max-w-md bg-slate-900 text-white rounded-2xl shadow-2xl p-4 border border-slate-700 flex items-start gap-3">
+        <div class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div class="flex-1 text-xs">
+            <div class="font-bold text-sm text-white" x-text="pasteToast.title"></div>
+            <div class="text-slate-300 mt-1 leading-relaxed" x-text="pasteToast.message"></div>
+            <div class="mt-3 flex items-center gap-2">
+                <button type="button" @click="saveScores()" :disabled="saving"
+                        class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg cursor-pointer transition shadow-2xs">
+                    <span x-text="saving ? 'Menyimpan...' : 'Simpan Sekarang (Ctrl+S)'"></span>
+                </button>
+                <button type="button" @click="pasteToast.show = false" class="px-2.5 py-1.5 text-slate-400 hover:text-white font-semibold cursor-pointer">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
 
     {{-- Modal Cetak PDF & Download Excel Daftar Nilai --}}
     @include('partials.export-modal', [
@@ -828,6 +948,19 @@ function gradebookSpreadsheet(cfg) {
         weightsModal: false,
         importModal: false,
         exportModal: false,
+        quickPasteModal: false,
+        quickPasteTargetCol: '',
+        quickPasteStartRow: 0,
+        quickPasteText: '',
+        quickPastePreviewCount: 0,
+        pastedKeys: {},
+        _pastedTimer: null,
+        pasteToast: {
+            show: false,
+            title: '',
+            message: '',
+            _timer: null,
+        },
 
         init() {
             this.savedSnapshot = this.cloneRows(this.rows);
@@ -836,6 +969,11 @@ function gradebookSpreadsheet(cfg) {
                 window.__workspaceDirty = false;
                 window.__workspaceDirtyLabel = 'Daftar Nilai Peserta Didik';
                 window.__workspaceSaveFn = () => this.saveScores();
+
+                const editable = this.getEditableColumns();
+                if (editable.length > 0) {
+                    this.quickPasteTargetCol = editable[0].key;
+                }
 
                 window.addEventListener('keydown', (e) => {
                     if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
@@ -964,6 +1102,201 @@ function gradebookSpreadsheet(cfg) {
         async submitColumnAdd(e) {
             if (!(await this.ensureSavedBeforeAction('menambah kolom nilai baru'))) return;
             e.target.submit();
+        },
+        openQuickPasteModal() {
+            if (this.isAdminReadOnly) return;
+            const editable = this.getEditableColumns();
+            if (editable.length > 0 && !this.quickPasteTargetCol) {
+                this.quickPasteTargetCol = editable[0].key;
+            }
+            this.quickPasteModal = true;
+        },
+        getEditableColumns() {
+            const cols = [];
+            const phMap = {};
+            (cfg.phColumns || []).forEach(c => { phMap[String(c.id)] = c.label; });
+            const ntMap = {};
+            (cfg.ntColumns || []).forEach(c => { ntMap[String(c.id)] = c.label; });
+
+            (this.phColIds || []).forEach(cid => {
+                cols.push({
+                    key: `ph-${cid}`,
+                    type: 'ph',
+                    colId: String(cid),
+                    label: phMap[String(cid)] || `PH ${cid}`
+                });
+            });
+
+            if (!this.isAutoAttendance) {
+                cols.push({
+                    key: 'att',
+                    type: 'att',
+                    label: 'Nilai Kehadiran (Manual)'
+                });
+            }
+
+            (this.ntColIds || []).forEach(cid => {
+                cols.push({
+                    key: `nt-${cid}`,
+                    type: 'nt',
+                    colId: String(cid),
+                    label: ntMap[String(cid)] || `NT ${cid}`
+                });
+            });
+
+            cols.push({ key: 'sts', type: 'sts', label: 'Nilai STS' });
+            cols.push({ key: 'sas', type: 'sas', label: 'Nilai SAS' });
+
+            return cols;
+        },
+        getColumnLabel(colKey) {
+            const found = this.getEditableColumns().find(c => c.key === colKey);
+            return found ? found.label : colKey;
+        },
+        flashPastedCells(cellKeys) {
+            const map = {};
+            cellKeys.forEach(k => { map[k] = true; });
+            this.pastedKeys = map;
+            clearTimeout(this._pastedTimer);
+            this._pastedTimer = setTimeout(() => {
+                this.pastedKeys = {};
+            }, 3500);
+        },
+        showPasteToast(title, message) {
+            this.pasteToast.title = title;
+            this.pasteToast.message = message;
+            this.pasteToast.show = true;
+            clearTimeout(this.pasteToast._timer);
+            this.pasteToast._timer = setTimeout(() => {
+                this.pasteToast.show = false;
+            }, 7000);
+        },
+        setCellValue(rowIdx, colKey, val) {
+            if (rowIdx < 0 || rowIdx >= this.rows.length) return;
+            const row = this.rows[rowIdx];
+            if (colKey.startsWith('ph-')) {
+                const colId = colKey.substring(3);
+                if (!row.dynamic_scores) row.dynamic_scores = {};
+                row.dynamic_scores[colId] = val;
+            } else if (colKey.startsWith('nt-')) {
+                const colId = colKey.substring(3);
+                if (!row.dynamic_scores) row.dynamic_scores = {};
+                row.dynamic_scores[colId] = val;
+            } else if (colKey === 'att') {
+                row.attendance_score = val;
+            } else if (colKey === 'sts') {
+                row.sts_score = val;
+            } else if (colKey === 'sas') {
+                row.sas_score = val;
+            }
+        },
+        handleCellPaste(e, startRowIdx, startColKey) {
+            if (this.isAdminReadOnly) return;
+            const clipData = (e.clipboardData || window.clipboardData);
+            if (!clipData) return;
+            const rawText = clipData.getData('text');
+            if (!rawText || rawText.trim() === '') return;
+
+            const hasMultipleRows = /[\r\n]/.test(rawText.trim());
+            const hasMultipleCols = /\t/.test(rawText);
+
+            if (!hasMultipleRows && !hasMultipleCols) {
+                let val = rawText.trim().replace(',', '.');
+                const num = parseFloat(val);
+                if (!isNaN(num)) {
+                    e.preventDefault();
+                    const cleanVal = Math.min(100, Math.max(0, Math.round(num * 100) / 100));
+                    this.setCellValue(startRowIdx, startColKey, cleanVal);
+                    this.markDirty();
+                    this.flashPastedCells([`${startRowIdx}-${startColKey}`]);
+                }
+                return;
+            }
+
+            e.preventDefault();
+            this.processPastedText(rawText, startRowIdx, startColKey);
+        },
+        processPastedText(rawText, startRowIdx, startColKey) {
+            if (!rawText) return;
+            const lines = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+            if (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            if (lines.length === 0) return;
+
+            const editableCols = this.getEditableColumns();
+            const startColIndex = editableCols.findIndex(c => c.key === startColKey);
+            if (startColIndex === -1) return;
+
+            let appliedCount = 0;
+            let studentCount = 0;
+            const affectedCellKeys = [];
+
+            for (let r = 0; r < lines.length; r++) {
+                const targetRowIdx = Number(startRowIdx) + r;
+                if (targetRowIdx >= this.rows.length) break;
+
+                const line = lines[r];
+                const cells = line.split('\t');
+                let rowModified = false;
+
+                for (let c = 0; c < cells.length; c++) {
+                    const targetColIdx = startColIndex + c;
+                    if (targetColIdx >= editableCols.length) break;
+
+                    const col = editableCols[targetColIdx];
+                    let cellText = cells[c].trim().replace(',', '.');
+
+                    if (cellText === '' || cellText === '-') {
+                        this.setCellValue(targetRowIdx, col.key, null);
+                        affectedCellKeys.push(`${targetRowIdx}-${col.key}`);
+                        appliedCount++;
+                        rowModified = true;
+                    } else {
+                        const num = parseFloat(cellText);
+                        if (!isNaN(num)) {
+                            const cleanVal = Math.min(100, Math.max(0, Math.round(num * 100) / 100));
+                            this.setCellValue(targetRowIdx, col.key, cleanVal);
+                            affectedCellKeys.push(`${targetRowIdx}-${col.key}`);
+                            appliedCount++;
+                            rowModified = true;
+                        }
+                    }
+                }
+
+                if (rowModified) {
+                    studentCount++;
+                }
+            }
+
+            if (appliedCount > 0) {
+                this.markDirty();
+                this.flashPastedCells(affectedCellKeys);
+                const colLabel = this.getColumnLabel(startColKey);
+                this.showPasteToast(
+                    'Berhasil Menempel Nilai dari Excel',
+                    `Berhasil memasukkan ${appliedCount} nilai untuk ${studentCount} murid ke kolom "${colLabel}". Nilai Akhir & KKTP langsung diperbarui.`
+                );
+            }
+        },
+        updateQuickPastePreview() {
+            if (!this.quickPasteText || this.quickPasteText.trim() === '') {
+                this.quickPastePreviewCount = 0;
+                return;
+            }
+            const lines = this.quickPasteText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+            if (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+                lines.pop();
+            }
+            this.quickPastePreviewCount = lines.length;
+        },
+        applyQuickPaste() {
+            if (this.quickPastePreviewCount === 0) return;
+            const targetCol = this.quickPasteTargetCol || (this.getEditableColumns()[0] ? this.getEditableColumns()[0].key : 'sts');
+            this.processPastedText(this.quickPasteText, Number(this.quickPasteStartRow), targetCol);
+            this.quickPasteModal = false;
+            this.quickPasteText = '';
+            this.quickPastePreviewCount = 0;
         },
         selectInput(e) {
             if (e && e.target && typeof e.target.select === 'function') {
