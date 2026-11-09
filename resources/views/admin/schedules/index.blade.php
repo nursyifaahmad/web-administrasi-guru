@@ -101,17 +101,6 @@
                 <span>+ Buat Jadwal Baru dari Awal</span>
             </a>
 
-            {{-- Tombol Muat Template Wakasek --}}
-            <form method="POST" action="{{ route('admin.schedules.master.load-wakasek') }}"
-                  onsubmit="return confirm('Muat seluruh jadwal resmi Wakasek SMPN 2 Lemahabang (21 Rombel, 36 Guru, 2 Shift)? Jadwal saat ini akan diperbarui.')">
-                @csrf
-                <button type="submit"
-                        class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition border border-slate-200">
-                    <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                    <span>Muat Template Wakasek</span>
-                </button>
-            </form>
-
             {{-- Tombol Sinkronkan ke Kelas Guru --}}
             <form method="POST" action="{{ route('admin.schedules.master.sync-classes') }}"
                   onsubmit="return confirm('Sinkronkan seluruh jadwal dari Master Jadwal ke Buku Administrasi Kelas Guru? Seluruh hari mengajar & jam pelajaran guru akan diperbarui otomatis.')">
@@ -437,7 +426,7 @@
                         @empty
                             <tr>
                                 <td colspan="16" class="p-8 text-center text-slate-400">
-                                    Belum ada data jadwal untuk Shift Pagi. Klik <strong>"+ Buat Jadwal Baru dari Awal"</strong> atau <strong>"Muat Template Wakasek"</strong>.
+                                    Belum ada data jadwal untuk Shift Pagi. Klik <strong>"+ Buat Jadwal Baru dari Awal"</strong>.
                                 </td>
                             </tr>
                         @endforelse
