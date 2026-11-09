@@ -107,12 +107,12 @@
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Dashboard Monitoring</span>
                         </a>
-                        <a href="{{ route('admin.teachers.index') }}"
-                           title="Data Master Guru & Pengguna"
+                         <a href="{{ route('admin.settings.index') }}"
+                           title="Kop Sekolah & Tahun Ajaran"
                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
-                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('admin.teachers.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
-                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Master Guru</span>
+                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('admin.settings.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Kop Sekolah & Tahun Ajaran</span>
                         </a>
                         <a href="{{ route('admin.kktp.index') }}"
                            title="Mapel & Standar KKM/KKTP"
@@ -121,12 +121,26 @@
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Mapel & Standar KKM/KKTP</span>
                         </a>
+                        <a href="{{ route('admin.teachers.index') }}"
+                           title="Data Master Guru & Pengguna"
+                           :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
+                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('admin.teachers.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Master Guru</span>
+                        </a>
                         <a href="{{ route('admin.classes.index') }}"
                            title="Master Rombel & Murid"
                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
                            class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('admin.classes.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Master Rombel & Murid</span>
+                        </a>
+                         <a href="{{ route('admin.schedules.master.index') }}"
+                           title="Master Jadwal Pelajaran (Wakasek Kurikulum)"
+                           :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
+                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('admin.schedules.master.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Master Jadwal Sekolah</span>
                         </a>
                         <a href="{{ route('admin.events.index') }}"
                            title="Kalender & Hari Libur"
@@ -135,12 +149,12 @@
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Kalender & Hari Libur</span>
                         </a>
-                        <a href="{{ route('admin.settings.index') }}"
-                           title="Kop Sekolah & Tahun Ajaran"
+                        <a href="{{ route('teaching-modules.index', ['view' => 'supervision']) }}"
+                           title="Supervisi &amp; Verifikasi Modul Ajar Guru"
                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
-                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('admin.settings.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
-                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Kop Sekolah & Tahun Ajaran</span>
+                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('teaching-modules.*') && request('view') !== 'my' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Supervisi Modul Ajar</span>
                         </a>
                         <a href="{{ route('admin.backup.index') }}"
                            title="Backup &amp; Restore Database"
@@ -149,20 +163,8 @@
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Backup &amp; Restore DB</span>
                         </a>
-                        <a href="{{ route('admin.schedules.master.index') }}"
-                           title="Master Jadwal Pelajaran (Wakasek Kurikulum)"
-                           :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
-                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('admin.schedules.master.*') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
-                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Master Jadwal Sekolah</span>
-                        </a>
-                        <a href="{{ route('teaching-modules.index', ['view' => 'supervision']) }}"
-                           title="Supervisi &amp; Verifikasi Modul Ajar Guru"
-                           :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
-                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('teaching-modules.*') && request('view') !== 'my' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
-                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Supervisi Modul Ajar</span>
-                        </a>
+                       
+                       
                     </div>
                 </div>
                 @endif
