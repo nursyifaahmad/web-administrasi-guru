@@ -176,6 +176,13 @@
                         <span class="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 font-semibold" title="{{ auth()->user()->isAdmin() ? 'Buku Kelas Saya yang Diampu' : 'Buku Kelas Saya' }}">{{ $quickSwitcherClasses->count() }}</span>
                     </div>
                     <div class="space-y-1">
+                        <a href="{{ route('schedules.index') }}"
+                           title="Jadwal Hari Ini"
+                           :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
+                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('schedules.index') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Jadwal Hari Ini</span>
+                        </a>
                         <a href="{{ route('schedules.main.index') }}"
                            title="Jadwal Utama Sekolah (Jadwal Saya & Matriks 21 Rombel)"
                            :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
@@ -197,13 +204,7 @@
                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
                             <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Modul Ajar</span>
                         </a>
-                        <a href="{{ route('schedules.index') }}"
-                           title="Jadwal Hari Ini"
-                           :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : 'px-3'"
-                           class="flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('schedules.index') ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
-                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                            <span :class="sidebarCollapsed ? 'lg:hidden' : ''">Jadwal Hari Ini</span>
-                        </a>
+                        
                     </div>
 
                     @if($quickSwitcherClasses->isNotEmpty())
