@@ -15,6 +15,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <style>
+        /* Sembunyikan scrollbar bawaan browser agar UI sidebar bersih */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none !important;
+            scrollbar-width: none !important;
+        }
+    </style>
 </head>
 <body class="h-full font-sans text-slate-800 antialiased"
       :class="sidebarOpen ? 'overflow-hidden lg:overflow-auto' : ''"
@@ -42,7 +54,7 @@
                    sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
                    sidebarCollapsed ? 'lg:w-20' : 'lg:w-72'
                ]"
-               class="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-screen h-dvh bg-slate-900 text-slate-100 flex flex-col transition-transform duration-200 ease-in-out shadow-2xl lg:shadow-none lg:sticky lg:top-0 lg:h-screen lg:shrink-0">
+               class="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-screen h-dvh bg-slate-900 text-slate-100 flex flex-col transition-transform duration-200 ease-in-out shadow-2xl lg:shadow-none lg:sticky lg:top-0 lg:h-screen lg:shrink-0 overflow-hidden">
 
             {{-- Tombol Floating Kecilkan / Besarkan Sidebar (Desktop) --}}
             <button type="button"
@@ -80,7 +92,7 @@
                 </button>
             </div>
 
-            <nav class="flex-1 overflow-y-auto pt-4 pb-6 space-y-6" :class="sidebarCollapsed ? 'px-3 lg:px-2' : 'px-3'">
+            <nav class="flex-1 overflow-y-auto no-scrollbar pt-4 pb-6 space-y-6" :class="sidebarCollapsed ? 'px-3 lg:px-2' : 'px-3'" style="scrollbar-width: none; -ms-overflow-style: none;">
                 @if(auth()->user()->isAdmin())
                 <div>
                     <div class="px-3 mb-2 text-[11px] font-bold uppercase tracking-wider text-emerald-400"
