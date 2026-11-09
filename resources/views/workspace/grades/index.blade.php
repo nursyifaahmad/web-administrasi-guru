@@ -379,7 +379,7 @@
                                            x-model="row.dynamic_scores[colId]"
                                            :readonly="isAdminReadOnly"
                                            :disabled="isAdminReadOnly"
-                                           @input="markDirty()"
+                                           @input="markDirty(); checkAbsen1Input(rIdx, `ph-${colId}`, $event.target.value)"
                                            @change="handleAbsen1Change(rIdx, `ph-${colId}`, $event.target.value)"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, `ph-${colId}`)"
@@ -414,7 +414,7 @@
                                            x-model="row.attendance_score"
                                            :readonly="isAdminReadOnly"
                                            :disabled="isAdminReadOnly"
-                                           @input="markDirty()"
+                                           @input="markDirty(); checkAbsen1Input(rIdx, 'att', $event.target.value)"
                                            @change="handleAbsen1Change(rIdx, 'att', $event.target.value)"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, 'att')"
@@ -436,7 +436,7 @@
                                            x-model="row.dynamic_scores[colId]"
                                            :readonly="isAdminReadOnly"
                                            :disabled="isAdminReadOnly"
-                                           @input="markDirty()"
+                                           @input="markDirty(); checkAbsen1Input(rIdx, `nt-${colId}`, $event.target.value)"
                                            @change="handleAbsen1Change(rIdx, `nt-${colId}`, $event.target.value)"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, `nt-${colId}`)"
@@ -458,7 +458,7 @@
                                        x-model="row.sts_score"
                                        :readonly="isAdminReadOnly"
                                        :disabled="isAdminReadOnly"
-                                       @input="markDirty()"
+                                       @input="markDirty(); checkAbsen1Input(rIdx, 'sts', $event.target.value)"
                                        @change="handleAbsen1Change(rIdx, 'sts', $event.target.value)"
                                        @focus="selectInput($event)"
                                        @keydown="handleGradeKey($event, rIdx, 'sts')"
@@ -476,7 +476,7 @@
                                        x-model="row.sas_score"
                                        :readonly="isAdminReadOnly"
                                        :disabled="isAdminReadOnly"
-                                       @input="markDirty()"
+                                       @input="markDirty(); checkAbsen1Input(rIdx, 'sas', $event.target.value)"
                                        @change="handleAbsen1Change(rIdx, 'sas', $event.target.value)"
                                        @focus="selectInput($event)"
                                        @keydown="handleGradeKey($event, rIdx, 'sas')"
@@ -892,11 +892,17 @@
 
     {{-- Modal Konfirmasi Set Nilai Sama dengan Absen 1 --}}
     <div x-show="sameScorePrompt.show" x-cloak
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-95"
          @keydown.window.escape="if (sameScorePrompt.show) cancelSameScorePrompt()"
-         @keydown.window.enter.prevent="if (sameScorePrompt.show) applySameScoreToAll()"
+         @keydown.window.enter.prevent="if (sameScorePrompt.show && Date.now() - (sameScorePrompt._openedAt || 0) > 250) applySameScoreToAll()"
          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-        <div @click.away="cancelSameScorePrompt()"
-             class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm sm:max-w-md w-full overflow-hidden p-5 space-y-4 text-center">
+        <div @click.away="if (sameScorePrompt.show && Date.now() - (sameScorePrompt._openedAt || 0) > 400) cancelSameScorePrompt()"
+             class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm sm:max-w-md w-full overflow-hidden p-6 space-y-4 text-center">
             
             <div class="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shadow-xs">
                 <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1013,7 +1019,9 @@ function gradebookSpreadsheet(cfg) {
             colLabel: '',
             score: null,
             targetCount: 0,
+            _openedAt: 0,
         },
+        _absen1InputTimer: null,
 
         init() {
             this.savedSnapshot = this.cloneRows(this.rows);
@@ -1372,12 +1380,14 @@ function gradebookSpreadsheet(cfg) {
         handleGradeKey(e, rIdx, colKey) {
             if (e.key === 'Enter') {
                 e.preventDefault();
+                e.stopPropagation();
+                clearTimeout(this._absen1InputTimer);
                 if (Number(rIdx) === 0 && !this.isAdminReadOnly && this.rows.length > 1) {
                     const rawVal = e.target ? e.target.value : null;
                     if (rawVal !== null && rawVal !== undefined && String(rawVal).trim() !== '') {
                         const num = parseFloat(String(rawVal).trim().replace(',', '.'));
-                        if (!isNaN(num)) {
-                            this.handleAbsen1Change(0, colKey, rawVal);
+                        if (!isNaN(num) && num >= 0 && num <= 100) {
+                            this.triggerSameScorePrompt(colKey, num);
                             return;
                         }
                     }
@@ -1391,18 +1401,38 @@ function gradebookSpreadsheet(cfg) {
                 this.focusGradeCell(rIdx - 1, colKey);
             }
         },
+        checkAbsen1Input(rIdx, colKey, val) {
+            if (this.isAdminReadOnly || Number(rIdx) !== 0 || this.rows.length <= 1) return;
+            if (val === null || val === undefined || String(val).trim() === '') return;
+
+            clearTimeout(this._absen1InputTimer);
+            this._absen1InputTimer = setTimeout(() => {
+                let cleanText = String(val).trim().replace(',', '.');
+                const num = parseFloat(cleanText);
+                if (isNaN(num) || num < 0 || num > 100) return;
+                this.triggerSameScorePrompt(colKey, num);
+            }, 600);
+        },
         handleAbsen1Change(rIdx, colKey, val) {
             if (this.isAdminReadOnly || Number(rIdx) !== 0 || this.rows.length <= 1) return;
+            clearTimeout(this._absen1InputTimer);
             if (val === null || val === undefined || String(val).trim() === '') return;
 
             let cleanText = String(val).trim().replace(',', '.');
             const num = parseFloat(cleanText);
-            if (isNaN(num)) return;
+            if (isNaN(num) || num < 0 || num > 100) return;
 
-            const cleanScore = Math.min(100, Math.max(0, Math.round(num * 100) / 100));
+            this.triggerSameScorePrompt(colKey, num);
+        },
+        triggerSameScorePrompt(colKey, score) {
+            if (this.isAdminReadOnly || this.rows.length <= 1) return;
+            const cleanScore = Math.min(100, Math.max(0, Math.round(score * 100) / 100));
 
-            // Set nilai bersih di absen 1
             this.setCellValue(0, colKey, cleanScore);
+
+            if (this.sameScorePrompt.show && this.sameScorePrompt.colKey === colKey && this.sameScorePrompt.score === cleanScore) {
+                return;
+            }
 
             this.sameScorePrompt = {
                 show: true,
@@ -1410,6 +1440,7 @@ function gradebookSpreadsheet(cfg) {
                 colLabel: this.getColumnLabel(colKey),
                 score: cleanScore,
                 targetCount: this.rows.length,
+                _openedAt: Date.now(),
             };
         },
         applySameScoreToAll() {
