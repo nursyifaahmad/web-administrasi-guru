@@ -418,11 +418,77 @@ class DynamicGradebookAndKktpTest extends TestCase
         $lastGrade = StudentGrade::query()->where('class_student_id', $students[37]->id)->firstOrFail();
         $this->assertEquals(89.0, $lastGrade->sts_score);
 
-        // Akses halaman index dan pastikan view merender fitur Quick Paste
+        // Akses halaman index dan pastikan view merender fitur Quick Paste & Fitur Samakan Nilai Absen 1
         $viewResponse = $this->actingAs($guru)->get(route('grades.index', $class));
         $viewResponse->assertOk();
         $viewResponse->assertSee('Paste Excel');
         $viewResponse->assertSee('handleCellPaste');
         $viewResponse->assertSee('openQuickPasteModal');
+        $viewResponse->assertSee('handleAbsen1Change');
+        $viewResponse->assertSee('applySameScoreToAll');
+        $viewResponse->assertSee('Set Nilai Sama dengan Absen 1?');
+    }
+
+    public function test_bulk_save_scores_supports_identical_scores_for_all_students_from_absen_1(): void
+    {
+        SchoolSetting::current();
+
+        $guru = User::query()->create([
+            'name' => 'Guru PKn',
+            'email' => 'gurupkn@test.sch.id',
+            'role' => 'guru',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'PKN',
+            'name' => 'Pendidikan Pancasila',
+            'default_kktp' => 75,
+        ]);
+
+        $class = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-A',
+            'homeroom_teacher_name' => 'Wali VII-A',
+        ]);
+        $class->ensureDefaultsInitialized();
+
+        // Buat 38 murid
+        $rowsPayload = [];
+        for ($i = 1; $i <= 38; $i++) {
+            $st = ClassStudent::query()->create([
+                'teaching_class_id' => $class->id,
+                'nis' => sprintf('20261%03d', $i),
+                'nisn' => sprintf('001133%04d', $i),
+                'full_name' => 'Murid VIIA ' . $i,
+                'gender' => 'L',
+                'is_active' => true,
+            ]);
+
+            // Simulasi seluruh 38 murid disamakan nilainya dengan absen 1 (misal 88.0)
+            $rowsPayload[] = [
+                'student_id' => $st->id,
+                'sts_score' => 88.0,
+                'sas_score' => 88.0,
+                'dynamic_scores' => [],
+            ];
+        }
+
+        $res = $this->actingAs($guru)->postJson(route('grades.bulk-save', $class), [
+            'rows' => $rowsPayload,
+        ]);
+
+        $res->assertOk();
+        $this->assertEquals(38, StudentGrade::query()->where('teaching_class_id', $class->id)->where('sts_score', 88.0)->count());
     }
 }

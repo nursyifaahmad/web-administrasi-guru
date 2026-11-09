@@ -380,6 +380,7 @@
                                            :readonly="isAdminReadOnly"
                                            :disabled="isAdminReadOnly"
                                            @input="markDirty()"
+                                           @change="handleAbsen1Change(rIdx, `ph-${colId}`, $event.target.value)"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, `ph-${colId}`)"
                                            @paste="handleCellPaste($event, rIdx, `ph-${colId}`)"
@@ -414,6 +415,7 @@
                                            :readonly="isAdminReadOnly"
                                            :disabled="isAdminReadOnly"
                                            @input="markDirty()"
+                                           @change="handleAbsen1Change(rIdx, 'att', $event.target.value)"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, 'att')"
                                            @paste="handleCellPaste($event, rIdx, 'att')"
@@ -435,6 +437,7 @@
                                            :readonly="isAdminReadOnly"
                                            :disabled="isAdminReadOnly"
                                            @input="markDirty()"
+                                           @change="handleAbsen1Change(rIdx, `nt-${colId}`, $event.target.value)"
                                            @focus="selectInput($event)"
                                            @keydown="handleGradeKey($event, rIdx, `nt-${colId}`)"
                                            @paste="handleCellPaste($event, rIdx, `nt-${colId}`)"
@@ -456,6 +459,7 @@
                                        :readonly="isAdminReadOnly"
                                        :disabled="isAdminReadOnly"
                                        @input="markDirty()"
+                                       @change="handleAbsen1Change(rIdx, 'sts', $event.target.value)"
                                        @focus="selectInput($event)"
                                        @keydown="handleGradeKey($event, rIdx, 'sts')"
                                        @paste="handleCellPaste($event, rIdx, 'sts')"
@@ -473,6 +477,7 @@
                                        :readonly="isAdminReadOnly"
                                        :disabled="isAdminReadOnly"
                                        @input="markDirty()"
+                                       @change="handleAbsen1Change(rIdx, 'sas', $event.target.value)"
                                        @focus="selectInput($event)"
                                        @keydown="handleGradeKey($event, rIdx, 'sas')"
                                        @paste="handleCellPaste($event, rIdx, 'sas')"
@@ -884,6 +889,47 @@
             </div>
         </div>
     </div>
+
+    {{-- Modal Konfirmasi Set Nilai Sama dengan Absen 1 --}}
+    <div x-show="sameScorePrompt.show" x-cloak
+         @keydown.window.escape="if (sameScorePrompt.show) cancelSameScorePrompt()"
+         @keydown.window.enter.prevent="if (sameScorePrompt.show) applySameScoreToAll()"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div @click.away="cancelSameScorePrompt()"
+             class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm sm:max-w-md w-full overflow-hidden p-5 space-y-4 text-center">
+            
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shadow-xs">
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                </svg>
+            </div>
+
+            <div>
+                <h3 class="text-base font-extrabold text-slate-900">Set Nilai Sama dengan Absen 1?</h3>
+                <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                    Anda baru saja mengisi nilai <strong class="text-indigo-700 text-sm" x-text="sameScorePrompt.score"></strong> pada murid nomor absen 1 di kolom <strong class="text-slate-800" x-text="sameScorePrompt.colLabel"></strong>.
+                </p>
+                <div class="mt-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-700 font-semibold">
+                    Terapkan nilai <span class="text-emerald-700 font-black" x-text="sameScorePrompt.score"></span> ke seluruh <strong x-text="sameScorePrompt.targetCount"></strong> murid di kelas ini?
+                </div>
+            </div>
+
+            <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
+                <button type="button" @click="applySameScoreToAll()"
+                        class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-2xs transition cursor-pointer text-xs flex items-center justify-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    <span>Ya, Samakan Semua Murid</span>
+                </button>
+                <button type="button" @click="cancelSameScorePrompt()"
+                        class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer text-xs">
+                    Tidak, Hanya Absen 1
+                </button>
+            </div>
+            <div class="text-[10px] text-slate-400">
+                Pintasan keyboard: Tekan <strong>Enter</strong> untuk Ya &bull; Tekan <strong>Esc</strong> untuk Tidak
+            </div>
+        </div>
+    </div>
     @endif
 
     {{-- Toast Notifikasi Berhasil Paste dari Excel --}}
@@ -960,6 +1006,13 @@ function gradebookSpreadsheet(cfg) {
             title: '',
             message: '',
             _timer: null,
+        },
+        sameScorePrompt: {
+            show: false,
+            colKey: '',
+            colLabel: '',
+            score: null,
+            targetCount: 0,
         },
 
         init() {
@@ -1319,6 +1372,16 @@ function gradebookSpreadsheet(cfg) {
         handleGradeKey(e, rIdx, colKey) {
             if (e.key === 'Enter') {
                 e.preventDefault();
+                if (Number(rIdx) === 0 && !this.isAdminReadOnly && this.rows.length > 1) {
+                    const rawVal = e.target ? e.target.value : null;
+                    if (rawVal !== null && rawVal !== undefined && String(rawVal).trim() !== '') {
+                        const num = parseFloat(String(rawVal).trim().replace(',', '.'));
+                        if (!isNaN(num)) {
+                            this.handleAbsen1Change(0, colKey, rawVal);
+                            return;
+                        }
+                    }
+                }
                 this.focusGradeCell(e.shiftKey ? rIdx - 1 : rIdx + 1, colKey);
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -1327,6 +1390,56 @@ function gradebookSpreadsheet(cfg) {
                 e.preventDefault();
                 this.focusGradeCell(rIdx - 1, colKey);
             }
+        },
+        handleAbsen1Change(rIdx, colKey, val) {
+            if (this.isAdminReadOnly || Number(rIdx) !== 0 || this.rows.length <= 1) return;
+            if (val === null || val === undefined || String(val).trim() === '') return;
+
+            let cleanText = String(val).trim().replace(',', '.');
+            const num = parseFloat(cleanText);
+            if (isNaN(num)) return;
+
+            const cleanScore = Math.min(100, Math.max(0, Math.round(num * 100) / 100));
+
+            // Set nilai bersih di absen 1
+            this.setCellValue(0, colKey, cleanScore);
+
+            this.sameScorePrompt = {
+                show: true,
+                colKey: colKey,
+                colLabel: this.getColumnLabel(colKey),
+                score: cleanScore,
+                targetCount: this.rows.length,
+            };
+        },
+        applySameScoreToAll() {
+            if (!this.sameScorePrompt.show) return;
+            const colKey = this.sameScorePrompt.colKey;
+            const score = this.sameScorePrompt.score;
+            const colLabel = this.sameScorePrompt.colLabel;
+            const affectedKeys = [];
+
+            for (let i = 0; i < this.rows.length; i++) {
+                this.setCellValue(i, colKey, score);
+                affectedKeys.push(`${i}-${colKey}`);
+            }
+
+            this.markDirty();
+            this.flashPastedCells(affectedKeys);
+            this.sameScorePrompt.show = false;
+
+            this.showPasteToast(
+                'Nilai Disamakan untuk Seluruh Murid',
+                `Nilai ${score} berhasil diterapkan ke seluruh ${this.rows.length} murid pada kolom "${colLabel}". Tekan Ctrl+S untuk menyimpan.`
+            );
+        },
+        cancelSameScorePrompt() {
+            if (!this.sameScorePrompt.show) return;
+            const colKey = this.sameScorePrompt.colKey;
+            this.sameScorePrompt.show = false;
+            this.$nextTick(() => {
+                this.focusGradeCell(1, colKey);
+            });
         },
         attendanceTooltip(row) {
             const ref = row.attendance_ref || {};
