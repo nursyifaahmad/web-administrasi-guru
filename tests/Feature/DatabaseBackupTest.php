@@ -200,4 +200,39 @@ class DatabaseBackupTest extends TestCase
         $guruRes->assertOk();
         $guruRes->assertDontSee(route('admin.backup.index'));
     }
+
+    public function test_backup_list_correctly_formats_wib_timezone_from_filename_and_mtime(): void
+    {
+        /** @var DatabaseBackupService $service */
+        $service = app(DatabaseBackupService::class);
+        $storageDir = $service->getStorageDir();
+
+        // Buat file dummy dengan pola nama backup jam 15:28:46
+        $filename = 'backup_db_administrasi_guru_2026-11-09_15-28-46.sql.gz';
+        $fullPath = $storageDir . DIRECTORY_SEPARATOR . $filename;
+        file_put_contents($fullPath, 'dummy-content');
+
+        $backups = $service->listBackups();
+        $target = $backups->firstWhere('filename', $filename);
+
+        $this->assertNotNull($target);
+        // Pastikan jam yang ditampilkan adalah 15:28:46 WIB, BUKAN 08:28:46
+        $this->assertStringContainsString('15:28:46 WIB', $target['created_at_label']);
+        $this->assertStringContainsString('09 November 2026', $target['created_at_label']);
+
+        // Uji tampilan di dashboard admin
+        $admin = User::query()->create([
+            'name' => 'Admin Backup Timezone Test',
+            'email' => 'admin.tz@sekolah.sch.id',
+            'role' => 'admin',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $res = $this->actingAs($admin)->get(route('admin.backup.index'));
+        $res->assertOk();
+        $res->assertSee('15:28:46 WIB');
+        $res->assertSee('09 November 2026');
+        $res->assertDontSee('08:28:46 WIB');
+    }
 }

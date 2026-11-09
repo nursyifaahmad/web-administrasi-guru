@@ -44,7 +44,7 @@ class DatabaseBackupService
         $driver = $connection->getDriverName();
         $pdo = $connection->getPdo();
 
-        $timestamp = Carbon::now()->format('Y-m-d_H-i-s');
+        $timestamp = Carbon::now('Asia/Jakarta')->format('Y-m-d_H-i-s');
         $rawDb = (string) config("database.connections.{$connection->getName()}.database", 'database');
         $safeDb = preg_replace('/[^a-zA-Z0-9_\-]/', '_', basename($rawDb)) ?: 'db';
 
@@ -91,7 +91,7 @@ class DatabaseBackupService
             'path' => $finalPath,
             'size' => $fileSize,
             'size_formatted' => $this->formatBytes($fileSize),
-            'created_at' => Carbon::now(),
+            'created_at' => Carbon::now('Asia/Jakarta'),
         ];
     }
 
@@ -183,7 +183,28 @@ class DatabaseBackupService
             }
 
             $size = $file->getSize();
-            $mtime = Carbon::createFromTimestamp($file->getMTime());
+
+            // 1. Prioritaskan ekstraksi timestamp dari nama file (format: ..._YYYY-MM-DD_HH-II-SS.sql...)
+            // Hal ini memastikan jam pembuatan selalu akurat sesuai zona waktu WIB (Asia/Jakarta),
+            // serta tidak berubah saat file dipindahkan, di-touch, atau diunduh ulang.
+            $createdAt = null;
+            if (preg_match('/(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})/', $name, $matches)) {
+                try {
+                    $createdAt = Carbon::createFromFormat(
+                        'Y-m-d H:i:s',
+                        "{$matches[1]} {$matches[2]}:{$matches[3]}:{$matches[4]}",
+                        'Asia/Jakarta'
+                    );
+                } catch (\Throwable $e) {
+                    $createdAt = null;
+                }
+            }
+
+            // 2. Fallback: gunakan filemtime dengan konversi eksplisit ke zona waktu Asia/Jakarta (WIB)
+            if (! $createdAt) {
+                $createdAt = Carbon::createFromTimestamp($file->getMTime())->setTimezone('Asia/Jakarta');
+            }
+
             $isSafetyAuto = str_starts_with($name, 'safety_auto_');
 
             $backups->push([
@@ -191,8 +212,8 @@ class DatabaseBackupService
                 'path' => $file->getPathname(),
                 'size' => $size,
                 'size_formatted' => $this->formatBytes($size),
-                'created_at' => $mtime,
-                'created_at_label' => IndonesianDate::formatLong($mtime) . ' ' . $mtime->format('H:i:s') . ' WIB',
+                'created_at' => $createdAt,
+                'created_at_label' => IndonesianDate::formatLong($createdAt) . ' ' . $createdAt->format('H:i:s') . ' WIB',
                 'is_safety_auto' => $isSafetyAuto,
                 'type_label' => $isSafetyAuto ? 'Otomatis (Pra-Restore)' : 'Manual',
                 'is_gzip' => str_ends_with(strtolower($name), '.gz'),
