@@ -1515,10 +1515,16 @@ CSV;
                         return self::isSubjectMatch($subjectText, $s);
                     });
                 }
-                if (! $subj) {
-                    $subj = $subjects->first();
+                if (! $subj && ! empty($user->default_subject)) {
+                    $subj = $subjects->first(function ($s) use ($user) {
+                        return self::isSubjectMatch($user->default_subject, $s);
+                    });
+                }
+                if (! $subj && $user->relationLoaded('teacherSubjects') && $user->teacherSubjects->isNotEmpty()) {
+                    $subj = $user->teacherSubjects->first()?->subject;
                 }
 
+                // Jangan izinkan fallback buta ke $subjects->first() agar tidak menciptakan kelas dummy Matematika
                 if (! $subj) {
                     continue;
                 }
@@ -1811,6 +1817,14 @@ CSV;
                 $matchedSubject = $subjects->first(function ($s) use ($scheduleTeacher) {
                     return self::isSubjectMatch($scheduleTeacher->subject, $s);
                 });
+            }
+            if (! $matchedSubject && ! empty($user->default_subject)) {
+                $matchedSubject = $subjects->first(function ($s) use ($user) {
+                    return self::isSubjectMatch($user->default_subject, $s);
+                });
+            }
+            if (! $matchedSubject && $user->relationLoaded('teacherSubjects') && $user->teacherSubjects->isNotEmpty()) {
+                $matchedSubject = $user->teacherSubjects->first()?->subject;
             }
 
             $totalJp = $classItems->count();

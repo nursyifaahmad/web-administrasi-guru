@@ -111,4 +111,30 @@ class User extends Authenticatable
     {
         return implode(', ', $this->teaching_codes_list);
     }
+
+    public function preferredSubjectId(): ?int
+    {
+        if ($this->relationLoaded('teacherSubjects') && $this->teacherSubjects->isNotEmpty()) {
+            $subjId = $this->teacherSubjects->first()?->subject_id;
+            if ($subjId) {
+                return (int) $subjId;
+            }
+        }
+
+        $directSubjId = $this->teacherSubjects()->value('subject_id');
+        if ($directSubjId) {
+            return (int) $directSubjId;
+        }
+
+        if (! empty($this->default_subject)) {
+            $matched = Subject::query()->where('is_active', true)->get()->first(function ($s) {
+                return \App\Services\SchoolScheduleService::isSubjectMatch($this->default_subject, $s);
+            });
+            if ($matched) {
+                return (int) $matched->id;
+            }
+        }
+
+        return null;
+    }
 }

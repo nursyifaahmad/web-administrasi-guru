@@ -14,7 +14,7 @@
         isLoadingAllocations: false,
 
         selectedSchoolClassId: '{{ $schoolClasses->first()?->id ?? '' }}',
-        selectedSubjectId: '{{ $subjects->first()?->id ?? '' }}',
+        selectedSubjectId: '{{ auth()->user()?->preferredSubjectId() ?: ($subjects->first()?->id ?? '') }}',
         scheduleInfoText: '',
         teachingDaysJson: '',
 

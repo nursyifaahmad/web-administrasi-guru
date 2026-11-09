@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SchoolSetting;
 use App\Models\Subject;
 use App\Models\SubjectKktp;
+use App\Models\TeachingClass;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -137,5 +138,41 @@ class KktpSubjectController extends Controller
         $subject->delete();
 
         return back()->with('success', "Mata pelajaran {$name} berhasil dihapus.");
+    }
+
+    public function purgeClasses(Request $request, Subject $subject): RedirectResponse
+    {
+        $confirm = strtoupper(trim((string) $request->input('confirm_text')));
+        if ($confirm !== 'HAPUS') {
+            return back()->withErrors([
+                'purge_confirm' => 'Ketik kata "HAPUS" dengan tepat untuk mengonfirmasi pembersihan seluruh kelas mapel ini.',
+            ]);
+        }
+
+        $classIds = $subject->teachingClasses()->pluck('id')->all();
+        $totalClasses = count($classIds);
+
+        if ($totalClasses === 0) {
+            return back()->with('info', "Mata pelajaran {$subject->name} tidak memiliki kelas yang perlu dibersihkan.");
+        }
+
+        DB::transaction(function () use ($classIds) {
+            // 1. Lepas relasi murid pada class_students (master murid & rombel tetap aman)
+            DB::table('class_students')
+                ->whereIn('teaching_class_id', $classIds)
+                ->update(['teaching_class_id' => null]);
+
+            // 2. Hapus data transaksi terkait kelas mengajar
+            DB::table('student_grades')->whereIn('teaching_class_id', $classIds)->delete();
+            DB::table('grade_columns')->whereIn('teaching_class_id', $classIds)->delete();
+            DB::table('grade_weights')->whereIn('teaching_class_id', $classIds)->delete();
+            DB::table('attendances')->whereIn('teaching_class_id', $classIds)->delete();
+            DB::table('daily_journals')->whereIn('teaching_class_id', $classIds)->delete();
+
+            // 3. Hapus teaching_classes
+            TeachingClass::query()->whereIn('id', $classIds)->delete();
+        });
+
+        return back()->with('success', "Berhasil membersihkan {$totalClasses} kelas mengajar pada mata pelajaran {$subject->name}. Master murid & rombel tetap aman.");
     }
 }

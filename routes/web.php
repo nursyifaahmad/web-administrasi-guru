@@ -78,6 +78,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/kktp/subjects', [KktpSubjectController::class, 'storeSubject'])->name('kktp.subjects.store');
         Route::put('/kktp/matrix', [KktpSubjectController::class, 'updateMatrix'])->name('kktp.matrix.update');
         Route::delete('/kktp/subjects/{subject}', [KktpSubjectController::class, 'destroySubject'])->name('kktp.subjects.destroy');
+        Route::post('/kktp/subjects/{subject}/purge-classes', [KktpSubjectController::class, 'purgeClasses'])->name('kktp.subjects.purge-classes');
 
         // Profil Sekolah, Kop Surat & Tahun Ajaran
         Route::get('/pengaturan', [SchoolAndYearController::class, 'index'])->name('settings.index');
