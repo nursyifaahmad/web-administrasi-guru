@@ -136,6 +136,7 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::post('/kelas/sync-from-schedule', [TeachingClassController::class, 'syncFromSchedule'])->name('classes.sync-from-schedule');
     Route::get('/kelas', [TeachingClassController::class, 'index'])->name('classes.index');
     Route::post('/kelas', [TeachingClassController::class, 'store'])->name('classes.store');
+    Route::delete('/kelas/hapus-massal', [TeachingClassController::class, 'bulkDestroy'])->name('classes.bulk-destroy');
     Route::put('/kelas/{teachingClass}', [TeachingClassController::class, 'update'])->name('classes.update');
     Route::delete('/kelas/{teachingClass}', [TeachingClassController::class, 'destroy'])->name('classes.destroy');
 

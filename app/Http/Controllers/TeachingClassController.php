@@ -398,6 +398,61 @@ class TeachingClassController extends Controller
         return redirect()->route('classes.index')->with('success', "Buku Administrasi Kelas {$name} ({$subjectName}) berhasil dihapus.");
     }
 
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'class_ids' => ['required', 'array', 'min:1'],
+            'class_ids.*' => ['required', 'integer'],
+            'confirmation_text' => ['required', 'string'],
+        ], [
+            'class_ids.required' => 'Pilih minimal satu buku administrasi kelas yang ingin dihapus.',
+            'class_ids.min' => 'Pilih minimal satu buku administrasi kelas yang ingin dihapus.',
+            'confirmation_text.required' => 'Ketik kata HAPUS untuk mengonfirmasi penghapusan.',
+        ]);
+
+        if (strtoupper(trim($validated['confirmation_text'])) !== 'HAPUS') {
+            return back()->with('error', 'Konfirmasi gagal. Anda wajib mengetik kata "HAPUS" secara tepat.');
+        }
+
+        $ids = array_map('intval', $validated['class_ids']);
+        $classes = TeachingClass::query()->whereIn('id', $ids)->get();
+
+        if ($classes->isEmpty()) {
+            return back()->with('error', 'Tidak ada buku administrasi kelas yang ditemukan untuk dihapus.');
+        }
+
+        // Verifikasi kepemilikan: hanya buku kelas milik user yang berhak dihapus
+        $unauthorized = $classes->filter(fn ($cls) => (int) $cls->teacher_id !== (int) $user->id);
+        if ($unauthorized->isNotEmpty()) {
+            abort(
+                403,
+                $user->isAdmin()
+                    ? 'Akses ditolak. Administrator tidak memiliki wewenang untuk menghapus Buku Administrasi milik guru lain. Hanya guru pengampu bersangkutan yang berhak menghapus buku kelas ini.'
+                    : 'Anda tidak memiliki izin untuk menghapus buku administrasi guru ini.'
+            );
+        }
+
+        $count = $classes->count();
+
+        DB::transaction(function () use ($ids) {
+            // Pastikan seluruh relasi murid dilepaskan dari teaching_class_id sebelum penghapusan
+            // Data murid adalah data master Rombel yang wajib tetap utuh di Master Rombel & Murid
+            ClassStudent::query()
+                ->whereIn('teaching_class_id', $ids)
+                ->update(['teaching_class_id' => null]);
+
+            // Hapus buku administrasi kelas secara massal
+            // Cascade basis data hanya akan menghapus data internal buku: attendances, daily_journals, grade_columns, grade_weights, student_grades
+            TeachingClass::query()
+                ->whereIn('id', $ids)
+                ->delete();
+        });
+
+        return redirect()->route('classes.index')->with('success', "Berhasil menghapus {$count} buku administrasi kelas.");
+    }
+
     public function students(Request $request, TeachingClass $teachingClass): View
     {
         $user = $request->user();

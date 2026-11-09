@@ -91,6 +91,41 @@
             }
         },
 
+        selectedClasses: [],
+        bulkDeleteModal: false,
+        confirmText: '',
+        allDeletableClasses: @js($classes->filter(fn($c) => (int)$c->teacher_id === (int)auth()->id())->map(fn($c) => [
+            'id' => (string) $c->id,
+            'name' => $c->class_name,
+            'subject' => $c->subject?->name ?? '-',
+        ])->values()),
+
+        get allDeletableIds() {
+            return this.allDeletableClasses.map(c => c.id);
+        },
+
+        get isAllSelected() {
+            return this.allDeletableIds.length > 0 && this.selectedClasses.length === this.allDeletableIds.length;
+        },
+
+        toggleSelectAll() {
+            if (this.isAllSelected) {
+                this.selectedClasses = [];
+            } else {
+                this.selectedClasses = [...this.allDeletableIds];
+            }
+        },
+
+        openBulkDeleteModal() {
+            if (this.selectedClasses.length === 0) return;
+            this.confirmText = '';
+            this.bulkDeleteModal = true;
+        },
+
+        get selectedClassesDetails() {
+            return this.allDeletableClasses.filter(c => this.selectedClasses.includes(c.id));
+        },
+
         init() {
             this.autoSelectFirstPending();
         }
@@ -247,6 +282,49 @@
             </div>
         @endif
     @else
+        {{-- Bilah Aksi Massal & Pilih Semua --}}
+        @php
+            $myDeletableClassesCount = $classes->filter(fn($c) => (int)$c->teacher_id === (int)auth()->id())->count();
+        @endphp
+        @if($myDeletableClassesCount > 0)
+            <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                <div class="flex items-center gap-3">
+                    <label class="inline-flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-700">
+                        <input type="checkbox"
+                               @change="toggleSelectAll()"
+                               :checked="isAllSelected"
+                               class="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300 transition cursor-pointer">
+                        <span>Pilih Semua (<span x-text="allDeletableClasses.length"></span> Buku Kelas)</span>
+                    </label>
+                    <template x-if="selectedClasses.length > 0">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800">
+                            <span x-text="selectedClasses.length"></span> buku dipilih
+                        </span>
+                    </template>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button type="button"
+                            x-show="selectedClasses.length > 0"
+                            x-cloak
+                            @click="selectedClasses = []"
+                            class="px-3 py-1.5 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-100 text-xs font-semibold transition cursor-pointer">
+                        Batal Pilih
+                    </button>
+                    <button type="button"
+                            x-show="selectedClasses.length > 0"
+                            x-cloak
+                            @click="openBulkDeleteModal()"
+                            class="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-2xs transition inline-flex items-center gap-1.5 cursor-pointer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        <span>Hapus (<span x-text="selectedClasses.length"></span>) Buku Kelas Terpilih</span>
+                    </button>
+                </div>
+            </div>
+        @endif
+
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             @foreach($classes as $cls)
                 @php
@@ -254,16 +332,29 @@
                     $attDays = (int) ($attendanceDaysByClass[$cls->id] ?? 0);
                     $grades = $cls->studentGrades;
                     $avgNa = $grades->count() > 0 ? round($grades->avg('final_score'), 1) : null;
+                    $isOwnClass = (int) $cls->teacher_id === (int) auth()->id();
                 @endphp
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs hover:border-emerald-400 hover:shadow-md transition flex flex-col justify-between overflow-hidden">
+                <div class="bg-white rounded-2xl border transition flex flex-col justify-between overflow-hidden relative"
+                     :class="selectedClasses.includes('{{ $cls->id }}') ? 'border-rose-400 ring-2 ring-rose-400/30 bg-rose-50/10 shadow-md' : 'border-slate-200 hover:border-emerald-400 shadow-2xs hover:shadow-md'">
                     <div class="p-4">
                         <div class="flex items-start justify-between gap-2">
-                            <div>
-                                <div class="flex items-center gap-2">
-                                    <span class="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white text-xs font-extrabold">{{ $cls->class_name }}</span>
-                                    <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold">Tingkat {{ $cls->grade_level }}</span>
+                            <div class="flex items-start gap-2.5 min-w-0 flex-1">
+                                @if($isOwnClass)
+                                    <div class="pt-0.5 shrink-0">
+                                        <input type="checkbox"
+                                               value="{{ $cls->id }}"
+                                               x-model="selectedClasses"
+                                               title="Pilih buku kelas {{ $cls->class_name }} untuk dihapus massal"
+                                               class="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300 transition cursor-pointer">
+                                    </div>
+                                @endif
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <span class="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white text-xs font-extrabold">{{ $cls->class_name }}</span>
+                                        <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold">Tingkat {{ $cls->grade_level }}</span>
+                                    </div>
+                                    <h3 class="mt-2 text-sm font-extrabold text-slate-900 truncate">{{ $cls->subject->name ?? '-' }}</h3>
                                 </div>
-                                <h3 class="mt-2 text-sm font-extrabold text-slate-900">{{ $cls->subject->name ?? '-' }}</h3>
                             </div>
                             <span class="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-extrabold shrink-0">
                                 KKTP {{ $kktp }}
@@ -581,6 +672,107 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    {{-- Modal Konfirmasi Hapus Massal Buku Administrasi Kelas --}}
+    <div x-show="bulkDeleteModal"
+         x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div @click.away="bulkDeleteModal = false"
+             class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden">
+            {{-- Modal Header --}}
+            <div class="px-5 py-4 bg-rose-600 text-white flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold">Konfirmasi Hapus Massal Buku Kelas</h3>
+                        <p class="text-[11px] text-rose-100">Tindakan ini permanen dan tidak dapat dibatalkan</p>
+                    </div>
+                </div>
+                <button type="button" @click="bulkDeleteModal = false" class="text-rose-200 hover:text-white text-xl leading-none">&times;</button>
+            </div>
+
+            {{-- Modal Body --}}
+            <div class="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+                {{-- Alert Box --}}
+                <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1.5 leading-relaxed">
+                    <p class="font-bold flex items-center gap-1.5 text-amber-800">
+                        <svg class="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span>Peringatan Penghapusan:</span>
+                    </p>
+                    <p>
+                        Anda akan menghapus <strong x-text="selectedClasses.length"></strong> buku administrasi kelas beserta seluruh data internal di dalamnya:
+                        <strong>Jurnal Harian, Rekap Absensi, Kolom & Bobot Nilai, serta Nilai Akhir</strong>.
+                    </p>
+                    <div class="text-[11px] text-emerald-800 font-semibold bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 mt-2 flex items-start gap-2">
+                        <svg class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span>Data Master Peserta Didik & Rombongan Belajar di menu <em>Master Rombel & Murid</em> <strong>TIDAK AKAN TERHAPUS</strong> (tetap aman).</span>
+                    </div>
+                </div>
+
+                {{-- Daftar Kelas yang Dipilih --}}
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1.5">
+                        Daftar Buku Kelas yang Akan Dihapus (<span x-text="selectedClasses.length"></span> buku):
+                    </label>
+                    <div class="max-h-36 overflow-y-auto rounded-xl border border-slate-200 p-2 bg-slate-50 space-y-1">
+                        <template x-for="item in selectedClassesDetails" :key="item.id">
+                            <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-0.5 rounded bg-emerald-600 text-white font-extrabold text-[10px]" x-text="item.name"></span>
+                                    <span class="font-bold text-slate-800" x-text="item.subject"></span>
+                                </div>
+                                <span class="text-rose-600 text-[10px] font-semibold bg-rose-50 px-2 py-0.5 rounded">Akan dihapus</span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                {{-- Input Validasi "HAPUS" --}}
+                <div class="pt-2 border-t border-slate-100">
+                    <label class="block font-bold text-slate-700 mb-1">
+                        Ketik kata <span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-mono font-extrabold tracking-wider">HAPUS</span> di bawah ini untuk konfirmasi:
+                    </label>
+                    <input type="text"
+                           x-model="confirmText"
+                           placeholder="Ketik HAPUS"
+                           class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 font-mono text-center text-sm font-bold tracking-widest text-slate-900 uppercase focus:border-rose-500 focus:ring-rose-500">
+                    <p class="text-[11px] text-slate-400 mt-1 text-center">
+                        Tombol konfirmasi hapus akan aktif secara otomatis setelah Anda mengetik kata <strong>HAPUS</strong> dengan benar.
+                    </p>
+                </div>
+            </div>
+
+            {{-- Modal Footer --}}
+            <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+                <button type="button"
+                        @click="bulkDeleteModal = false"
+                        class="px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer">
+                    Batal
+                </button>
+                <form method="POST" action="{{ route('classes.bulk-destroy') }}">
+                    @csrf
+                    @method('DELETE')
+                    <template x-for="id in selectedClasses" :key="id">
+                        <input type="hidden" name="class_ids[]" :value="id">
+                    </template>
+                    <input type="hidden" name="confirmation_text" :value="confirmText">
+                    <button type="submit"
+                            :disabled="confirmText.trim().toUpperCase() !== 'HAPUS'"
+                            class="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                            :class="confirmText.trim().toUpperCase() === 'HAPUS' ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer shadow-xs' : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        <span>Hapus (<span x-text="selectedClasses.length"></span>) Buku Kelas Sekarang</span>
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </div>
