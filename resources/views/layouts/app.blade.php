@@ -80,7 +80,7 @@
                 </button>
             </div>
 
-            <nav class="flex-1 overflow-y-auto py-4 space-y-6" :class="sidebarCollapsed ? 'px-3 lg:px-2' : 'px-3'">
+            <nav class="flex-1 overflow-y-auto pt-4 pb-6 space-y-6" :class="sidebarCollapsed ? 'px-3 lg:px-2' : 'px-3'">
                 @if(auth()->user()->isAdmin())
                 <div>
                     <div class="px-3 mb-2 text-[11px] font-bold uppercase tracking-wider text-emerald-400"
@@ -248,32 +248,6 @@
                     @endif
                 </div>
             </nav>
-
-            <div class="p-3.5 sm:p-4 border-t border-slate-800 bg-slate-950/70 shrink-0" :class="sidebarCollapsed ? 'lg:px-2 lg:py-3' : ''">
-                <div class="flex items-center justify-between gap-2" :class="sidebarCollapsed ? 'lg:flex-col lg:justify-center' : ''">
-                    <a href="{{ route('profile.edit') }}"
-                       title="Profil & TTD: {{ auth()->user()->name }}"
-                       class="flex items-center gap-2.5 min-w-0 group"
-                       :class="sidebarCollapsed ? 'lg:justify-center' : ''">
-                        <div class="w-9 h-9 rounded-full bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center text-emerald-300 font-bold text-sm shrink-0">
-                            {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
-                        </div>
-                        <div class="min-w-0" :class="sidebarCollapsed ? 'lg:hidden' : ''">
-                            <div class="text-xs font-semibold text-white truncate group-hover:text-emerald-300">{{ auth()->user()->name }}</div>
-                            <div class="text-[11px] text-slate-400 truncate">
-                                {{ auth()->user()->isAdmin() ? 'Administrator' : ('NIP: ' . (auth()->user()->nip ?: '-')) }}
-                            </div>
-                        </div>
-                    </a>
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit" title="Keluar"
-                                class="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-                        </button>
-                    </form>
-                </div>
-            </div>
         </aside>
 
         {{-- Konten Utama --}}
