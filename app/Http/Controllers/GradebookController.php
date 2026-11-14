@@ -84,13 +84,31 @@ class GradebookController extends Controller
             }
         }
 
+        $isAdminReadOnly = $user->isAdmin() && (int) $teachingClass->teacher_id !== (int) $user->id;
+        $phAbsentMap = [];
+        $classJournalDates = [];
+
+        if (! $isGradeLockedForAdmin && ! $isAdminReadOnly) {
+            foreach ($gradebook['ph_columns'] as $col) {
+                if ($col->assessment_date) {
+                    $d = $col->assessment_date->toDateString();
+                    if (! isset($phAbsentMap[$d])) {
+                        $phAbsentMap[$d] = $attendanceService->getAbsentDispenDetailForDate($teachingClass, $d);
+                    }
+                }
+            }
+            $classJournalDates = $attendanceService->getClassAttendanceDateOptions($teachingClass);
+        }
+
         return view('workspace.grades.index', [
             'teachingClass' => $teachingClass,
             'gradebook' => $gradebook,
             'alpineRows' => $alpineRows,
             'siblingClasses' => $siblingClassesQuery->get(),
             'isGradeLockedForAdmin' => $isGradeLockedForAdmin,
-            'isAdminReadOnly' => $user->isAdmin() && (int) $teachingClass->teacher_id !== (int) $user->id,
+            'isAdminReadOnly' => $isAdminReadOnly,
+            'phAbsentMap' => $phAbsentMap,
+            'classJournalDates' => $classJournalDates,
         ]);
     }
 
@@ -228,6 +246,7 @@ class GradebookController extends Controller
             'type' => ['required', Rule::in(['PH', 'NT'])],
             'label' => ['nullable', 'string', 'max:50'],
             'topic_note' => ['nullable', 'string', 'max:120'],
+            'assessment_date' => ['nullable', 'date'],
         ]);
 
         $type = $validated['type'];
@@ -239,6 +258,7 @@ class GradebookController extends Controller
             'type' => $type,
             'label' => ! empty($validated['label']) ? trim($validated['label']) : $defaultLabel,
             'topic_note' => $validated['topic_note'] ?? null,
+            'assessment_date' => ($type === 'PH' && ! empty($validated['assessment_date'])) ? $validated['assessment_date'] : null,
             'sort_order' => $nextOrder,
         ]);
 
@@ -251,7 +271,7 @@ class GradebookController extends Controller
         Request $request,
         TeachingClass $teachingClass,
         GradeColumn $column
-    ): RedirectResponse {
+    ): RedirectResponse|JsonResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
         abort_unless((int) $column->teaching_class_id === (int) $teachingClass->id, 404);
 
@@ -262,14 +282,41 @@ class GradebookController extends Controller
         );
 
         $validated = $request->validate([
-            'label' => ['required', 'string', 'max:50'],
+            'label' => [$request->wantsJson() ? 'sometimes' : 'required', 'required', 'string', 'max:50'],
             'topic_note' => ['nullable', 'string', 'max:120'],
+            'assessment_date' => ['nullable', 'date'],
         ]);
 
-        $column->update([
-            'label' => trim($validated['label']),
-            'topic_note' => $validated['topic_note'] ?? null,
-        ]);
+        $updatePayload = [
+            'label' => array_key_exists('label', $validated) ? trim($validated['label']) : $column->label,
+            'topic_note' => array_key_exists('topic_note', $validated) ? $validated['topic_note'] : $column->topic_note,
+        ];
+
+        if ($column->type === 'PH') {
+            if ($request->exists('assessment_date') || ! $request->wantsJson()) {
+                $updatePayload['assessment_date'] = ! empty($validated['assessment_date'])
+                    ? $validated['assessment_date']
+                    : null;
+            }
+        } else {
+            $updatePayload['assessment_date'] = null;
+        }
+
+        $column->update($updatePayload);
+        $column->refresh();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'status' => 'ok',
+                'column' => [
+                    'id' => (string) $column->id,
+                    'label' => $column->label,
+                    'topic_note' => $column->topic_note,
+                    'assessment_date' => $column->assessment_date?->toDateString(),
+                    'assessment_date_label' => $column->assessment_date_label,
+                ],
+            ]);
+        }
 
         return back()->with('success', "Kolom {$column->label} berhasil diperbarui.");
     }

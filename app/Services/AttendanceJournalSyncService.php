@@ -11,6 +11,13 @@ use Carbon\Carbon;
 
 class AttendanceJournalSyncService
 {
+    public const NON_REGULAR_STATUS_META = [
+        's' => ['label' => 'Sakit', 'color' => 'amber', 'badge' => 'bg-amber-100 text-amber-800 border-amber-200'],
+        'i' => ['label' => 'Izin', 'color' => 'blue', 'badge' => 'bg-blue-100 text-blue-800 border-blue-200'],
+        'a' => ['label' => 'Alpa (Tanpa Keterangan)', 'color' => 'rose', 'badge' => 'bg-rose-100 text-rose-800 border-rose-200'],
+        'd' => ['label' => 'Dispensasi', 'color' => 'purple', 'badge' => 'bg-purple-100 text-purple-800 border-purple-200'],
+    ];
+
     /**
      * Hitung ringkasan kehadiran pada suatu tanggal untuk kelas tertentu.
      * Aturan: '.' (Hadir) dan 'd' (Dispen) keduanya dihitung ke dalam Jumlah Hadir.
@@ -382,5 +389,144 @@ class AttendanceJournalSyncService
         }
 
         return $map;
+    }
+
+    /**
+     * Ambil daftar detail murid berstatus Sakit, Izin, Alpa, atau Dispensasi (S/I/A/D) pada tanggal tertentu.
+     */
+    public function getAbsentDispenDetailForDate(TeachingClass $teachingClass, string $date): array
+    {
+        $normalizedDate = Carbon::parse($date)->toDateString();
+        $teachingClass->loadMissing('subject');
+
+        $activeStudentIds = $teachingClass->activeStudents()->pluck('id');
+
+        $attendances = Attendance::query()
+            ->where('teaching_class_id', $teachingClass->id)
+            ->whereDate('attendance_date', $normalizedDate)
+            ->whereIn('class_student_id', $activeStudentIds)
+            ->whereIn('status', ['s', 'i', 'a', 'd'])
+            ->with('student')
+            ->get();
+
+        $students = $attendances->map(function (Attendance $att) {
+            $st = strtolower(trim((string) $att->status));
+            $meta = self::NON_REGULAR_STATUS_META[$st] ?? [
+                'label' => strtoupper($st),
+                'color' => 'slate',
+                'badge' => 'bg-slate-100 text-slate-800 border-slate-200',
+            ];
+
+            return [
+                'id' => $att->student?->id,
+                'order_number' => $att->student?->order_number ?? '-',
+                'nis_nisn' => $att->student?->nis_nisn ?: '-',
+                'full_name' => $att->student?->full_name ?? 'Murid Tidak Ditemukan',
+                'gender' => $att->student?->gender ?? '-',
+                'status_code' => strtoupper($st),
+                'status_label' => $meta['label'],
+                'badge_class' => $meta['badge'],
+            ];
+        })->sortBy([
+            ['order_number', 'asc'],
+            ['full_name', 'asc'],
+        ])->values();
+
+        $journal = DailyJournal::query()
+            ->where('teaching_class_id', $teachingClass->id)
+            ->whereDate('journal_date', $normalizedDate)
+            ->first();
+
+        $carbonDate = Carbon::parse($normalizedDate);
+
+        return [
+            'date' => $normalizedDate,
+            'day_name' => IndonesianDate::dayName($normalizedDate),
+            'formatted_date' => IndonesianDate::formatLong($normalizedDate),
+            'class_name' => $teachingClass->class_name,
+            'subject_name' => $teachingClass->subject?->name,
+            'journal_material' => $journal?->activity_material,
+            'total_absent' => $students->whereIn('status_code', ['S', 'I', 'A'])->count(),
+            'total_dispen' => $students->where('status_code', 'D')->count(),
+            'total_affected' => $students->count(),
+            'sakit_count' => $students->where('status_code', 'S')->count(),
+            'izin_count' => $students->where('status_code', 'I')->count(),
+            'alfa_count' => $students->where('status_code', 'A')->count(),
+            'students' => $students->all(),
+            'journal_absent_count' => $journal?->absent_count,
+            'is_overridden' => (bool) ($journal?->is_attendance_overridden ?? false),
+            'attendance_url' => route('attendances.index', [
+                'teachingClass' => $teachingClass->id,
+                'month' => $carbonDate->month,
+            ]),
+        ];
+    }
+
+    /**
+     * Ambil daftar tanggal Jurnal Harian & Absensi S/I/A/D untuk pilihan cepat Penilaian Harian.
+     */
+    public function getClassAttendanceDateOptions(TeachingClass $teachingClass): array
+    {
+        $journals = DailyJournal::query()
+            ->where('teaching_class_id', $teachingClass->id)
+            ->orderByDesc('journal_date')
+            ->get()
+            ->keyBy(fn (DailyJournal $j) => $j->journal_date->toDateString());
+
+        $activeStudentIds = $teachingClass->activeStudents()->pluck('id');
+
+        $nonRegularRows = Attendance::query()
+            ->where('teaching_class_id', $teachingClass->id)
+            ->whereIn('class_student_id', $activeStudentIds)
+            ->whereIn('status', ['s', 'i', 'a', 'd'])
+            ->get(['attendance_date', 'status']);
+
+        $countsByDate = [];
+        foreach ($nonRegularRows as $att) {
+            $d = $att->attendance_date->toDateString();
+            $st = strtolower(trim((string) $att->status));
+            if (! isset($countsByDate[$d])) {
+                $countsByDate[$d] = ['s' => 0, 'i' => 0, 'a' => 0, 'd' => 0];
+            }
+            if (isset($countsByDate[$d][$st])) {
+                $countsByDate[$d][$st]++;
+            }
+        }
+
+        $allDates = collect(array_keys($journals->all()))
+            ->merge(array_keys($countsByDate))
+            ->unique()
+            ->sortDesc()
+            ->values();
+
+        return $allDates->map(function (string $d) use ($journals, $countsByDate) {
+            /** @var DailyJournal|null $journal */
+            $journal = $journals->get($d);
+            $counts = $countsByDate[$d] ?? ['s' => 0, 'i' => 0, 'a' => 0, 'd' => 0];
+            $totalAffected = $counts['s'] + $counts['i'] + $counts['a'] + $counts['d'];
+            $formattedDate = IndonesianDate::formatLong($d);
+            $dayName = IndonesianDate::dayName($d);
+
+            $statusSummary = $totalAffected > 0
+                ? "{$totalAffected} S/I/A/D (S:{$counts['s']} I:{$counts['i']} A:{$counts['a']} D:{$counts['d']})"
+                : 'Hadir Lengkap';
+
+            $materialPreview = $journal && $journal->activity_material
+                ? ' — ' . mb_strimwidth(trim(preg_replace('/\s+/', ' ', $journal->activity_material)), 0, 38, '...')
+                : '';
+
+            return [
+                'date' => $d,
+                'formatted_date' => $formattedDate,
+                'day_name' => $dayName,
+                'journal_material' => $journal?->activity_material,
+                'sakit_count' => $counts['s'],
+                'izin_count' => $counts['i'],
+                'alfa_count' => $counts['a'],
+                'dispen_count' => $counts['d'],
+                'total_affected' => $totalAffected,
+                'option_label' => "{$formattedDate} ({$dayName}) • {$statusSummary}{$materialPreview}",
+            ];
+        })->all();
     }
 }

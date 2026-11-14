@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\AcademicYear;
+use App\Models\Attendance;
 use App\Models\ClassStudent;
+use App\Models\DailyJournal;
+use App\Models\GradeColumn;
 use App\Models\SchoolSetting;
 use App\Models\StudentGrade;
 use App\Models\Subject;
@@ -533,5 +536,231 @@ class DynamicGradebookAndKktpTest extends TestCase
         $response->assertSee('name-cell-active', false);
         $response->assertSee('handleTableFocusOut', false);
         $response->assertSee('selectInput($event, row.student_id)', false);
+    }
+
+    public function test_ph_assessment_date_absent_dispen_confirmation_data_and_null_preservation(): void
+    {
+        SchoolSetting::current();
+
+        $admin = User::query()->create([
+            'name' => 'Admin Kurikulum 2',
+            'email' => 'admin2@test.sch.id',
+            'role' => 'admin',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $guru = User::query()->create([
+            'name' => 'Guru IPA',
+            'email' => 'guruipa@test.sch.id',
+            'role' => 'guru',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'IPA',
+            'name' => 'Ilmu Pengetahuan Alam',
+            'default_kktp' => 75,
+        ]);
+
+        $class = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-D',
+            'homeroom_teacher_name' => 'Wali VII-D',
+        ]);
+        $class->ensureDefaultsInitialized();
+
+        // Set bobot 100% ke PH untuk memverifikasi Aturan A5 secara presisi
+        $class->gradeWeight()->update([
+            'weight_ph' => 100,
+            'weight_attendance' => 0,
+            'weight_nt' => 0,
+            'weight_sts' => 0,
+            'weight_sas' => 0,
+            'rounding_precision' => 2,
+        ]);
+
+        // 12 siswa: 3 Hadir (.), 2 Sakit (s), 2 Izin (i), 3 Alpa (a), 2 Dispensasi (d) = 9 terdampak
+        $statuses = ['.', '.', '.', 's', 's', 'i', 'i', 'a', 'a', 'a', 'd', 'd'];
+        $students = [];
+        foreach ($statuses as $idx => $status) {
+            $student = ClassStudent::query()->create([
+                'teaching_class_id' => $class->id,
+                'order_number' => $idx + 1,
+                'full_name' => 'Siswa Uji ' . ($idx + 1),
+                'gender' => $idx % 2 === 0 ? 'L' : 'P',
+                'is_active' => true,
+            ]);
+            $students[] = $student;
+
+            Attendance::query()->create([
+                'teaching_class_id' => $class->id,
+                'class_student_id' => $student->id,
+                'attendance_date' => '2026-11-10',
+                'status' => $status,
+            ]);
+        }
+
+        DailyJournal::query()->create([
+            'teaching_class_id' => $class->id,
+            'journal_date' => '2026-11-10',
+            'lesson_hours' => '3 - 4',
+            'activity_material' => 'Penilaian Harian Bab 2 Klasifikasi',
+            'present_count' => 5, // 3 hadir + 2 dispen
+            'absent_count' => 7,  // 2s + 2i + 3a
+        ]);
+
+        // 1. Tambah kolom PH baru langsung dengan assessment_date
+        $this->actingAs($guru)
+            ->post(route('grades.columns.store', $class), [
+                'type' => 'PH',
+                'label' => 'PH Bab 2',
+                'topic_note' => 'Klasifikasi',
+                'assessment_date' => '2026-11-10',
+            ])
+            ->assertRedirect();
+
+        $ph2 = GradeColumn::query()
+            ->where('teaching_class_id', $class->id)
+            ->where('type', 'PH')
+            ->where('label', 'PH Bab 2')
+            ->firstOrFail();
+        $this->assertSame('2026-11-10', $ph2->assessment_date?->toDateString());
+
+        // Tambah kolom NT dengan assessment_date -> harus diabaikan (null)
+        $this->actingAs($guru)
+            ->post(route('grades.columns.store', $class), [
+                'type' => 'NT',
+                'label' => 'NT Bab 2',
+                'assessment_date' => '2026-11-10',
+            ])
+            ->assertRedirect();
+
+        $ntExtra = GradeColumn::query()
+            ->where('teaching_class_id', $class->id)
+            ->where('type', 'NT')
+            ->where('label', 'NT Bab 2')
+            ->firstOrFail();
+        $this->assertNull($ntExtra->assessment_date);
+
+        // 2. Update tanggal pada PH default (PH 1) via JSON PUT
+        $ph1 = $class->phColumns()->orderBy('sort_order')->firstOrFail();
+        $updateRes = $this->actingAs($guru)
+            ->putJson(route('grades.columns.update', [$class, $ph1]), [
+                'label' => 'PH 1',
+                'topic_note' => 'Bab 1',
+                'assessment_date' => '2026-11-10',
+            ]);
+
+        $updateRes->assertOk()
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('column.assessment_date', '2026-11-10');
+
+        // 3. Cek endpoint absent-students tanggal 2026-11-10 -> 9 terdampak (7 absent, 2 dispen)
+        $absentRes = $this->actingAs($guru)
+            ->getJson(route('journals.absent-students', ['teachingClass' => $class->id, 'date' => '2026-11-10']));
+
+        $absentRes->assertOk()
+            ->assertJsonPath('date', '2026-11-10')
+            ->assertJsonPath('total_affected', 9)
+            ->assertJsonPath('total_absent', 7)
+            ->assertJsonPath('total_dispen', 2)
+            ->assertJsonPath('sakit_count', 2)
+            ->assertJsonPath('izin_count', 2)
+            ->assertJsonPath('alfa_count', 3);
+
+        // 4. Cek halaman Nilai untuk Guru memuat phAbsentMap, classJournalDates, dan modal hooks
+        $guruIndexRes = $this->actingAs($guru)->get(route('grades.index', $class));
+        $guruIndexRes->assertOk();
+        $guruIndexRes->assertViewHas('phAbsentMap', function (array $map) {
+            return isset($map['2026-11-10'])
+                && $map['2026-11-10']['total_affected'] === 9
+                && count($map['2026-11-10']['students']) === 9;
+        });
+        $guruIndexRes->assertViewHas('classJournalDates', function (array $dates) {
+            return collect($dates)->contains('date', '2026-11-10');
+        });
+        $guruIndexRes->assertSee('absentConfirmModal', false);
+        $guruIndexRes->assertSee('Kosongkan S/I/A (Pertahankan Dispen)', false);
+        $guruIndexRes->assertSee('Isi Alpa = 0', false);
+        $guruIndexRes->assertSee('getPhPillText(', false);
+
+        // 5. Admin Read-Only tidak dirender modal & tombol konfirmasi S/I/A/D interaktif
+        $adminIndexRes = $this->actingAs($admin)->get(route('grades.index', $class));
+        $adminIndexRes->assertOk();
+        $adminIndexRes->assertViewHas('phAbsentMap', []);
+        $adminIndexRes->assertDontSee('x-show="absentConfirmModal.show"', false);
+        $adminIndexRes->assertDontSee('@click.stop="openAbsentConfirmForColumn(', false);
+        $adminIndexRes->assertDontSee('Kosongkan S/I/A (Pertahankan Dispen)', false);
+
+        // 6. Simpan nilai hasil konfirmasi: Hadir=90, Sakit=null, Izin=null, Alpa=0, Dispen=85 pada PH 1
+        // Sementara seluruh kolom PH aktif lainnya diisi 100 agar Aturan A5 (pembagi tetap seluruh kolom PH aktif) teruji
+        $allPhIds = $class->phColumns()->orderBy('sort_order')->pluck('id')->all();
+        $otherPhCount = max(0, count($allPhIds) - 1);
+        $phCount = max(1, count($allPhIds));
+
+        $payloadRows = [];
+        foreach ($students as $idx => $student) {
+            $st = $statuses[$idx];
+            $ph1Val = match ($st) {
+                '.' => 90,
+                'd' => 85,
+                'a' => 0,
+                default => null, // Sakit & Izin dikosongkan
+            };
+            $dynScores = [];
+            foreach ($allPhIds as $cid) {
+                $dynScores[(string) $cid] = ($cid === $ph1->id) ? $ph1Val : 100;
+            }
+            $payloadRows[] = [
+                'student_id' => $student->id,
+                'dynamic_scores' => $dynScores,
+                'attendance_score' => null,
+                'sts_score' => null,
+                'sas_score' => null,
+            ];
+        }
+
+        $this->actingAs($guru)
+            ->postJson(route('grades.bulk-save', $class), ['rows' => $payloadRows])
+            ->assertOk()
+            ->assertJsonPath('status', 'ok');
+
+        $expectedNullNa = round((100 * $otherPhCount) / $phCount, 2);
+        $expectedDispenNa = round((85 + 100 * $otherPhCount) / $phCount, 2);
+
+        // Cek siswa Sakit (#4, index 3) -> dynamic_scores[ph1] null & NA dihitung per Aturan A5
+        $sakitGrade = StudentGrade::query()
+            ->where('teaching_class_id', $class->id)
+            ->where('class_student_id', $students[3]->id)
+            ->firstOrFail();
+        $this->assertNull($sakitGrade->dynamic_scores[(string) $ph1->id]);
+        $this->assertEqualsWithDelta($expectedNullNa, (float) $sakitGrade->final_score, 0.01);
+
+        // Cek siswa Alpa (#8, index 7) -> dynamic_scores[ph1] = 0 & NA identik dengan sel null
+        $alfaGrade = StudentGrade::query()
+            ->where('teaching_class_id', $class->id)
+            ->where('class_student_id', $students[7]->id)
+            ->firstOrFail();
+        $this->assertSame(0.0, (float) $alfaGrade->dynamic_scores[(string) $ph1->id]);
+        $this->assertEqualsWithDelta($expectedNullNa, (float) $alfaGrade->final_score, 0.01);
+
+        // Cek siswa Dispensasi (#11, index 10) -> dynamic_scores[ph1] = 85
+        $dispenGrade = StudentGrade::query()
+            ->where('teaching_class_id', $class->id)
+            ->where('class_student_id', $students[10]->id)
+            ->firstOrFail();
+        $this->assertSame(85.0, (float) $dispenGrade->dynamic_scores[(string) $ph1->id]);
+        $this->assertEqualsWithDelta($expectedDispenNa, (float) $dispenGrade->final_score, 0.01);
     }
 }
