@@ -264,4 +264,37 @@ class TeachingClassDeletePreservesMasterDataTest extends TestCase
             'id' => $this->tcMat->id,
         ]);
     }
+
+    public function test_single_delete_validates_confirmation_text_when_present(): void
+    {
+        // Konfirmasi salah harus gagal dan buku tetap ada
+        $failedResponse = $this->actingAs($this->guruA)
+            ->from(route('classes.index'))
+            ->delete(route('classes.destroy', $this->tcMat), [
+                'confirmation_text' => 'SALAH',
+            ]);
+
+        $failedResponse->assertRedirect(route('classes.index'));
+        $failedResponse->assertSessionHas('error');
+        $this->assertDatabaseHas('teaching_classes', [
+            'id' => $this->tcMat->id,
+        ]);
+
+        // Konfirmasi "Hapus" (case-insensitive) berhasil menghapus buku dan menjaga Master Rombel & Murid
+        $successResponse = $this->actingAs($this->guruA)
+            ->delete(route('classes.destroy', $this->tcMat), [
+                'confirmation_text' => 'Hapus',
+            ]);
+
+        $successResponse->assertRedirect(route('classes.index'));
+        $successResponse->assertSessionHas('success');
+        $this->assertDatabaseMissing('teaching_classes', [
+            'id' => $this->tcMat->id,
+        ]);
+        $this->assertDatabaseHas('school_classes', [
+            'id' => $this->schoolClass->id,
+            'name' => 'VII-A',
+        ]);
+        $this->assertDatabaseCount('class_students', 5);
+    }
 }

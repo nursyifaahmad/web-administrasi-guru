@@ -8,15 +8,49 @@
 @include('partials.class-workspace-tabs')
 
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
-    {{-- Kolom Kiri: Form Pengaturan Mata Pelajaran & Jadwal Mengajar --}}
+    {{-- Kolom Kiri: Informasi / Form Mata Pelajaran & Jadwal Mengajar --}}
     <div class="lg:col-span-7 space-y-5">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 md:p-6 space-y-5">
-            <div>
-                <h2 class="text-sm md:text-base font-bold text-slate-900">Pengaturan Mata Pelajaran & Jadwal</h2>
-                <p class="text-xs text-slate-500 mt-0.5">Ubah mata pelajaran yang Anda ampu atau perbarui jadwal mengajar untuk kelas ini.</p>
-            </div>
+            @if(! auth()->user()->isAdmin())
+                <div>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold mb-1.5">
+                        Tersinkronisasi Portal Admin
+                    </span>
+                    <h2 class="text-sm md:text-base font-bold text-slate-900">Informasi Kelas Tersinkronisasi Portal Admin</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Mata pelajaran, jadwal mengajar, dan hari tatap muka dikelola dari Portal Admin agar selalu sinkron dengan jadwal resmi sekolah.</p>
+                </div>
 
-            <form method="POST" action="{{ route('classes.update', $teachingClass) }}" class="space-y-4 text-xs">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div class="rounded-xl bg-slate-50 border border-slate-200/80 p-3">
+                        <dt class="text-[11px] font-semibold text-slate-500">Mata Pelajaran</dt>
+                        <dd class="font-bold text-slate-900 mt-0.5">{{ $teachingClass->subject->name ?? '-' }}</dd>
+                    </div>
+                    <div class="rounded-xl bg-slate-50 border border-slate-200/80 p-3">
+                        <dt class="text-[11px] font-semibold text-slate-500">KKTP Efektif</dt>
+                        <dd class="font-bold text-slate-900 mt-0.5">{{ $teachingClass->effective_kktp ?? 75 }}</dd>
+                    </div>
+                    <div class="rounded-xl bg-slate-50 border border-slate-200/80 p-3">
+                        <dt class="text-[11px] font-semibold text-slate-500">Hari Mengajar</dt>
+                        <dd class="font-bold text-slate-900 mt-0.5">{{ $teachingClass->teaching_days_label ?: 'Belum dipetakan Admin' }}</dd>
+                    </div>
+                    <div class="rounded-xl bg-slate-50 border border-slate-200/80 p-3">
+                        <dt class="text-[11px] font-semibold text-slate-500">Jam Pelajaran</dt>
+                        <dd class="font-bold text-slate-900 mt-0.5">{{ $teachingClass->schedule_info ?: '-' }}</dd>
+                    </div>
+                    <div class="sm:col-span-2 rounded-xl bg-slate-50 border border-slate-200/80 p-3">
+                        <dt class="text-[11px] font-semibold text-slate-500">Mode Kolom Absensi</dt>
+                        <dd class="font-bold text-slate-900 mt-0.5">
+                            {{ $teachingClass->only_teaching_days ? 'Hanya Tanggal Hari Mengajar (Terfilter Jadwal Admin)' : 'Semua Hari Kerja Aktif' }}
+                        </dd>
+                    </div>
+                </dl>
+            @else
+                <div>
+                    <h2 class="text-sm md:text-base font-bold text-slate-900">Pengaturan Mata Pelajaran & Jadwal</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Ubah mata pelajaran yang Anda ampu atau perbarui jadwal mengajar untuk kelas ini.</p>
+                </div>
+
+                <form method="POST" action="{{ route('classes.update', $teachingClass) }}" class="space-y-4 text-xs">
                 @csrf
                 @method('PUT')
 
@@ -91,6 +125,7 @@
                     </button>
                 </div>
             </form>
+            @endif
         </div>
 
         {{-- Area Bahaya / Proteksi: Hapus Buku Kelas --}}

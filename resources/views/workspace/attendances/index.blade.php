@@ -83,11 +83,10 @@
                     </button>
                 </template>
                 <template x-if="!hasTeachingDays">
-                    <a href="{{ route('classes.students', $teachingClass) }}"
-                       class="shrink-0 px-3 py-2 rounded-xl text-slate-500 bg-slate-50 border border-slate-200 hover:bg-slate-100 font-semibold text-xs flex items-center gap-1"
-                       title="Atur hari mengajar di Pengaturan Kelas agar tanggal non-KBM otomatis disembunyikan">
-                        <span>🗓️ Atur Hari Mengajar</span>
-                    </a>
+                    <span class="shrink-0 px-3 py-2 rounded-xl text-slate-600 bg-slate-50 border border-slate-200 font-semibold text-xs flex items-center gap-1"
+                          title="Jadwal hari mengajar disinkronkan terpusat dari Portal Admin">
+                        <span>🗓️ Jadwal Mengikuti Portal Admin</span>
+                    </span>
                 </template>
             @endif
         </div>

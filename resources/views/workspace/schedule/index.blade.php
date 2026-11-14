@@ -209,11 +209,6 @@
                                             {{ $cls->subject->name ?? '-' }}
                                         </div>
                                     </div>
-                                    <a href="{{ route('classes.students', $cls) }}"
-                                       title="Pengaturan Kelas & Jadwal"
-                                       class="text-slate-400 hover:text-emerald-600 p-1 rounded-lg hover:bg-slate-50 transition">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                                    </a>
                                 </div>
 
                                 {{-- Keterangan Jam Pelajaran --}}
@@ -275,15 +270,14 @@
                         Terdapat {{ $unscheduledClasses->count() }} Kelas yang Belum Diatur Hari Mengajarnya:
                     </h4>
                     <p class="text-amber-800 leading-relaxed">
-                        Kelas di bawah ini belum ditentukan hari apa saja diajarkan dalam seminggu, sehingga belum terpetakan ke kolom hari di atas:
+                        Kelas di bawah ini belum memiliki pemetaan hari mengajar dari Portal Admin sehingga belum tampil pada kolom hari di atas. Silakan hubungi Admin Sekolah untuk sinkronisasi jadwal, atau hapus buku yang tidak terpakai melalui halaman <a href="{{ route('classes.index') }}" class="font-bold underline hover:text-amber-950">Buku Administrasi Kelas</a>:
                     </p>
                     <div class="flex flex-wrap gap-2 pt-1">
                         @foreach($unscheduledClasses as $uCls)
-                            <a href="{{ route('classes.students', $uCls) }}"
-                               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-amber-300 font-bold text-amber-900 hover:bg-amber-100 hover:border-amber-400 transition shadow-2xs">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-amber-300 font-bold text-amber-900 shadow-2xs">
                                 <span>Kelas {{ $uCls->class_name }} ({{ $uCls->subject->code ?? $uCls->subject->name }})</span>
-                                <span class="text-[10px] text-amber-600">&rarr; Atur Hari</span>
-                            </a>
+                                <span class="text-[10px] font-semibold text-amber-600">&bull; Sinkron via Admin</span>
+                            </span>
                         @endforeach
                     </div>
                 </div>

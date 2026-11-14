@@ -116,6 +116,16 @@
             }
         },
 
+        singleDeleteModal: false,
+        singleDeleteTarget: null,
+        singleConfirmText: '',
+
+        openSingleDeleteModal(target) {
+            this.singleDeleteTarget = target;
+            this.singleConfirmText = '';
+            this.singleDeleteModal = true;
+        },
+
         openBulkDeleteModal() {
             if (this.selectedClasses.length === 0) return;
             this.confirmText = '';
@@ -396,7 +406,7 @@
                     </div>
 
                     {{-- Quick Action Footer --}}
-                    <div class="px-4 py-3 bg-slate-50 border-t border-slate-200/80 grid grid-cols-4 gap-1.5 text-center text-[11px] font-bold">
+                    <div class="px-4 py-3 bg-slate-50 border-t border-slate-200/80 grid {{ $isOwnClass ? 'grid-cols-4' : 'grid-cols-3' }} gap-1.5 text-center text-[11px] font-bold">
                         <a href="{{ route('journals.index', $cls) }}" class="py-1.5 rounded-lg bg-white border border-slate-200 text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition">
                             Jurnal
                         </a>
@@ -406,9 +416,19 @@
                         <a href="{{ route('grades.index', $cls) }}" class="py-1.5 rounded-lg bg-white border border-slate-200 text-amber-800 hover:bg-amber-600 hover:text-white hover:border-amber-600 transition">
                             Nilai
                         </a>
-                        <a href="{{ route('classes.settings', $cls) }}" class="py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-800 hover:text-white transition">
-                            Pengaturan
-                        </a>
+                        @if($isOwnClass)
+                            <button type="button"
+                                    data-delete-target="{{ json_encode([
+                                        'id' => $cls->id,
+                                        'class_name' => $cls->class_name,
+                                        'subject_name' => $cls->subject->name ?? ($cls->subject->code ?? 'Mata Pelajaran'),
+                                        'destroy_url' => route('classes.destroy', $cls),
+                                    ]) }}"
+                                    @click="openSingleDeleteModal(JSON.parse($el.dataset.deleteTarget))"
+                                    class="py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition cursor-pointer">
+                                Hapus Buku
+                            </button>
+                        @endif
                     </div>
                 </div>
             @endforeach
@@ -773,6 +793,74 @@
                     </button>
                 </form>
             </div>
+        </div>
+    </div>
+
+    {{-- Modal Konfirmasi Hapus Satu Buku Administrasi Kelas --}}
+    <div x-show="singleDeleteModal"
+         x-cloak
+         style="display: none;"
+         @keydown.escape.window="singleDeleteModal = false"
+         @click.self="singleDeleteModal = false"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div class="bg-white rounded-2xl border border-rose-200 shadow-2xl max-w-md w-full overflow-hidden">
+            <div class="px-5 py-4 bg-rose-50 border-b border-rose-200 flex items-start justify-between gap-3">
+                <div class="flex items-start gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-extrabold text-rose-950">Hapus Buku Administrasi?</h3>
+                        <p class="text-xs text-rose-800 font-semibold mt-0.5">
+                            Kelas <span x-text="singleDeleteTarget?.class_name"></span> &mdash; <span x-text="singleDeleteTarget?.subject_name"></span>
+                        </p>
+                    </div>
+                </div>
+                <button type="button" @click="singleDeleteModal = false" class="text-rose-500 hover:text-rose-800 p-1 rounded-lg transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <form method="POST" :action="singleDeleteTarget?.destroy_url" class="p-5 space-y-4 text-xs">
+                @csrf
+                @method('DELETE')
+                <input type="hidden" name="confirmation_text" :value="singleConfirmText">
+
+                <div class="p-3 rounded-xl bg-rose-50/70 border border-rose-200 text-rose-900 leading-relaxed space-y-1">
+                    <p>Menghapus buku ini akan menghapus permanen seluruh <strong>Jurnal Mengajar, Absensi, dan Nilai</strong> pada buku kelas ini.</p>
+                    <p class="text-[11px] text-rose-700">Master Data Rombel &amp; Murid di Portal Admin tetap aman dan tidak terhapus.</p>
+                </div>
+
+                <div>
+                    <label for="single_delete_confirm" class="block font-bold text-slate-800 mb-1.5">
+                        Ketik <span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-mono">Hapus</span> untuk konfirmasi:
+                    </label>
+                    <input id="single_delete_confirm"
+                           type="text"
+                           x-model="singleConfirmText"
+                           autocomplete="off"
+                           placeholder="Ketik Hapus di sini..."
+                           class="w-full px-3 py-2 rounded-xl border border-slate-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-200 outline-none text-xs font-bold text-slate-900">
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-1">
+                    <button type="button"
+                            @click="singleDeleteModal = false"
+                            class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold hover:bg-slate-50 transition">
+                        Batal
+                    </button>
+                    <button type="submit"
+                            :disabled="(singleConfirmText || '').trim().toUpperCase() !== 'HAPUS'"
+                            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs cursor-pointer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        <span>Hapus Buku Permanen</span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

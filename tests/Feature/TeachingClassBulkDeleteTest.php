@@ -299,4 +299,61 @@ class TeachingClassBulkDeleteTest extends TestCase
         $response->assertSessionHas('success');
         $this->assertDatabaseMissing('teaching_classes', ['id' => $tcAdmin->id]);
     }
+
+    public function test_classes_index_and_portal_guru_views_replace_pengaturan_with_hapus_buku_modal(): void
+    {
+        [$year, $subject, $teacher1, , $admin, $rombelA] = $this->setupData();
+        $year->is_active = true;
+        $year->save();
+
+        $tc = TeachingClass::query()->create([
+            'academic_year_id' => $year->id,
+            'teacher_id' => $teacher1->id,
+            'subject_id' => $subject->id,
+            'school_class_id' => $rombelA->id,
+            'class_name' => 'IX-A',
+            'grade_level' => 'IX',
+            'homeroom_teacher_name' => 'Wali IX-A',
+        ]);
+
+        // 1. Pemilik kelas melihat tombol Hapus Buku + modal konfirmasi ketik "Hapus", bukan Pengaturan
+        $indexRes = $this->actingAs($teacher1)->get(route('classes.index'));
+        $indexRes->assertOk();
+        $indexRes->assertSee('Hapus Buku');
+        $indexRes->assertSee('openSingleDeleteModal');
+        $indexRes->assertSee('singleDeleteModal');
+        $indexRes->assertSee('Hapus Buku Administrasi?');
+        $indexRes->assertSee('Hapus Buku Permanen');
+        $indexRes->assertDontSee(route('classes.settings', $tc));
+
+        // 2. Admin yang memantau kelas guru lain tidak melihat tombol Hapus Buku pada kartu tersebut
+        $adminIndexRes = $this->actingAs($admin)->get(route('classes.index'));
+        $adminIndexRes->assertOk();
+        $adminIndexRes->assertSee('grid-cols-3');
+        $adminIndexRes->assertDontSee(route('classes.destroy', $tc));
+        $adminIndexRes->assertDontSee(route('classes.settings', $tc));
+
+        // 3. Tab workspace & halaman absensi/jadwal guru tidak lagi mengarah ke Pengaturan
+        $journalRes = $this->actingAs($teacher1)->get(route('journals.index', $tc));
+        $journalRes->assertOk();
+        $journalRes->assertDontSee('Pengaturan Kelas');
+
+        $attendanceRes = $this->actingAs($teacher1)->get(route('attendances.index', $tc));
+        $attendanceRes->assertOk();
+        $attendanceRes->assertSee('Jadwal Mengikuti Portal Admin');
+        $attendanceRes->assertDontSee('Atur Hari Mengajar');
+
+        $scheduleRes = $this->actingAs($teacher1)->get(route('schedules.index'));
+        $scheduleRes->assertOk();
+        $scheduleRes->assertDontSee('Pengaturan Kelas & Jadwal');
+        $scheduleRes->assertDontSee('Atur Hari');
+        $scheduleRes->assertSee('Sinkron via Admin');
+        $scheduleRes->assertDontSee(route('classes.students', $tc));
+
+        // 4. Akses langsung ke route kelas settings untuk guru menampilkan informasi read-only sinkron Admin
+        $settingsRes = $this->actingAs($teacher1)->get(route('classes.settings', $tc));
+        $settingsRes->assertOk();
+        $settingsRes->assertSee('Informasi Kelas Tersinkronisasi Portal Admin');
+        $settingsRes->assertDontSee('Simpan Pengaturan Kelas');
+    }
 }

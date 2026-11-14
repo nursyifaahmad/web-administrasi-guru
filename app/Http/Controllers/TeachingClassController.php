@@ -380,6 +380,12 @@ class TeachingClassController extends Controller
                 : 'Anda tidak memiliki izin untuk menghapus buku administrasi guru ini.'
         );
 
+        if ($request->has('confirmation_text')) {
+            if (strtoupper(trim((string) $request->input('confirmation_text'))) !== 'HAPUS') {
+                return back()->with('error', 'Konfirmasi gagal. Anda wajib mengetik kata "Hapus" dengan tepat.');
+            }
+        }
+
         $name = $teachingClass->class_name;
         $subjectName = $teachingClass->subject?->name ?? '';
 
