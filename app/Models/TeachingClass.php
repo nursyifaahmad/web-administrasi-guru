@@ -78,6 +78,8 @@ class TeachingClass extends Model
         return in_array($dayOfWeek, array_map('intval', $this->teaching_days), true);
     }
 
+    private const SCHEDULE_DAY_NAMES_REGEX = "Minggu|Senin|Selasa|Rabu|Kamis|Jum'?at|Sabtu";
+
     public function getTeachingDaysLabelAttribute(): string
     {
         if (empty($this->teaching_days) || ! is_array($this->teaching_days)) {
@@ -90,6 +92,75 @@ class TeachingClass extends Model
         }
 
         return implode(' & ', array_filter($names));
+    }
+
+    /**
+     * Ekstrak segmen jadwal mengajar khusus untuk hari tertentu dari string schedule_info.
+     */
+    public function scheduleForDay(int $dayOfWeek): ?string
+    {
+        $raw = trim((string) ($this->schedule_info ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        $dayPattern = match ($dayOfWeek) {
+            0 => 'Minggu',
+            1 => 'Senin',
+            2 => 'Selasa',
+            3 => 'Rabu',
+            4 => 'Kamis',
+            5 => "Jum'?at",
+            6 => 'Sabtu',
+            default => null,
+        };
+
+        if ($dayPattern === null) {
+            return $raw;
+        }
+
+        $dayRegex = self::SCHEDULE_DAY_NAMES_REGEX;
+
+        // Bila teks tidak memuat nama hari sama sekali (mis. "Jam 1-2"), anggap berlaku generik.
+        if (! preg_match('/\b(?:' . $dayRegex . ')\b/iu', $raw)) {
+            return $raw;
+        }
+
+        $parts = preg_split(
+            '/\s*(?:[\x{2022}&;|\r\n]+|,(?=\s*(?:' . $dayRegex . ')\b))\s*/iu',
+            $raw,
+            -1,
+            PREG_SPLIT_NO_EMPTY
+        );
+
+        $matched = [];
+        foreach ($parts ?: [] as $part) {
+            $part = trim($part);
+            if ($part !== '' && preg_match('/\b' . $dayPattern . '\b/iu', $part)) {
+                $matched[] = $part;
+            }
+        }
+
+        return ! empty($matched) ? implode(' • ', $matched) : null;
+    }
+
+    /**
+     * Kunci pengurutan kronologis kelas pada hari tertentu berdasarkan jam mulai lalu nama kelas.
+     */
+    public function sortKeyForDay(int $dayOfWeek): string
+    {
+        $segment = (string) ($this->scheduleForDay($dayOfWeek) ?? '');
+        $timeKey = '9999';
+        $periodKey = '99';
+
+        if (preg_match('/\b(\d{1,2})[.:]([0-5]\d)\b/', $segment, $m)) {
+            $timeKey = sprintf('%02d%02d', (int) $m[1], (int) $m[2]);
+        }
+        if (preg_match('/\bjam\s*(\d{1,2})/i', $segment, $m)) {
+            $periodKey = sprintf('%02d', (int) $m[1]);
+        }
+
+        return "{$timeKey}_{$periodKey}_{$this->class_name}";
     }
 
     public function schoolClass(): BelongsTo

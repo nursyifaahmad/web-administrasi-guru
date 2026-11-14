@@ -8,6 +8,7 @@ use App\Models\SchoolClass;
 use App\Models\Subject;
 use App\Models\TeachingClass;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -279,5 +280,102 @@ class TeachingScheduleTest extends TestCase
         $matchedClass = $classesData->firstWhere('id', $cls7d->id);
         $this->assertNotNull($matchedClass);
         $this->assertEquals(38, $matchedClass->students_count);
+    }
+
+    public function test_today_banner_and_day_columns_only_show_matching_day_schedule_segment(): void
+    {
+        $env = $this->setupScheduleEnvironment();
+        $guru = $env['guru'];
+        $year = $env['year'];
+        $subject = Subject::first();
+
+        // Uji unit helper scheduleForDay() pada berbagai pemisah dan format
+        $probe = new TeachingClass([
+            'schedule_info' => 'Jumat Jam 4 (10.05 - 10.35) • Sabtu Jam 1-2 (07.40 - 08.40)',
+        ]);
+        $this->assertSame('Sabtu Jam 1-2 (07.40 - 08.40)', $probe->scheduleForDay(6));
+        $this->assertSame('Jumat Jam 4 (10.05 - 10.35)', $probe->scheduleForDay(5));
+        $this->assertNull($probe->scheduleForDay(1));
+
+        $probeCommaAmp = new TeachingClass([
+            'schedule_info' => "Senin jam 6-7, Kamis jam 2 & Jum'at jam 3-4",
+        ]);
+        $this->assertSame('Senin jam 6-7', $probeCommaAmp->scheduleForDay(1));
+        $this->assertSame('Kamis jam 2', $probeCommaAmp->scheduleForDay(4));
+        $this->assertSame("Jum'at jam 3-4", $probeCommaAmp->scheduleForDay(5));
+
+        $probeGeneric = new TeachingClass(['schedule_info' => 'Jam 1-2 (07.40 - 08.40)']);
+        $this->assertSame('Jam 1-2 (07.40 - 08.40)', $probeGeneric->scheduleForDay(6));
+
+        // Buat kelas hari Sabtu (urutan abjad VII-A, VII-C, VII-G, VIII-B sengaja tidak sama dengan urutan jam)
+        $defs = [
+            ['VII-C', 'VII', 'Sabtu Jam 5-7 (10.00 - 11.30)', [6]],
+            ['VII-G', 'VII', 'Kamis Jam 7-8 (10.55 - 11.55) • Sabtu (09.10 - 09.40)', [4, 6]],
+            ['VII-A', 'VII', 'Jumat Jam 4 (10.05 - 10.35) • Sabtu Jam 1-2 (07.40 - 08.40)', [5, 6]],
+            ['VIII-B', 'VIII', 'Selasa Jam 7-8 (15.25 - 16.25) • Sabtu Jam 7 (15.45 - 16.15)', [2, 6]],
+        ];
+
+        foreach ($defs as [$name, $grade, $info, $days]) {
+            $sc = SchoolClass::query()->create([
+                'academic_year_id' => $year->id,
+                'name' => $name,
+                'grade_level' => $grade,
+                'homeroom_teacher_name' => "Wali {$name}",
+            ]);
+
+            $cls = TeachingClass::query()->create([
+                'teacher_id' => $guru->id,
+                'academic_year_id' => $year->id,
+                'school_class_id' => $sc->id,
+                'subject_id' => $subject->id,
+                'grade_level' => $grade,
+                'class_name' => $name,
+                'schedule_info' => $info,
+                'teaching_days' => $days,
+                'only_teaching_days' => true,
+                'homeroom_teacher_name' => "Wali {$name}",
+            ]);
+            $cls->ensureDefaultsInitialized();
+        }
+
+        Carbon::setTestNow('2026-11-14 08:00:00'); // Sabtu, 14 November 2026
+
+        try {
+            $res = $this->actingAs($guru)->get(route('schedules.index'));
+            $res->assertOk();
+            $res->assertSee('Sabtu, 14 November 2026');
+
+            // Urutan todayClasses harus kronologis: 07.40 (VII-A) -> 09.10 (VII-G) -> 10.00 (VII-C) -> 15.45 (VIII-B)
+            $todayClasses = $res->viewData('todayClasses');
+            $this->assertSame(['VII-A', 'VII-G', 'VII-C', 'VIII-B'], $todayClasses->pluck('class_name')->all());
+
+            // Banner Hari Ini tidak boleh menampilkan hari selain Sabtu
+            $html = $res->getContent();
+            $startPos = strpos($html, 'Jadwal KBM Hari Ini:');
+            $endPos = strpos($html, 'Total Kelas Diampu');
+            $this->assertNotFalse($startPos);
+            $this->assertNotFalse($endPos);
+
+            $bannerHtml = substr($html, $startPos, $endPos - $startPos);
+            $this->assertStringContainsString('Sabtu Jam 1-2 (07.40 - 08.40)', $bannerHtml);
+            $this->assertStringContainsString('Sabtu (09.10 - 09.40)', $bannerHtml);
+            $this->assertStringContainsString('Sabtu Jam 5-7 (10.00 - 11.30)', $bannerHtml);
+            $this->assertStringContainsString('Sabtu Jam 7 (15.45 - 16.15)', $bannerHtml);
+            $this->assertStringNotContainsString('Jumat Jam 4', $bannerHtml);
+            $this->assertStringNotContainsString('Kamis Jam 7-8', $bannerHtml);
+            $this->assertStringNotContainsString('Selasa Jam 7-8', $bannerHtml);
+
+            // Di seluruh halaman jadwal (banner, grid mingguan, area cetak), string gabungan penuh tidak boleh muncul
+            $res->assertDontSee('Jumat Jam 4 (10.05 - 10.35) • Sabtu Jam 1-2 (07.40 - 08.40)');
+            $res->assertDontSee('Kamis Jam 7-8 (10.55 - 11.55) • Sabtu (09.10 - 09.40)');
+            $res->assertDontSee('Selasa Jam 7-8 (15.25 - 16.25) • Sabtu Jam 7 (15.45 - 16.15)');
+
+            // Di halaman Buku Administrasi Kelas, ringkasan 1 minggu utuh tetap ditampilkan
+            $classesRes = $this->actingAs($guru)->get(route('classes.index'));
+            $classesRes->assertOk();
+            $classesRes->assertSee('Jumat Jam 4 (10.05 - 10.35) • Sabtu Jam 1-2 (07.40 - 08.40)');
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }

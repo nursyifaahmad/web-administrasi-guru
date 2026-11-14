@@ -59,7 +59,7 @@ class TeachingScheduleController extends Controller
             6 => 'Sabtu',
         ];
 
-        // Kelompokkan kelas berdasarkan hari KBM (hanya untuk kelas yang sudah diatur hari mengajarnya)
+        // Kelompokkan kelas berdasarkan hari KBM dan urutkan sesuai jam mulai pada hari tersebut
         $scheduledByDay = [];
         foreach ($daysMap as $dayNum => $dayName) {
             $scheduledByDay[$dayNum] = $classes->filter(function (TeachingClass $cls) use ($dayNum) {
@@ -68,7 +68,7 @@ class TeachingScheduleController extends Controller
                 }
 
                 return in_array($dayNum, array_map('intval', $cls->teaching_days), true);
-            })->values();
+            })->sortBy(fn (TeachingClass $cls) => $cls->sortKeyForDay($dayNum))->values();
         }
 
         // Deteksi kelas yang belum diatur jadwal hari mengajarnya

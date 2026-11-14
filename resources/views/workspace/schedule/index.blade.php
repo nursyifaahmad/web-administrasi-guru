@@ -93,7 +93,7 @@
                             </div>
                             <div class="mt-2 text-xs font-bold text-amber-200 flex items-center gap-1.5">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                <span>{{ $cls->schedule_info ?: 'Jadwal Jam Reguler' }}</span>
+                                <span>{{ $cls->scheduleForDay($todayDayOfWeek) ?: 'Jadwal Jam Reguler' }}</span>
                             </div>
                             <div class="mt-1 text-[11px] text-slate-300">
                                 Wali Kelas: {{ $cls->homeroom_teacher_name ?: '-' }} &bull; {{ $cls->activeStudents->count() }} Siswa
@@ -214,7 +214,7 @@
                                 {{-- Keterangan Jam Pelajaran --}}
                                 <div class="px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[10.5px] font-bold flex items-center gap-1.5">
                                     <svg class="w-3 h-3 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    <span class="truncate">{{ $cls->schedule_info ?: 'Jam KBM Reguler' }}</span>
+                                    <span class="truncate">{{ $cls->scheduleForDay($dayNum) ?: 'Jam KBM Reguler' }}</span>
                                 </div>
 
                                 {{-- Wali Kelas & Murid --}}
@@ -354,7 +354,7 @@
                                 {{ $cls->subject->name ?? '-' }}
                             </td>
                             <td class="border border-slate-800 px-3 py-1.5">
-                                {{ $cls->schedule_info ?: 'Jam KBM Reguler' }}
+                                {{ $cls->scheduleForDay($dNum) ?: 'Jam KBM Reguler' }}
                             </td>
                             <td class="border border-slate-800 px-3 py-1.5">
                                 {{ $cls->homeroom_teacher_name ?: '-' }}
