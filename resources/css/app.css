@@ -49,6 +49,17 @@ input.no-spinner[type=number] {
     box-shadow: 3px 0 6px -2px rgba(15, 23, 42, 0.08);
 }
 
+/* Active student name cell purple outline highlight in Nilai & Absensi spreadsheets */
+.sticky-col-shadow.name-cell-active,
+.name-cell-active {
+    background-color: #faf5ff !important;
+    color: #581c87 !important;
+    outline: 2px solid #9333ea;
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.28), 3px 0 6px -2px rgba(147, 51, 234, 0.18);
+    z-index: 15;
+}
+
 /* Mobile optimizations: prevent iOS Safari auto-zoom on input focus */
 @media (max-width: 640px) {
     input:not([type="checkbox"]):not([type="radio"]):not(.no-spinner):not([maxlength="1"]),

@@ -491,4 +491,47 @@ class DynamicGradebookAndKktpTest extends TestCase
         $res->assertOk();
         $this->assertEquals(38, StudentGrade::query()->where('teaching_class_id', $class->id)->where('sts_score', 88.0)->count());
     }
+
+    public function test_gradebook_view_includes_purple_active_name_cell_highlight_hooks(): void
+    {
+        SchoolSetting::current();
+
+        $guru = User::query()->create([
+            'name' => 'Guru Bahasa',
+            'email' => 'gurubhs@test.sch.id',
+            'role' => 'guru',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'BIN',
+            'name' => 'Bahasa Indonesia',
+            'default_kktp' => 75,
+        ]);
+
+        $class = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-C',
+            'homeroom_teacher_name' => 'Wali VII-C',
+        ]);
+        $class->ensureDefaultsInitialized();
+
+        $response = $this->actingAs($guru)->get(route('grades.index', $class));
+
+        $response->assertOk();
+        $response->assertSee('activeStudentId', false);
+        $response->assertSee('name-cell-active', false);
+        $response->assertSee('handleTableFocusOut', false);
+        $response->assertSee('selectInput($event, row.student_id)', false);
+    }
 }

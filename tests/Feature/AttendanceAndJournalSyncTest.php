@@ -216,7 +216,8 @@ class AttendanceAndJournalSyncTest extends TestCase
         $gradePage = $this->actingAs($guru)->get(route('grades.index', $tClass));
         $gradePage->assertOk()
             ->assertSee('Simpan Seluruh Daftar Nilai & Perbarui Nilai Akhir (NA)', false)
-            ->assertSee('Simpan Nilai (Ctrl+S)', false)
+            ->assertSee('Simpan Nilai', false)
+            ->assertSee('Ctrl + S', false)
             ->assertSee('Urungkan Perubahan', false)
             ->assertSee('ensureSavedBeforeAction', false)
             ->assertSee('window.confirmWorkspaceDiscard', false);
@@ -388,5 +389,19 @@ class AttendanceAndJournalSyncTest extends TestCase
         $response->assertSee('Otomatis Master Jadwal', false);
         $response->assertSee('scheduleInfo', false);
         $response->assertSee('Terapkan Jam Master', false);
+    }
+
+    public function test_attendance_view_includes_purple_active_name_cell_highlight_hooks(): void
+    {
+        [$guru, $tClass, $students] = $this->createClassWithFiveStudents();
+
+        $response = $this->actingAs($guru)->get(route('attendances.index', $tClass));
+
+        $response->assertOk();
+        $response->assertSee('activeStudentId', false);
+        $response->assertSee('name-cell-active', false);
+        $response->assertSee('handleTableFocusOut', false);
+        $response->assertSee('onCellFocus($el, st.id)', false);
+        $response->assertSee('onCellTap(st.id, d)', false);
     }
 }

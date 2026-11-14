@@ -120,7 +120,7 @@
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 whitespace-nowrap">
                         <span class="font-bold text-white shrink-0 pr-1">Mode HP:</span>
-                        <button type="button" @click="tapStamp = null"
+                        <button type="button" @click="tapStamp = null; activeStudentId = null"
                                 class="shrink-0 px-2.5 py-1 rounded-lg font-bold transition border"
                                 :class="tapStamp === null ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-slate-300 border-slate-700'">
                             Ketik Keyboard
@@ -234,7 +234,7 @@
                             <th class="px-2 py-1.5 text-center bg-rose-50/70 text-rose-900 w-9" title="Alfa (a)">A</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-200">
+                    <tbody class="divide-y divide-slate-200" @focusout="handleTableFocusOut($event, $el)">
                         <template x-if="students.length === 0">
                             <tr>
                                 <td :colspan="7 + displayedDays.length" class="px-5 py-10 text-center text-slate-500">
@@ -243,9 +243,13 @@
                             </tr>
                         </template>
                         <template x-for="(st, rIdx) in students" :key="st.id">
-                            <tr class="hover:bg-slate-50/80">
-                                <td class="sticky left-0 z-10 bg-white px-2 py-1.5 text-center font-bold text-slate-600 border-r border-slate-200" x-text="st.no"></td>
-                                <td class="sticky left-9 sm:left-10 z-10 bg-white px-2.5 sm:px-3 py-1.5 font-bold text-slate-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[210px] sticky-col-shadow" x-text="st.full_name"></td>
+                            <tr :class="activeStudentId === st.id ? 'bg-purple-50/35' : 'hover:bg-slate-50/80'">
+                                <td class="sticky left-0 z-10 px-2 py-1.5 text-center font-bold border-r border-slate-200 transition-colors"
+                                    :class="activeStudentId === st.id ? 'bg-purple-50 text-purple-900' : 'bg-white text-slate-600'"
+                                    x-text="st.no"></td>
+                                <td class="sticky left-9 sm:left-10 z-10 px-2.5 sm:px-3 py-1.5 font-bold border-r border-slate-200 truncate max-w-[135px] sm:max-w-[210px] sticky-col-shadow transition-colors"
+                                    :class="activeStudentId === st.id ? 'name-cell-active' : 'bg-white text-slate-900'"
+                                    x-text="st.full_name"></td>
                                 <td class="px-2 py-1.5 text-center font-semibold text-slate-700 border-r border-slate-200" x-text="st.gender"></td>
 
                                 <template x-for="d in displayedDays" :key="st.id + '-' + d">
@@ -262,7 +266,7 @@
                                                :placeholder="isHoliday(d) ? '-' : ''"
                                                :id="`att-${rIdx}-${d}`"
                                                :value="getCell(st.id, d)"
-                                               @focus="if(!isAdmin && tapStamp === null) $el.select()"
+                                               @focus="onCellFocus($el, st.id)"
                                                @click="if(!isAdmin) onCellTap(st.id, d)"
                                                @keydown="handleKey($event, st.id, rIdx, d)"
                                                @input="handleInput($event, st.id, d)"
@@ -449,6 +453,7 @@ function attendanceSpreadsheet(cfg) {
         filterTeachingDays: Boolean(cfg.filterTeachingDays),
         isAdmin: Boolean(cfg.isAdmin),
         tapStamp: null,
+        activeStudentId: null,
         isDirty: false,
         dirtyCount: 0,
         saving: false,
@@ -536,8 +541,33 @@ function attendanceSpreadsheet(cfg) {
             this.exportModal = true;
         },
 
+        setActiveStudent(studentId) {
+            if (this.isAdmin) return;
+            this.activeStudentId = studentId;
+        },
+
+        onCellFocus(el, studentId) {
+            if (this.isAdmin) return;
+            this.setActiveStudent(studentId);
+            if (this.tapStamp === null && el && typeof el.select === 'function') {
+                try { el.select(); } catch (_) {}
+            }
+        },
+
+        handleTableFocusOut(e, tbodyEl) {
+            if (this.tapStamp !== null) {
+                return;
+            }
+            const nextTarget = e && e.relatedTarget ? e.relatedTarget : null;
+            if (nextTarget && tbodyEl && tbodyEl.contains(nextTarget)) {
+                return;
+            }
+            this.activeStudentId = null;
+        },
+
         onCellTap(studentId, day) {
             if (this.isAdmin) return;
+            this.setActiveStudent(studentId);
             if (this.tapStamp !== null) {
                 this.setCell(studentId, day, this.tapStamp);
             }
@@ -623,10 +653,16 @@ function attendanceSpreadsheet(cfg) {
         focusCell(rIdx, day) {
             if (this.isAdmin) return;
             if (rIdx < 0 || rIdx >= this.students.length || day < 1 || day > this.daysInMonth) return;
+            const st = this.students[rIdx];
+            if (st) {
+                this.setActiveStudent(st.id);
+            }
             const el = document.getElementById(`att-${rIdx}-${day}`);
             if (el) {
                 el.focus();
-                el.select();
+                if (this.tapStamp === null && typeof el.select === 'function') {
+                    try { el.select(); } catch (_) {}
+                }
             }
         },
         handleKey(e, studentId, rIdx, day) {

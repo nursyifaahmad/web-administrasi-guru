@@ -356,7 +356,7 @@
                         @endforeach
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-200">
+                <tbody class="divide-y divide-slate-200" @focusout="handleTableFocusOut($event, $el)">
                     <template x-if="rows.length === 0">
                         <tr>
                             <td :colspan="7 + phColIds.length + ntColIds.length" class="px-5 py-10 text-center text-slate-500">
@@ -365,9 +365,13 @@
                         </tr>
                     </template>
                     <template x-for="(row, rIdx) in rows" :key="row.student_id">
-                        <tr class="hover:bg-slate-50/80">
-                            <td class="sticky left-0 z-10 bg-white px-2 py-1.5 text-center font-bold text-slate-600 border-r border-slate-200" x-text="row.no"></td>
-                            <td class="sticky left-9 sm:left-10 z-10 bg-white px-2.5 sm:px-3 py-1.5 font-bold text-slate-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[220px] sticky-col-shadow" x-text="row.full_name"></td>
+                        <tr :class="activeStudentId === row.student_id ? 'bg-purple-50/35' : 'hover:bg-slate-50/80'">
+                            <td class="sticky left-0 z-10 px-2 py-1.5 text-center font-bold border-r border-slate-200 transition-colors"
+                                :class="activeStudentId === row.student_id ? 'bg-purple-50 text-purple-900' : 'bg-white text-slate-600'"
+                                x-text="row.no"></td>
+                            <td class="sticky left-9 sm:left-10 z-10 px-2.5 sm:px-3 py-1.5 font-bold border-r border-slate-200 truncate max-w-[135px] sm:max-w-[220px] sticky-col-shadow transition-colors"
+                                :class="activeStudentId === row.student_id ? 'name-cell-active' : 'bg-white text-slate-900'"
+                                x-text="row.full_name"></td>
                             <td class="px-2 py-1.5 text-center font-semibold text-slate-700 border-r border-slate-200" x-text="row.gender"></td>
 
                             {{-- Input Dinamis PH --}}
@@ -380,7 +384,7 @@
                                            :disabled="isAdminReadOnly"
                                            @input="markDirty(); checkAbsen1Input(rIdx, `ph-${colId}`, $event.target.value)"
                                            @change="handleAbsen1Change(rIdx, `ph-${colId}`, $event.target.value)"
-                                           @focus="selectInput($event)"
+                                           @focus="selectInput($event, row.student_id)"
                                            @keydown="handleGradeKey($event, rIdx, `ph-${colId}`)"
                                            @paste="handleCellPaste($event, rIdx, `ph-${colId}`)"
                                            placeholder="0"
@@ -415,7 +419,7 @@
                                            :disabled="isAdminReadOnly"
                                            @input="markDirty(); checkAbsen1Input(rIdx, 'att', $event.target.value)"
                                            @change="handleAbsen1Change(rIdx, 'att', $event.target.value)"
-                                           @focus="selectInput($event)"
+                                           @focus="selectInput($event, row.student_id)"
                                            @keydown="handleGradeKey($event, rIdx, 'att')"
                                            @paste="handleCellPaste($event, rIdx, 'att')"
                                            placeholder="0"
@@ -437,7 +441,7 @@
                                            :disabled="isAdminReadOnly"
                                            @input="markDirty(); checkAbsen1Input(rIdx, `nt-${colId}`, $event.target.value)"
                                            @change="handleAbsen1Change(rIdx, `nt-${colId}`, $event.target.value)"
-                                           @focus="selectInput($event)"
+                                           @focus="selectInput($event, row.student_id)"
                                            @keydown="handleGradeKey($event, rIdx, `nt-${colId}`)"
                                            @paste="handleCellPaste($event, rIdx, `nt-${colId}`)"
                                            placeholder="0"
@@ -459,7 +463,7 @@
                                        :disabled="isAdminReadOnly"
                                        @input="markDirty(); checkAbsen1Input(rIdx, 'sts', $event.target.value)"
                                        @change="handleAbsen1Change(rIdx, 'sts', $event.target.value)"
-                                       @focus="selectInput($event)"
+                                       @focus="selectInput($event, row.student_id)"
                                        @keydown="handleGradeKey($event, rIdx, 'sts')"
                                        @paste="handleCellPaste($event, rIdx, 'sts')"
                                        placeholder="0"
@@ -477,7 +481,7 @@
                                        :disabled="isAdminReadOnly"
                                        @input="markDirty(); checkAbsen1Input(rIdx, 'sas', $event.target.value)"
                                        @change="handleAbsen1Change(rIdx, 'sas', $event.target.value)"
-                                       @focus="selectInput($event)"
+                                       @focus="selectInput($event, row.student_id)"
                                        @keydown="handleGradeKey($event, rIdx, 'sas')"
                                        @paste="handleCellPaste($event, rIdx, 'sas')"
                                        placeholder="0"
@@ -972,6 +976,7 @@ function gradebookSpreadsheet(cfg) {
             _openedAt: 0,
         },
         _absen1InputTimer: null,
+        activeStudentId: null,
 
         init() {
             this.savedSnapshot = this.cloneRows(this.rows);
@@ -1309,13 +1314,34 @@ function gradebookSpreadsheet(cfg) {
             this.quickPasteText = '';
             this.quickPastePreviewCount = 0;
         },
-        selectInput(e) {
+        setActiveStudent(studentId) {
+            if (this.isAdminReadOnly) return;
+            this.activeStudentId = studentId;
+        },
+        handleTableFocusOut(e, tbodyEl) {
+            if (this.sameScorePrompt && this.sameScorePrompt.show) {
+                return;
+            }
+            const nextTarget = e && e.relatedTarget ? e.relatedTarget : null;
+            if (nextTarget && tbodyEl && tbodyEl.contains(nextTarget)) {
+                return;
+            }
+            this.activeStudentId = null;
+        },
+        selectInput(e, studentId = null) {
+            if (studentId !== null && studentId !== undefined) {
+                this.setActiveStudent(studentId);
+            }
             if (e && e.target && typeof e.target.select === 'function') {
                 try { e.target.select(); } catch (_) {}
             }
         },
         focusGradeCell(rIdx, colKey) {
             if (rIdx < 0 || rIdx >= this.rows.length) return;
+            const row = this.rows[rIdx];
+            if (row) {
+                this.setActiveStudent(row.student_id);
+            }
             const el = document.getElementById(`grade-${rIdx}-${colKey}`);
             if (el) {
                 el.focus();
@@ -1408,6 +1434,7 @@ function gradebookSpreadsheet(cfg) {
             this.markDirty();
             this.flashPastedCells(affectedKeys);
             this.sameScorePrompt.show = false;
+            this.activeStudentId = null;
 
             this.showPasteToast(
                 'Nilai Disamakan untuk Seluruh Murid',
