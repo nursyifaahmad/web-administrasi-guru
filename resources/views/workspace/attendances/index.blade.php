@@ -33,7 +33,7 @@
 @endif
 
 <div class="space-y-4"
-     :class="(isMonthly && !isAdmin && (isDirty || saving || justSaved)) ? 'pb-24' : ''"
+     :class="(isMonthly && !isAdmin) ? 'pb-24' : ''"
      x-data="attendanceSpreadsheet({
         students: @js($alpineStudents),
         initialCells: @js($alpineCells),
@@ -114,55 +114,6 @@
     </div>
 
     @if($tab === 'monthly')
-        @if($isOwner)
-            {{-- Panduan Kode & Mode Sentuh Cepat HP (Tap-to-Fill) --}}
-            <div class="bg-slate-900 text-slate-200 rounded-2xl px-4 py-3 text-xs space-y-2.5">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 whitespace-nowrap">
-                        <span class="font-bold text-white shrink-0 pr-1">Mode HP:</span>
-                        <button type="button" @click="tapStamp = null; activeStudentId = null"
-                                class="shrink-0 px-2.5 py-1 rounded-lg font-bold transition border"
-                                :class="tapStamp === null ? 'bg-white text-slate-900 border-white' : 'bg-slate-800 text-slate-300 border-slate-700'">
-                            Ketik Keyboard
-                        </button>
-                        <button type="button" @click="tapStamp = '.'"
-                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                                :class="tapStamp === '.' ? 'bg-emerald-500 text-white border-emerald-400 ring-2 ring-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'">
-                            Tap "." Hadir
-                        </button>
-                        <button type="button" @click="tapStamp = 'd'"
-                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                                :class="tapStamp === 'd' ? 'bg-sky-500 text-white border-sky-400 ring-2 ring-sky-300' : 'bg-sky-500/20 text-sky-300 border-sky-400/30'">
-                            Tap "d" Dispen
-                        </button>
-                        <button type="button" @click="tapStamp = 's'"
-                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                                :class="tapStamp === 's' ? 'bg-amber-500 text-white border-amber-400 ring-2 ring-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-400/30'">
-                            Tap "s" Sakit
-                        </button>
-                        <button type="button" @click="tapStamp = 'i'"
-                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                                :class="tapStamp === 'i' ? 'bg-purple-500 text-white border-purple-400 ring-2 ring-purple-300' : 'bg-purple-500/20 text-purple-300 border-purple-400/30'">
-                            Tap "i" Izin
-                        </button>
-                        <button type="button" @click="tapStamp = 'a'"
-                                class="shrink-0 px-2.5 py-1 rounded-lg font-extrabold transition border"
-                                :class="tapStamp === 'a' ? 'bg-rose-500 text-white border-rose-400 ring-2 ring-rose-300' : 'bg-rose-500/20 text-rose-300 border-rose-400/30'">
-                            Tap "a" Alfa
-                        </button>
-                        <button type="button" @click="tapStamp = ''"
-                                class="shrink-0 px-2.5 py-1 rounded-lg font-bold transition border"
-                                :class="tapStamp === '' ? 'bg-slate-600 text-white border-slate-400 ring-2 ring-slate-300' : 'bg-slate-800 text-slate-300 border-slate-700'">
-                            Tap Hapus
-                        </button>
-                    </div>
-                    <div class="text-[11px] text-slate-400">
-                        Tip: Di HP, pilih tombol <strong>Tap</strong> di atas lalu sentuh kotak tanggal murid tanpa perlu membuka keyboard!
-                    </div>
-                </div>
-            </div>
-        @endif
-
         {{-- Spreadsheet Matriks Bulanan --}}
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
             <div class="overflow-x-auto spreadsheet-scroll">
@@ -305,6 +256,12 @@
                 </div>
             </div>
 
+            @if($isOwner)
+                <div class="text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+                    💡 <strong>Mode HP (Tap Cepat):</strong> Ketuk tombol melayang <strong>Mode HP</strong> di pojok layar untuk mengisi absen dengan sentuhan tanpa keyboard (bisa <strong>digeser</strong> ke posisi yang nyaman).
+                </div>
+            @endif
+
             @if(isset($matrix['events_in_month']) && $matrix['events_in_month']->isNotEmpty())
                 <div class="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2 text-[11px]">
                     <span class="font-bold text-slate-800">📌 Agenda Sekolah Bulan Ini:</span>
@@ -435,6 +392,83 @@
         'defaultOrientation' => $tab === 'recap' ? 'portrait' : 'landscape',
         'extraParams' => ['month' => $month, 'year' => $year],
     ])
+
+    @if($tab === 'monthly' && $isOwner)
+        {{-- Draggable Floating Action Button (FAB) Mode HP --}}
+        <div x-ref="modeFab"
+             x-show="!exportModal"
+             x-cloak
+             @click.outside="fabOpen = false"
+             @keydown.escape.window="fabOpen = false"
+             class="fixed z-30 select-none"
+             :class="fabPos === null ? 'bottom-5 right-4 sm:bottom-6 sm:right-6' : ''"
+             :style="fabPos ? `left: ${fabPos.x}px; top: ${fabPos.y}px;` : ''">
+
+            {{-- Speed-Dial Menu Pilihan Kode (Mengembang Adaptif Atas/Bawah & Kiri/Kanan) --}}
+            <div x-show="fabOpen"
+                 x-cloak
+                 x-transition:enter="transition ease-out duration-150"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-100"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="absolute w-max max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-5.5rem)] overflow-y-auto no-scrollbar flex gap-2"
+                 :class="[
+                     fabExpandDown ? 'top-full mt-2.5 flex-col-reverse' : 'bottom-full mb-2.5 flex-col',
+                     fabAlignLeft ? 'left-0 items-start' : 'right-0 items-end'
+                 ]">
+
+                <div class="px-3 py-1.5 rounded-xl bg-slate-900/95 text-slate-200 border border-slate-700/80 shadow-lg text-[10px] font-medium flex items-center gap-2 backdrop-blur-sm">
+                    <span>Geser tombol untuk pindah posisi</span>
+                    <template x-if="fabPos !== null">
+                        <button type="button"
+                                @click="resetFabPosition()"
+                                class="px-2 py-0.5 rounded-md bg-slate-700 hover:bg-slate-600 text-white font-bold transition cursor-pointer">
+                            Reset
+                        </button>
+                    </template>
+                </div>
+
+                <template x-for="opt in tapStampOptions" :key="opt.key">
+                    <button type="button"
+                            @click="selectTapStamp(opt.value)"
+                            class="px-3.5 py-2 rounded-full border shadow-lg text-xs font-extrabold flex items-center gap-2 transition cursor-pointer active:scale-95"
+                            :class="[opt.itemClass, tapStamp === opt.value ? 'ring-2 ring-offset-2 ring-slate-900' : 'opacity-95 hover:opacity-100']">
+                        <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
+                              :class="opt.badgeClass"
+                              x-text="opt.badge"></span>
+                        <span x-text="opt.label"></span>
+                    </button>
+                </template>
+            </div>
+
+            {{-- Tombol Utama FAB (Tap untuk Buka Menu / Tahan & Geser untuk Pindah Posisi) --}}
+            <button type="button"
+                    @pointerdown="onFabPointerDown($event)"
+                    @click="handleFabClick()"
+                    style="touch-action: none;"
+                    :aria-expanded="fabOpen ? 'true' : 'false'"
+                    title="Mode HP: Ketuk untuk pilih kode Tap cepat, atau geser untuk pindah posisi"
+                    class="h-12 px-3.5 rounded-full border shadow-xl flex items-center gap-2 text-xs font-extrabold transition-shadow cursor-grab active:cursor-grabbing"
+                    :class="[activeTapOption.fabClass, fabDragging ? 'scale-105 shadow-2xl opacity-95' : '']">
+                <svg class="w-3.5 h-3.5 opacity-60 shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <circle cx="5" cy="3.5" r="1.2"/><circle cx="11" cy="3.5" r="1.2"/>
+                    <circle cx="5" cy="8" r="1.2"/><circle cx="11" cy="8" r="1.2"/>
+                    <circle cx="5" cy="12.5" r="1.2"/><circle cx="11" cy="12.5" r="1.2"/>
+                </svg>
+                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0"
+                      :class="activeTapOption.fabBadgeClass"
+                      x-text="activeTapOption.badge"></span>
+                <span class="whitespace-nowrap" x-text="tapStamp === null ? 'Mode HP' : ('Tap ' + activeTapOption.shortLabel)"></span>
+                <svg class="w-3.5 h-3.5 opacity-80 transition-transform duration-150 shrink-0"
+                     :class="(fabExpandDown ? !fabOpen : fabOpen) ? 'rotate-180' : ''"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 15l7-7 7 7" />
+                </svg>
+            </button>
+        </div>
+    @endif
 </div>
 
 @push('scripts')
@@ -453,7 +487,93 @@ function attendanceSpreadsheet(cfg) {
         filterTeachingDays: Boolean(cfg.filterTeachingDays),
         isAdmin: Boolean(cfg.isAdmin),
         tapStamp: null,
+        fabOpen: false,
+        fabPos: null,
+        fabDragging: false,
+        fabExpandDown: false,
+        fabAlignLeft: false,
+        _suppressFabClick: false,
+        _fabClickTimer: null,
         activeStudentId: null,
+        tapStampOptions: [
+            {
+                key: 'keyboard',
+                value: null,
+                badge: '⌨',
+                shortLabel: 'Ketik',
+                label: 'Ketik Keyboard',
+                fabClass: 'bg-slate-900 text-white border-slate-700',
+                fabBadgeClass: 'bg-white/15 text-white',
+                itemClass: 'bg-white text-slate-900 border-slate-300',
+                badgeClass: 'bg-slate-100 text-slate-800',
+            },
+            {
+                key: 'clear',
+                value: '',
+                badge: '⌫',
+                shortLabel: 'Hapus',
+                label: 'Tap Hapus',
+                fabClass: 'bg-slate-700 text-white border-slate-500 ring-2 ring-slate-300/70',
+                fabBadgeClass: 'bg-white/15 text-white',
+                itemClass: 'bg-slate-800 text-white border-slate-600',
+                badgeClass: 'bg-slate-600 text-white',
+            },
+            {
+                key: 'a',
+                value: 'a',
+                badge: 'a',
+                shortLabel: 'Alfa',
+                label: 'Tap "a" Alfa',
+                fabClass: 'bg-rose-600 text-white border-rose-400 ring-2 ring-rose-300/70',
+                fabBadgeClass: 'bg-white/20 text-white',
+                itemClass: 'bg-rose-600 text-white border-rose-400',
+                badgeClass: 'bg-white/20 text-white',
+            },
+            {
+                key: 'i',
+                value: 'i',
+                badge: 'i',
+                shortLabel: 'Izin',
+                label: 'Tap "i" Izin',
+                fabClass: 'bg-purple-600 text-white border-purple-400 ring-2 ring-purple-300/70',
+                fabBadgeClass: 'bg-white/20 text-white',
+                itemClass: 'bg-purple-600 text-white border-purple-400',
+                badgeClass: 'bg-white/20 text-white',
+            },
+            {
+                key: 's',
+                value: 's',
+                badge: 's',
+                shortLabel: 'Sakit',
+                label: 'Tap "s" Sakit',
+                fabClass: 'bg-amber-500 text-white border-amber-300 ring-2 ring-amber-200/80',
+                fabBadgeClass: 'bg-white/25 text-white',
+                itemClass: 'bg-amber-500 text-white border-amber-300',
+                badgeClass: 'bg-white/25 text-white',
+            },
+            {
+                key: 'd',
+                value: 'd',
+                badge: 'd',
+                shortLabel: 'Dispen',
+                label: 'Tap "d" Dispen',
+                fabClass: 'bg-sky-600 text-white border-sky-400 ring-2 ring-sky-300/70',
+                fabBadgeClass: 'bg-white/20 text-white',
+                itemClass: 'bg-sky-600 text-white border-sky-400',
+                badgeClass: 'bg-white/20 text-white',
+            },
+            {
+                key: '.',
+                value: '.',
+                badge: '.',
+                shortLabel: 'Hadir',
+                label: 'Tap "." Hadir',
+                fabClass: 'bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-300/70',
+                fabBadgeClass: 'bg-white/20 text-white',
+                itemClass: 'bg-emerald-600 text-white border-emerald-400',
+                badgeClass: 'bg-white/20 text-white',
+            },
+        ],
         isDirty: false,
         dirtyCount: 0,
         saving: false,
@@ -461,6 +581,10 @@ function attendanceSpreadsheet(cfg) {
         _savedTimer: null,
         savedMessage: '',
         exportModal: false,
+
+        get activeTapOption() {
+            return this.tapStampOptions.find((o) => o.value === this.tapStamp) || this.tapStampOptions[0];
+        },
 
         get displayedDays() {
             if (!this.filterTeachingDays || !this.hasTeachingDays) {
@@ -478,6 +602,13 @@ function attendanceSpreadsheet(cfg) {
                 window.__workspaceSaveFn = () => this.saveAll();
 
                 if (this.isMonthly) {
+                    this.initFabPosition();
+                    window.addEventListener('resize', () => {
+                        if (this.fabPos) {
+                            this.fabPos = this.clampFabPosition(this.fabPos.x, this.fabPos.y);
+                        }
+                        this.updateFabMenuPlacement();
+                    });
                     window.addEventListener('keydown', (e) => {
                         if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
                             e.preventDefault();
@@ -488,6 +619,143 @@ function attendanceSpreadsheet(cfg) {
                     });
                 }
             }
+        },
+
+        initFabPosition() {
+            try {
+                const raw = localStorage.getItem('ag_attendance_fab_pos');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
+                        this.$nextTick(() => {
+                            this.fabPos = this.clampFabPosition(parsed.x, parsed.y);
+                            this.updateFabMenuPlacement();
+                        });
+                        return;
+                    }
+                }
+            } catch (_) {}
+            this.$nextTick(() => this.updateFabMenuPlacement());
+        },
+
+        saveFabPosition() {
+            if (!this.fabPos) return;
+            try {
+                localStorage.setItem('ag_attendance_fab_pos', JSON.stringify(this.fabPos));
+            } catch (_) {}
+        },
+
+        clampFabPosition(x, y) {
+            const margin = 12;
+            const el = this.$refs.modeFab;
+            const w = el && el.offsetWidth ? el.offsetWidth : 132;
+            const h = el && el.offsetHeight ? el.offsetHeight : 48;
+            const vw = window.innerWidth || document.documentElement.clientWidth || 390;
+            const vh = window.innerHeight || document.documentElement.clientHeight || 844;
+            const maxX = Math.max(margin, vw - w - margin);
+            const maxY = Math.max(margin, vh - h - margin);
+            return {
+                x: Math.round(Math.min(Math.max(margin, x), maxX)),
+                y: Math.round(Math.min(Math.max(margin, y), maxY)),
+            };
+        },
+
+        updateFabMenuPlacement() {
+            const el = this.$refs.modeFab;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const vw = window.innerWidth || document.documentElement.clientWidth || 390;
+            const vh = window.innerHeight || document.documentElement.clientHeight || 844;
+            const spaceAbove = rect.top;
+            const spaceBelow = vh - rect.bottom;
+            this.fabExpandDown = spaceAbove < 350 && spaceBelow > spaceAbove;
+            this.fabAlignLeft = (rect.left + (rect.width / 2)) < (vw / 2);
+        },
+
+        onFabPointerDown(e) {
+            if (this.isAdmin) return;
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            const el = this.$refs.modeFab;
+            if (!el) return;
+
+            const rect = el.getBoundingClientRect();
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const originLeft = rect.left;
+            const originTop = rect.top;
+            let moved = false;
+
+            const onMove = (moveEvt) => {
+                const dx = moveEvt.clientX - startX;
+                const dy = moveEvt.clientY - startY;
+                if (!moved && Math.hypot(dx, dy) > 8) {
+                    moved = true;
+                    this.fabDragging = true;
+                    this.fabOpen = false;
+                }
+                if (moved) {
+                    this.fabPos = this.clampFabPosition(originLeft + dx, originTop + dy);
+                    this.updateFabMenuPlacement();
+                }
+            };
+
+            const onUp = () => {
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                window.removeEventListener('pointercancel', onUp);
+                this.fabDragging = false;
+                if (moved) {
+                    this._suppressFabClick = true;
+                    clearTimeout(this._fabClickTimer);
+                    this._fabClickTimer = setTimeout(() => {
+                        this._suppressFabClick = false;
+                    }, 120);
+                    this.saveFabPosition();
+                    this.updateFabMenuPlacement();
+                }
+            };
+
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+            window.addEventListener('pointercancel', onUp);
+        },
+
+        handleFabClick() {
+            if (this._suppressFabClick) {
+                this._suppressFabClick = false;
+                return;
+            }
+            this.toggleFab();
+        },
+
+        toggleFab() {
+            this.updateFabMenuPlacement();
+            this.fabOpen = !this.fabOpen;
+        },
+
+        resetFabPosition() {
+            this.fabPos = null;
+            this.fabOpen = false;
+            try {
+                localStorage.removeItem('ag_attendance_fab_pos');
+            } catch (_) {}
+            this.$nextTick(() => this.updateFabMenuPlacement());
+        },
+
+        selectTapStamp(val) {
+            if (this.isAdmin) return;
+            this.tapStamp = val;
+            this.fabOpen = false;
+            if (val === null) {
+                this.activeStudentId = null;
+            }
+            this.$nextTick(() => {
+                if (this.fabPos) {
+                    this.fabPos = this.clampFabPosition(this.fabPos.x, this.fabPos.y);
+                    this.saveFabPosition();
+                }
+                this.updateFabMenuPlacement();
+            });
         },
 
         cloneCells(src) {

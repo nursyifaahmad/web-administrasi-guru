@@ -404,4 +404,32 @@ class AttendanceAndJournalSyncTest extends TestCase
         $response->assertSee('onCellFocus($el, st.id)', false);
         $response->assertSee('onCellTap(st.id, d)', false);
     }
+
+    public function test_attendance_view_replaces_top_mode_hp_banner_with_draggable_fab(): void
+    {
+        [$guru, $tClass, $students] = $this->createClassWithFiveStudents();
+
+        $response = $this->actingAs($guru)->get(route('attendances.index', $tClass));
+
+        $response->assertOk()
+            ->assertDontSee('bg-slate-900 text-slate-200 rounded-2xl px-4 py-3 text-xs space-y-2.5', false)
+            ->assertSee('x-ref="modeFab"', false)
+            ->assertSee('onFabPointerDown($event)', false)
+            ->assertSee('resetFabPosition()', false)
+            ->assertSee('selectTapStamp(', false)
+            ->assertSee('ag_attendance_fab_pos', false)
+            ->assertSee('Mode HP', false);
+
+        $admin = User::query()->create([
+            'name' => 'Admin Monitoring',
+            'email' => 'admin.monitor@sekolah.sch.id',
+            'role' => 'admin',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $adminResponse = $this->actingAs($admin)->get(route('attendances.index', $tClass));
+        $adminResponse->assertOk()
+            ->assertDontSee('x-ref="modeFab"', false);
+    }
 }
