@@ -704,20 +704,35 @@ class TeachingClassController extends Controller
     ): JsonResponse|RedirectResponse {
         $this->authorizeSharingOwner($request, $teachingClass);
 
+        $validated = $request->validate([
+            'anti_screenshot' => ['nullable', 'boolean'],
+        ]);
+
         $newStatus = ! (bool) $teachingClass->is_grade_shared_with_students;
         $slug = $newStatus
             ? ($teachingClass->student_share_slug ?: $teachingClass->generateUniqueStudentShareSlug())
             : $teachingClass->student_share_slug;
 
-        $teachingClass->update([
+        $updateData = [
             'is_grade_shared_with_students' => $newStatus,
             'student_share_slug' => $slug,
             'student_share_enabled_at' => $newStatus ? now() : $teachingClass->student_share_enabled_at,
-        ]);
+        ];
 
-        $msg = $newStatus
-            ? "Sharing Nilai Murid untuk Kelas {$teachingClass->class_name} berhasil DIAKTIFKAN (ON)."
-            : "Sharing Nilai Murid untuk Kelas {$teachingClass->class_name} berhasil DINONAKTIFKAN (OFF).";
+        if ($newStatus) {
+            $useAntiScreenshot = array_key_exists('anti_screenshot', $validated) && $validated['anti_screenshot'] !== null
+                ? (bool) $validated['anti_screenshot']
+                : true;
+            $updateData['is_student_share_anti_screenshot'] = $useAntiScreenshot;
+
+            $msg = $useAntiScreenshot
+                ? "Sharing Nilai Murid untuk Kelas {$teachingClass->class_name} berhasil DIAKTIFKAN (ON) dengan Mode Anti-Screenshot."
+                : "Sharing Nilai Murid untuk Kelas {$teachingClass->class_name} berhasil DIAKTIFKAN (ON) dengan Mode Tampilan Normal (Tanpa Anti-Screenshot).";
+        } else {
+            $msg = "Sharing Nilai Murid untuk Kelas {$teachingClass->class_name} berhasil DINONAKTIFKAN (OFF).";
+        }
+
+        $teachingClass->update($updateData);
 
         if ($request->wantsJson()) {
             return response()->json($this->buildStudentSharingPayload($teachingClass, $shareService, $msg));
@@ -775,6 +790,7 @@ class TeachingClassController extends Controller
         return [
             'status' => 'ok',
             'is_grade_shared_with_students' => (bool) $teachingClass->is_grade_shared_with_students,
+            'is_student_share_anti_screenshot' => (bool) ($teachingClass->is_student_share_anti_screenshot ?? true),
             'student_share_slug' => $teachingClass->student_share_slug,
             'share_url' => $teachingClass->studentShareUrl(),
             'missing_nis_count' => $missingCount,

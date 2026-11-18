@@ -51,22 +51,34 @@
         </form>
     </div>
 
-    {{-- Panel Sharing Nilai Mandiri untuk Murid (Link Slug Unik + Anti-Screenshot) --}}
+    {{-- Panel Sharing Nilai Mandiri untuk Murid (Link Slug Unik + Opsi Anti-Screenshot) --}}
     @php
         $studentShareEnabled = (bool) $teachingClass->is_grade_shared_with_students;
+        $studentAntiSsEnabled = (bool) ($teachingClass->is_student_share_anti_screenshot ?? true);
         $studentShareUrl = $teachingClass->studentShareUrl();
         $missingNis = (int) ($missingNisCount ?? 0);
     @endphp
-    <div class="mb-4 rounded-2xl border p-4 shadow-2xs space-y-3 {{ $studentShareEnabled ? 'bg-sky-50/70 border-sky-200' : 'bg-slate-50 border-slate-200' }}"
+    <div class="mb-4 rounded-2xl border p-4 shadow-2xs space-y-3 transition"
+         :class="enabled ? 'bg-sky-50/70 border-sky-200' : 'bg-slate-50 border-slate-200'"
          x-data="{
+            enabled: @js($studentShareEnabled),
+            antiScreenshot: @js($studentAntiSsEnabled),
+            shareUrl: @js($studentShareUrl ?: ''),
+            slug: @js($teachingClass->student_share_slug ?: ''),
+            missingNisCount: @js($missingNis),
+            className: @js($teachingClass->class_name),
+            subjectName: @js($teachingClass->subject?->name ?? '-'),
+            loading: false,
             copied: false,
-            copyUrl(url) {
-                if (!url) return;
+            shareToastMsg: '',
+            shareConfirmModal: { show: false },
+            copyUrl() {
+                if (!this.shareUrl) return;
                 if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(url);
+                    navigator.clipboard.writeText(this.shareUrl);
                 } else {
                     const tmp = document.createElement('textarea');
-                    tmp.value = url;
+                    tmp.value = this.shareUrl;
                     tmp.style.position = 'fixed';
                     tmp.style.opacity = '0';
                     document.body.appendChild(tmp);
@@ -76,86 +88,157 @@
                 }
                 this.copied = true;
                 setTimeout(() => { this.copied = false; }, 2200);
+            },
+            async sendToggle(payload = null) {
+                if (this.loading) return false;
+                this.loading = true;
+                this.shareToastMsg = '';
+                try {
+                    const headers = {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    };
+                    const opts = { method: 'PATCH', headers: headers };
+                    if (payload !== null) {
+                        headers['Content-Type'] = 'application/json';
+                        opts.body = JSON.stringify(payload);
+                    }
+                    const res = await fetch('{{ route('classes.toggle-student-sharing', $teachingClass) }}', opts);
+                    const data = await res.json();
+                    if (!res.ok) {
+                        alert(data.message || 'Gagal memperbarui status sharing nilai murid.');
+                        return false;
+                    }
+                    this.enabled = Boolean(data.is_grade_shared_with_students);
+                    this.antiScreenshot = Boolean(data.is_student_share_anti_screenshot ?? true);
+                    this.slug = data.student_share_slug || '';
+                    this.shareUrl = data.share_url || '';
+                    this.missingNisCount = Number(data.missing_nis_count || 0);
+                    this.shareToastMsg = data.message || '';
+                    return true;
+                } catch (_) {
+                    alert('Terjadi kesalahan jaringan saat memperbarui status sharing nilai murid.');
+                    return false;
+                } finally {
+                    this.loading = false;
+                }
+            },
+            openConfirmEnable() {
+                if (this.loading) return;
+                this.shareConfirmModal.show = true;
+            },
+            closeConfirmEnable() {
+                if (this.loading) return;
+                this.shareConfirmModal.show = false;
+            },
+            async confirmEnable(useAntiScreenshot) {
+                const ok = await this.sendToggle({ anti_screenshot: Boolean(useAntiScreenshot) });
+                if (ok) {
+                    this.shareConfirmModal.show = false;
+                }
             }
          }">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div class="flex items-start sm:items-center gap-3">
-                <div class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs {{ $studentShareEnabled ? 'bg-sky-600 text-white' : 'bg-slate-700 text-white' }}">
-                    {{ $studentShareEnabled ? '🔗' : '🛡️' }}
+                <div class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs text-white"
+                     :class="enabled ? 'bg-sky-600' : 'bg-slate-700'">
+                    <span x-text="enabled ? '🔗' : '🛡️'">{{ $studentShareEnabled ? '🔗' : '🛡️' }}</span>
                 </div>
                 <div>
                     <div class="flex flex-wrap items-center gap-2">
-                        <span class="text-xs font-bold text-slate-900">Sharing Nilai Mandiri untuk Murid (Link Slug + Anti-Screenshot)</span>
-                        @if($studentShareEnabled)
-                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                ON (Dibagikan ke Murid)
-                            </span>
-                        @else
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-200 text-slate-700 border border-slate-300">
-                                OFF (Belum Dibagikan)
-                            </span>
-                        @endif
+                        <span class="text-xs font-bold text-slate-900">Sharing Nilai Mandiri untuk Murid (Link Slug Unik)</span>
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border"
+                              :class="enabled ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-200 text-slate-700 border-slate-300'">
+                            <span class="w-1.5 h-1.5 rounded-full" :class="enabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
+                            <span x-text="enabled ? 'ON (Dibagikan ke Murid)' : 'OFF (Belum Dibagikan)'">{{ $studentShareEnabled ? 'ON (Dibagikan ke Murid)' : 'OFF (Belum Dibagikan)' }}</span>
+                        </span>
+                        <span x-show="enabled"
+                              x-cloak
+                              class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold border"
+                              :class="antiScreenshot ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-sky-100 text-sky-900 border-sky-300'"
+                              x-text="antiScreenshot ? '🛡️ Mode Anti-Screenshot' : '👁️ Mode Normal (Boleh Screenshot)'">
+                            {{ $studentShareEnabled ? ($studentAntiSsEnabled ? '🛡️ Mode Anti-Screenshot' : '👁️ Mode Normal (Boleh Screenshot)') : '' }}
+                        </span>
                     </div>
                     <p class="text-[11px] text-slate-600 mt-0.5">
-                        @if($studentShareEnabled)
-                            Murid hanya bisa melihat nilainya masing-masing melalui verifikasi <strong>NIS / NISN</strong> pada link slug kelas ini, dilengkapi watermark berjalan &amp; proteksi layar.
-                        @else
-                            Aktifkan tombol di samping bila Anda siap membagikan rincian nilai kelas ini ke murid melalui link slug unik.
-                        @endif
+                        <template x-if="enabled && antiScreenshot">
+                            <span>Murid melihat nilainya via verifikasi <strong>NIS / NISN</strong> pada link slug kelas dengan proteksi <strong>Anti-Screenshot</strong> aktif (untuk ubah mode, matikan OFF lalu aktifkan ON lagi).</span>
+                        </template>
+                        <template x-if="enabled && !antiScreenshot">
+                            <span>Murid melihat nilainya via verifikasi <strong>NIS / NISN</strong> pada link slug kelas dalam <strong>Mode Normal</strong> (bebas screenshot; untuk ubah mode, matikan OFF lalu aktifkan ON lagi).</span>
+                        </template>
+                        <template x-if="!enabled">
+                            <span>Aktifkan tombol di samping bila Anda siap membagikan rincian nilai kelas ini ke murid melalui link slug unik.</span>
+                        </template>
                     </p>
                 </div>
             </div>
 
-            <form method="POST" action="{{ route('classes.toggle-student-sharing', $teachingClass) }}" class="shrink-0">
-                @csrf
-                @method('PATCH')
-                @if($studentShareEnabled)
-                    <button type="submit" class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition shadow-2xs cursor-pointer">
-                        Matikan Sharing Murid (OFF)
-                    </button>
-                @else
-                    <button type="submit" class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 transition shadow-2xs cursor-pointer">
-                        Aktifkan Sharing Murid (ON)
-                    </button>
-                @endif
-            </form>
+            <div class="shrink-0">
+                <button type="button"
+                        x-show="enabled"
+                        x-cloak
+                        :disabled="loading"
+                        @click="sendToggle()"
+                        class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition shadow-2xs disabled:opacity-50 cursor-pointer">
+                    Matikan Sharing Murid (OFF)
+                </button>
+                <button type="button"
+                        x-show="!enabled"
+                        :disabled="loading"
+                        @click="openConfirmEnable()"
+                        class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 transition shadow-2xs disabled:opacity-50 cursor-pointer">
+                    Aktifkan Sharing Murid (ON)
+                </button>
+            </div>
         </div>
 
-        @if($studentShareEnabled && $studentShareUrl)
-            <div class="pt-2.5 border-t border-sky-200/80 flex flex-col lg:flex-row lg:items-center gap-2 text-xs">
-                <div class="flex-1 flex items-center gap-2 min-w-0">
-                    <span class="text-[11px] font-bold text-sky-900 shrink-0">Link Murid:</span>
-                    <input type="text" readonly value="{{ $studentShareUrl }}"
-                           onclick="this.select()"
-                           class="flex-1 min-w-0 rounded-xl border border-sky-200 bg-white px-3 py-1.5 font-mono text-[11px] text-slate-800">
-                </div>
-                <div class="flex flex-wrap items-center gap-1.5 shrink-0">
-                    <button type="button" @click="copyUrl(@js($studentShareUrl))"
-                            class="px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer"
-                            :class="copied ? 'bg-emerald-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'">
-                        <span x-text="copied ? 'Link Tersalin!' : 'Salin Link'"></span>
-                    </button>
-                    <a href="{{ $studentShareUrl }}" target="_blank" rel="noopener"
-                       class="px-3 py-1.5 rounded-xl bg-white border border-sky-300 text-sky-800 hover:bg-sky-100 font-bold text-xs transition">
-                        Buka Pratinjau
-                    </a>
-                    <form method="POST" action="{{ route('classes.regenerate-student-slug', $teachingClass) }}"
-                          onsubmit="return confirm('Buat ulang link slug baru? Link slug lama otomatis tidak dapat diakses lagi oleh murid.')">
-                        @csrf
-                        <button type="submit" class="px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-amber-50 hover:text-amber-900 hover:border-amber-300 font-bold text-xs transition cursor-pointer">
-                            Buat Ulang Link
-                        </button>
-                    </form>
-                </div>
-            </div>
-        @endif
+        <div x-show="shareToastMsg" x-cloak class="rounded-xl bg-emerald-100/80 border border-emerald-300 px-3 py-2 text-[11px] text-emerald-950 font-semibold flex items-center justify-between gap-2">
+            <span x-text="shareToastMsg"></span>
+            <button type="button" @click="shareToastMsg = ''" class="text-emerald-700 hover:text-emerald-950 font-bold cursor-pointer">&times;</button>
+        </div>
 
-        @if($missingNis > 0)
-            <div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 font-semibold">
-                ⚠ Catatan: Ada <strong>{{ $missingNis }}</strong> peserta didik aktif di Rombel ini yang belum memiliki data <strong>NIS / NISN</strong>. Hubungi Admin agar seluruh murid dapat memverifikasi nilai.
+        <div x-show="enabled && shareUrl" x-cloak class="pt-2.5 border-t border-sky-200/80 flex flex-col lg:flex-row lg:items-center gap-2 text-xs">
+            <div class="flex-1 flex items-center gap-2 min-w-0">
+                <span class="text-[11px] font-bold text-sky-900 shrink-0">Link Murid:</span>
+                <input type="text" readonly :value="shareUrl" value="{{ $studentShareUrl }}"
+                       onclick="this.select()"
+                       class="flex-1 min-w-0 rounded-xl border border-sky-200 bg-white px-3 py-1.5 font-mono text-[11px] text-slate-800">
             </div>
-        @endif
+            <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                <button type="button" @click="copyUrl()"
+                        class="px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer"
+                        :class="copied ? 'bg-emerald-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'">
+                    <span x-text="copied ? 'Link Tersalin!' : 'Salin Link'">Salin Link</span>
+                </button>
+                <a :href="shareUrl" target="_blank" rel="noopener"
+                   class="px-3 py-1.5 rounded-xl bg-white border border-sky-300 text-sky-800 hover:bg-sky-100 font-bold text-xs transition">
+                    Buka Pratinjau
+                </a>
+                <form method="POST" action="{{ route('classes.regenerate-student-slug', $teachingClass) }}"
+                      onsubmit="return confirm('Buat ulang link slug baru? Link slug lama otomatis tidak dapat diakses lagi oleh murid.')">
+                    @csrf
+                    <button type="submit" class="px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-amber-50 hover:text-amber-900 hover:border-amber-300 font-bold text-xs transition cursor-pointer">
+                        Buat Ulang Link
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div x-show="missingNisCount > 0" @if($missingNis === 0) x-cloak @endif class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 font-semibold">
+            ⚠ Catatan: Ada <strong x-text="missingNisCount">{{ $missingNis }}</strong> peserta didik aktif di Rombel ini yang belum memiliki data <strong>NIS / NISN</strong>. Hubungi Admin agar seluruh murid dapat memverifikasi nilai.
+        </div>
+
+        @include('partials.student-share-confirm-modal', [
+            'showVar' => 'shareConfirmModal.show',
+            'classLabelExpr' => 'className',
+            'subjectLabelExpr' => 'subjectName',
+            'loadingExpr' => 'loading',
+            'onSelectTrue' => 'confirmEnable(true)',
+            'onSelectFalse' => 'confirmEnable(false)',
+            'onCancel' => 'closeConfirmEnable()',
+        ])
     </div>
 @endif
 

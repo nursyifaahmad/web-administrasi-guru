@@ -171,32 +171,38 @@ class StudentGradeSharingTest extends TestCase
             ->patchJson(route('classes.toggle-student-sharing', $tc))
             ->assertForbidden();
 
-        // Guru pengampu mengaktifkan sharing (ON) via JSON
+        // Guru pengampu mengaktifkan sharing (ON) dengan Anti-Screenshot via JSON
         $onRes = $this->actingAs($f['guru'])
-            ->patchJson(route('classes.toggle-student-sharing', $tc));
+            ->patchJson(route('classes.toggle-student-sharing', $tc), ['anti_screenshot' => true]);
 
         $onRes->assertOk()
             ->assertJsonPath('status', 'ok')
             ->assertJsonPath('is_grade_shared_with_students', true)
+            ->assertJsonPath('is_student_share_anti_screenshot', true)
             ->assertJsonPath('missing_nis_count', 1);
 
         $tc->refresh();
         $firstSlug = $tc->student_share_slug;
         $this->assertNotEmpty($firstSlug);
+        $this->assertTrue((bool) $tc->is_student_share_anti_screenshot);
         $this->assertStringStartsWith('vii-a-mtk-ganjil-', $firstSlug);
         $this->assertNotNull($tc->student_share_enabled_at);
 
-        // Halaman /kelas & Menu 3 Nilai menampilkan kontrol sharing + peringatan murid tanpa NISN
+        // Halaman /kelas & Menu 3 Nilai menampilkan kontrol sharing, modal konfirmasi & peringatan murid tanpa NISN
         $classesView = $this->actingAs($f['guru'])->get(route('classes.index'));
         $classesView->assertOk()
             ->assertSee('Sharing Nilai Murid', false)
             ->assertSee($firstSlug, false)
-            ->assertSee('toggleStudentSharing', false);
+            ->assertSee('toggleStudentSharing', false)
+            ->assertSee('Aktifkan dengan Anti-Screenshot', false)
+            ->assertSee('Aktifkan Tanpa Anti-Screenshot (Mode Normal)', false);
 
         $gradesView = $this->actingAs($f['guru'])->get(route('grades.index', $tc));
         $gradesView->assertOk()
-            ->assertSee('Sharing Nilai Mandiri untuk Murid (Link Slug + Anti-Screenshot)', false)
+            ->assertSee('Sharing Nilai Mandiri untuk Murid (Link Slug Unik)', false)
             ->assertSee($firstSlug, false)
+            ->assertSee('Aktifkan dengan Anti-Screenshot', false)
+            ->assertSee('Aktifkan Tanpa Anti-Screenshot (Mode Normal)', false)
             ->assertSee('1</strong> peserta didik aktif', false);
 
         // Regenerasi link slug memutus slug lama
@@ -339,5 +345,87 @@ class StudentGradeSharingTest extends TestCase
 
         $this->post(route('student-grades.verify', $slug), ['nis_nisn' => '0000000000'])
             ->assertStatus(429);
+    }
+
+    public function test_teacher_can_enable_student_sharing_without_anti_screenshot_and_student_sees_clean_mode(): void
+    {
+        $f = $this->createFixtureClass();
+        $tc = $f['teachingClass'];
+
+        // 1. Guru mengaktifkan sharing tanpa fitur Anti-Screenshot (Mode Normal)
+        $onNormal = $this->actingAs($f['guru'])
+            ->patchJson(route('classes.toggle-student-sharing', $tc), ['anti_screenshot' => false]);
+
+        $onNormal->assertOk()
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('is_grade_shared_with_students', true)
+            ->assertJsonPath('is_student_share_anti_screenshot', false);
+
+        $tc->refresh();
+        $this->assertFalse((bool) $tc->is_student_share_anti_screenshot);
+        $slug = $tc->student_share_slug;
+
+        // Portal Guru (/kelas & Menu 3 Nilai) menampilkan badge Mode Normal
+        $this->actingAs($f['guru'])->get(route('classes.index'))
+            ->assertOk()
+            ->assertSee('Mode Normal', false);
+
+        $this->actingAs($f['guru'])->get(route('grades.index', $tc))
+            ->assertOk()
+            ->assertSee('Mode Normal (Boleh Screenshot)', false);
+
+        // Admin monitoring tetap tidak melihat tombol/modal pengaktifan sharing murid kelas guru lain
+        $this->actingAs($f['admin'])->get(route('grades.index', $tc))
+            ->assertOk()
+            ->assertDontSee('Sharing Nilai Mandiri untuk Murid', false);
+
+        // 2. Halaman gerbang murid tetap mewajibkan verifikasi NIS/NISN tanpa teks Anti-Screenshot
+        $this->get(route('student-grades.show', $slug))
+            ->assertOk()
+            ->assertSee('Verifikasi Identitas Siswa', false)
+            ->assertDontSee('Mode Privasi Anti-Screenshot', false);
+
+        // 3. Siswa 1 login dengan NISN -> nilai langsung terlihat jelas, tetap terisolasi, tanpa anti-screenshot
+        $this->post(route('student-grades.verify', $slug), ['nis_nisn' => '0098120001'])
+            ->assertRedirect(route('student-grades.show', $slug));
+
+        $normalView = $this->get(route('student-grades.show', $slug));
+        $normalView->assertOk();
+        $this->assertStringContainsString('no-store', (string) $normalView->headers->get('Cache-Control'));
+        $this->assertSame('noindex, nofollow', $normalView->headers->get('X-Robots-Tag'));
+
+        $normalView->assertSee('Mode Tampilan Normal (Boleh Screenshot)', false)
+            ->assertSee('Ahmad Fauzan Pratama', false)
+            ->assertSee('88', false)
+            ->assertSee('91', false)
+            ->assertDontSee('Siti Rahmawati Putri', false)
+            ->assertDontSee('0098120002', false)
+            ->assertDontSee('studentGradeShield(', false)
+            ->assertDontSee('Tekan &amp; Tahan untuk Lihat Nilai', false)
+            ->assertDontSee('Intip 8 Detik', false)
+            ->assertDontSee('visibilitychange', false)
+            ->assertDontSee('@media print', false)
+            ->assertDontSee('blur-md', false);
+
+        // 4. Matikan (OFF) lalu nyalakan kembali (ON) dengan Anti-Screenshot -> kembali terproteksi
+        $this->actingAs($f['guru'])
+            ->patchJson(route('classes.toggle-student-sharing', $tc))
+            ->assertOk()
+            ->assertJsonPath('is_grade_shared_with_students', false);
+
+        $this->actingAs($f['guru'])
+            ->patchJson(route('classes.toggle-student-sharing', $tc), ['anti_screenshot' => true])
+            ->assertOk()
+            ->assertJsonPath('is_grade_shared_with_students', true)
+            ->assertJsonPath('is_student_share_anti_screenshot', true);
+
+        // Siswa login ulang ke link aktif -> melihat Mode Anti-Screenshot aktif kembali
+        $this->post(route('student-grades.verify', $slug), ['nis_nisn' => '0098120001'])
+            ->assertRedirect(route('student-grades.show', $slug));
+
+        $this->get(route('student-grades.show', $slug))
+            ->assertOk()
+            ->assertSee('studentGradeShield(', false)
+            ->assertSee('Tekan &amp; Tahan untuk Lihat Nilai', false);
     }
 }

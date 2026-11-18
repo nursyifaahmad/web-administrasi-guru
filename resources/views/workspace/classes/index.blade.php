@@ -139,6 +139,9 @@
         studentSharingMap: @js($classes->filter(fn($c) => (int)$c->teacher_id === (int)auth()->id())->mapWithKeys(fn($c) => [
             (string) $c->id => [
                 'enabled' => (bool) $c->is_grade_shared_with_students,
+                'anti_screenshot' => (bool) ($c->is_student_share_anti_screenshot ?? true),
+                'class_name' => $c->class_name,
+                'subject_name' => $c->subject?->name ?? '-',
                 'slug' => $c->student_share_slug,
                 'share_url' => $c->studentShareUrl(),
                 'missing_nis_count' => (int) ($missingNisBySchoolClass[$c->school_class_id] ?? 0),
@@ -148,6 +151,7 @@
                 'copied' => false,
             ],
         ])),
+        shareConfirmModal: { show: false, classId: '', className: '', subjectName: '', loading: false },
         shareToast: { show: false, message: '', _timer: null },
 
         showShareToast(msg) {
@@ -157,39 +161,84 @@
             this.shareToast._timer = setTimeout(() => { this.shareToast.show = false; }, 3500);
         },
 
-        async _postSharingAction(classId, method, urlKey, confirmMsg = null) {
+        async _postSharingAction(classId, method, urlKey, confirmMsg = null, bodyPayload = null) {
             const state = this.studentSharingMap[String(classId)];
-            if (!state || state.loading) return;
-            if (confirmMsg && !window.confirm(confirmMsg)) return;
+            if (!state || state.loading) return false;
+            if (confirmMsg && !window.confirm(confirmMsg)) return false;
             state.loading = true;
             try {
-                const res = await fetch(state[urlKey], {
-                    method: method,
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                    },
-                });
+                const headers = {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                };
+                const fetchOpts = { method: method, headers: headers };
+                if (bodyPayload !== null) {
+                    headers['Content-Type'] = 'application/json';
+                    fetchOpts.body = JSON.stringify(bodyPayload);
+                }
+
+                const res = await fetch(state[urlKey], fetchOpts);
                 const data = await res.json();
                 if (!res.ok) {
                     alert(data.message || 'Gagal memperbarui status sharing nilai murid.');
-                    return;
+                    return false;
                 }
                 state.enabled = Boolean(data.is_grade_shared_with_students);
+                if (Object.prototype.hasOwnProperty.call(data, 'is_student_share_anti_screenshot')) {
+                    state.anti_screenshot = Boolean(data.is_student_share_anti_screenshot);
+                }
                 state.slug = data.student_share_slug || '';
                 state.share_url = data.share_url || '';
                 state.missing_nis_count = Number(data.missing_nis_count || 0);
                 if (data.message) this.showShareToast(data.message);
+                return true;
             } catch (e) {
                 alert('Terjadi kesalahan jaringan saat memperbarui status sharing nilai murid.');
+                return false;
             } finally {
                 state.loading = false;
             }
         },
 
         toggleStudentSharing(classId) {
+            const state = this.studentSharingMap[String(classId)];
+            if (!state || state.loading) return;
+            if (!state.enabled) {
+                this.openStudentShareConfirm(classId);
+                return;
+            }
             return this._postSharingAction(classId, 'PATCH', 'toggle_url');
+        },
+
+        openStudentShareConfirm(classId) {
+            const state = this.studentSharingMap[String(classId)];
+            if (!state) return;
+            this.shareConfirmModal = {
+                show: true,
+                classId: String(classId),
+                className: state.class_name || '',
+                subjectName: state.subject_name || '',
+                loading: false,
+            };
+        },
+
+        closeStudentShareConfirm() {
+            if (this.shareConfirmModal.loading) return;
+            this.shareConfirmModal.show = false;
+        },
+
+        async confirmEnableStudentSharing(useAntiScreenshot) {
+            const classId = this.shareConfirmModal.classId;
+            if (!classId || this.shareConfirmModal.loading) return;
+            this.shareConfirmModal.loading = true;
+            const ok = await this._postSharingAction(classId, 'PATCH', 'toggle_url', null, {
+                anti_screenshot: Boolean(useAntiScreenshot),
+            });
+            this.shareConfirmModal.loading = false;
+            if (ok) {
+                this.shareConfirmModal.show = false;
+            }
         },
 
         regenerateStudentSlug(classId) {
@@ -496,17 +545,25 @@
                         @if($isOwnClass)
                             @php
                                 $shareEnabled = (bool) $cls->is_grade_shared_with_students;
+                                $antiSsActive = (bool) ($cls->is_student_share_anti_screenshot ?? true);
                                 $missingNis = (int) ($missingNisBySchoolClass[$cls->school_class_id] ?? 0);
                             @endphp
                             <div class="mt-3.5 pt-3 border-t border-slate-100 space-y-2"
-                                 x-data="{ get shareState() { return studentSharingMap['{{ $cls->id }}'] || { enabled: false, slug: '', share_url: '', missing_nis_count: 0, loading: false, copied: false }; } }">
+                                 x-data="{ get shareState() { return studentSharingMap['{{ $cls->id }}'] || { enabled: false, anti_screenshot: true, slug: '', share_url: '', missing_nis_count: 0, loading: false, copied: false }; } }">
                                 <div class="flex items-center justify-between gap-2">
-                                    <div class="flex items-center gap-1.5 min-w-0">
+                                    <div class="flex flex-wrap items-center gap-1.5 min-w-0">
                                         <span class="text-[11px] font-bold text-slate-700 truncate">Sharing Nilai Murid</span>
                                         <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border"
                                               :class="shareState.enabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'">
                                             <span class="w-1.5 h-1.5 rounded-full" :class="shareState.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
                                             <span x-text="shareState.enabled ? 'ON' : 'OFF'">{{ $shareEnabled ? 'ON' : 'OFF' }}</span>
+                                        </span>
+                                        <span x-show="shareState.enabled"
+                                              x-cloak
+                                              class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border"
+                                              :class="shareState.anti_screenshot ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-sky-50 text-sky-800 border-sky-200'"
+                                              x-text="shareState.anti_screenshot ? '🛡️ Anti-SS' : '👁️ Mode Normal'">
+                                            {{ $shareEnabled ? ($antiSsActive ? '🛡️ Anti-SS' : '👁️ Mode Normal') : '' }}
                                         </span>
                                     </div>
 
@@ -1013,6 +1070,17 @@
             </form>
         </div>
     </div>
+
+    {{-- Modal Konfirmasi Mode Anti-Screenshot saat Mengaktifkan Sharing Nilai Murid (ON) --}}
+    @include('partials.student-share-confirm-modal', [
+        'showVar' => 'shareConfirmModal.show',
+        'classLabelExpr' => 'shareConfirmModal.className',
+        'subjectLabelExpr' => 'shareConfirmModal.subjectName',
+        'loadingExpr' => 'shareConfirmModal.loading',
+        'onSelectTrue' => 'confirmEnableStudentSharing(true)',
+        'onSelectFalse' => 'confirmEnableStudentSharing(false)',
+        'onCancel' => 'closeStudentShareConfirm()',
+    ])
 
     {{-- Toast Notifikasi Status / Salin Link Sharing Nilai Murid --}}
     <div x-show="shareToast.show" x-cloak

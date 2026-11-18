@@ -16,7 +16,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    @if($report)
+    @php
+        $antiSs = (bool) ($antiScreenshotEnabled ?? true);
+    @endphp
+    @if($report && $antiSs)
         <style>
             .anti-capture-surface {
                 -webkit-user-select: none !important;
@@ -130,8 +133,12 @@
                 </form>
 
                 <div class="rounded-xl bg-slate-50 border border-slate-200 p-3 text-[11px] text-slate-600 leading-relaxed flex items-start gap-2">
-                    <span class="shrink-0">🛡️</span>
-                    <span>Halaman nilai dilindungi <strong>Mode Privasi Anti-Screenshot</strong> (nilai tertutup blur hingga ditahan, watermark identitas bergerak, &amp; penguncian otomatis bila berpindah layar).</span>
+                    <span class="shrink-0">{{ $antiSs ? '🛡️' : '🔒' }}</span>
+                    @if($antiSs)
+                        <span>Halaman nilai dilindungi <strong>Mode Privasi Anti-Screenshot</strong> (nilai tertutup blur hingga ditahan, watermark identitas bergerak, &amp; penguncian otomatis bila berpindah layar).</span>
+                    @else
+                        <span>Anda hanya dapat melihat rincian nilai pribadi Anda sendiri melalui verifikasi <strong>NIS / NISN</strong> pada halaman ini.</span>
+                    @endif
                 </div>
             </div>
         </div>
@@ -145,59 +152,65 @@
         $maskedNis = $student->nis_nisn ?: '-';
     @endphp
 
-    {{-- Pesan saat user memaksa Print / Save PDF --}}
-    <div class="print-blocked-notice hidden min-h-screen items-center justify-center p-8 text-center bg-white text-slate-900">
-        <div class="max-w-md space-y-2 border-2 border-rose-300 rounded-2xl p-6">
-            <h1 class="text-lg font-extrabold text-rose-700">Pencetakan &amp; Simpan PDF Dinonaktifkan</h1>
-            <p class="text-xs text-slate-600">Demi privasi peserta didik, rincian nilai mandiri hanya dapat dilihat secara langsung pada portal dengan verifikasi NIS/NISN.</p>
+    @if($antiSs)
+        {{-- Pesan saat user memaksa Print / Save PDF --}}
+        <div class="print-blocked-notice hidden min-h-screen items-center justify-center p-8 text-center bg-white text-slate-900">
+            <div class="max-w-md space-y-2 border-2 border-rose-300 rounded-2xl p-6">
+                <h1 class="text-lg font-extrabold text-rose-700">Pencetakan &amp; Simpan PDF Dinonaktifkan</h1>
+                <p class="text-xs text-slate-600">Demi privasi peserta didik, rincian nilai mandiri hanya dapat dilihat secara langsung pada portal dengan verifikasi NIS/NISN.</p>
+            </div>
         </div>
-    </div>
+    @endif
 
-    <div class="grade-protected-root anti-capture-surface relative min-h-screen py-5 px-3 sm:px-6 select-none overflow-x-hidden"
+    <div class="{{ $antiSs ? 'grade-protected-root anti-capture-surface select-none' : '' }} relative min-h-screen py-5 px-3 sm:px-6 overflow-x-hidden"
+         @if($antiSs)
          x-data="studentGradeShield({
             studentName: @js($student->full_name),
             nisNisn: @js($maskedNis),
             classLabel: @js('Kelas ' . $teachingClass->class_name . ' • ' . ($teachingClass->subject?->name ?? '')),
             verifiedAt: @js($verifiedAt ?: now()->format('d/m/Y H:i:s'))
-         })">
+         })"
+         @endif>
 
-        {{-- Lapisan Watermark Diagonal Dinamis (Selalu Ada & Mengikuti Waktu Real-Time) --}}
-        <div class="fixed inset-0 z-40 pointer-events-none overflow-hidden select-none"
-             :class="isRevealed ? 'opacity-[0.16]' : 'opacity-[0.08]'"
-             aria-hidden="true">
-            <div class="w-[140vw] h-[140vh] -ml-[20vw] -mt-[20vh] grid grid-cols-2 sm:grid-cols-3 gap-10 p-6 transition-transform duration-1000 ease-linear"
-                 :style="`transform: rotate(-24deg) translate(${driftX}px, ${driftY}px)`">
-                @for($wm = 0; $wm < 15; $wm++)
-                    <div class="flex flex-col items-center justify-center text-center text-slate-900 font-mono"
-                         style="text-shadow: 0 0 1px rgba(255,255,255,0.65);">
-                        <div class="text-xs sm:text-sm font-extrabold tracking-wide">{{ $student->full_name }}</div>
-                        <div class="text-[11px] font-bold">NIS/NISN: {{ $maskedNis }}</div>
-                        <div class="text-[10px]">{{ $teachingClass->class_name }} &bull; {{ $teachingClass->subject?->code ?: $teachingClass->subject?->name }}</div>
-                        <div class="text-[10px] font-bold" x-text="watermarkClock"></div>
+        @if($antiSs)
+            {{-- Lapisan Watermark Diagonal Dinamis (Selalu Ada & Mengikuti Waktu Real-Time) --}}
+            <div class="fixed inset-0 z-40 pointer-events-none overflow-hidden select-none"
+                 :class="isRevealed ? 'opacity-[0.16]' : 'opacity-[0.08]'"
+                 aria-hidden="true">
+                <div class="w-[140vw] h-[140vh] -ml-[20vw] -mt-[20vh] grid grid-cols-2 sm:grid-cols-3 gap-10 p-6 transition-transform duration-1000 ease-linear"
+                     :style="`transform: rotate(-24deg) translate(${driftX}px, ${driftY}px)`">
+                    @for($wm = 0; $wm < 15; $wm++)
+                        <div class="flex flex-col items-center justify-center text-center text-slate-900 font-mono"
+                             style="text-shadow: 0 0 1px rgba(255,255,255,0.65);">
+                            <div class="text-xs sm:text-sm font-extrabold tracking-wide">{{ $student->full_name }}</div>
+                            <div class="text-[11px] font-bold">NIS/NISN: {{ $maskedNis }}</div>
+                            <div class="text-[10px]">{{ $teachingClass->class_name }} &bull; {{ $teachingClass->subject?->code ?: $teachingClass->subject?->name }}</div>
+                            <div class="text-[10px] font-bold" x-text="watermarkClock"></div>
+                        </div>
+                    @endfor
+                </div>
+            </div>
+
+            {{-- Tirai Privasi Otomatis saat Fokus Layar Hilang / Pindah Aplikasi / Shortcut SS --}}
+            <div x-show="curtainLocked"
+                 x-cloak
+                 class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 text-center text-white">
+                <div class="max-w-sm w-full bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-4 shadow-2xl">
+                    <div class="w-14 h-14 mx-auto rounded-2xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center text-2xl">
+                        🔒
                     </div>
-                @endfor
-            </div>
-        </div>
-
-        {{-- Tirai Privasi Otomatis saat Fokus Layar Hilang / Pindah Aplikasi / Shortcut SS --}}
-        <div x-show="curtainLocked"
-             x-cloak
-             class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 text-center text-white">
-            <div class="max-w-sm w-full bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-4 shadow-2xl">
-                <div class="w-14 h-14 mx-auto rounded-2xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center text-2xl">
-                    🔒
+                    <div class="space-y-1.5">
+                        <h2 class="text-base font-extrabold">Layar Nilai Dikunci Sementara</h2>
+                        <p class="text-xs text-slate-300 leading-relaxed" x-text="curtainReason"></p>
+                    </div>
+                    <button type="button"
+                            @click="unlockCurtain()"
+                            class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer transition">
+                        Saya Kembali ke Halaman Ini
+                    </button>
                 </div>
-                <div class="space-y-1.5">
-                    <h2 class="text-base font-extrabold">Layar Nilai Dikunci Sementara</h2>
-                    <p class="text-xs text-slate-300 leading-relaxed" x-text="curtainReason"></p>
-                </div>
-                <button type="button"
-                        @click="unlockCurtain()"
-                        class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer transition">
-                    Saya Kembali ke Halaman Ini
-                </button>
             </div>
-        </div>
+        @endif
 
         <div class="relative z-10 max-w-4xl mx-auto space-y-4">
             {{-- Kartu Header Identitas Sekolah, Kelas & Siswa --}}
@@ -249,53 +262,62 @@
                             </div>
                         </div>
                     </div>
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold">
-                        <span>🛡️</span>
-                        <span>Anti-Screenshot &amp; Watermark Aktif</span>
-                    </div>
+                    @if($antiSs)
+                        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold">
+                            <span>🛡️</span>
+                            <span>Anti-Screenshot &amp; Watermark Aktif</span>
+                        </div>
+                    @else
+                        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-[11px] font-bold">
+                            <span>✓</span>
+                            <span>Mode Tampilan Normal (Boleh Screenshot)</span>
+                        </div>
+                    @endif
                 </div>
             </div>
 
-            {{-- Panel Kontrol Buka Nilai (Hold-to-Reveal & Intip 8 Detik) --}}
-            <div class="sticky top-2 z-30 bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg border border-emerald-200 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div class="space-y-0.5 text-xs">
-                    <div class="font-extrabold flex items-center gap-2"
-                         :class="isRevealed ? 'text-emerald-700' : 'text-slate-800'">
-                        <span class="w-2.5 h-2.5 rounded-full"
-                              :class="isRevealed ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'"></span>
-                        <span x-text="isRevealed ? (peekSeconds > 0 ? `Nilai Terbuka Sementara (${peekSeconds} detik lagi terkunci)` : 'Nilai Terbuka — Lepas tombol untuk langsung menyembunyikan') : 'Angka Nilai Sedang Disembunyikan (Mode Privasi)'"></span>
+            @if($antiSs)
+                {{-- Panel Kontrol Buka Nilai (Hold-to-Reveal & Intip 8 Detik) --}}
+                <div class="sticky top-2 z-30 bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg border border-emerald-200 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="space-y-0.5 text-xs">
+                        <div class="font-extrabold flex items-center gap-2"
+                             :class="isRevealed ? 'text-emerald-700' : 'text-slate-800'">
+                            <span class="w-2.5 h-2.5 rounded-full"
+                                  :class="isRevealed ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'"></span>
+                            <span x-text="isRevealed ? (peekSeconds > 0 ? `Nilai Terbuka Sementara (${peekSeconds} detik lagi terkunci)` : 'Nilai Terbuka — Lepas tombol untuk langsung menyembunyikan') : 'Angka Nilai Sedang Disembunyikan (Mode Privasi)'"></span>
+                        </div>
+                        <p class="text-[11px] text-slate-500">
+                            Tekan &amp; tahan tombol biru/hijau dengan satu jari, atau gunakan <strong>Intip 8 Detik</strong>. Nilai otomatis buram kembali jika Anda melepas tombol atau berpindah aplikasi.
+                        </p>
                     </div>
-                    <p class="text-[11px] text-slate-500">
-                        Tekan &amp; tahan tombol biru/hijau dengan satu jari, atau gunakan <strong>Intip 8 Detik</strong>. Nilai otomatis buram kembali jika Anda melepas tombol atau berpindah aplikasi.
-                    </p>
+
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                        <button type="button"
+                                @pointerdown.prevent="startHold()"
+                                @pointerup="stopHold()"
+                                @pointercancel="stopHold()"
+                                @mouseleave="stopHold()"
+                                @touchend="stopHold()"
+                                @touchcancel="stopHold()"
+                                @contextmenu.prevent
+                                class="hold-reveal-btn px-4 py-2.5 rounded-xl text-xs font-extrabold shadow-sm transition cursor-pointer flex-1 sm:flex-none text-center"
+                                :class="holding ? 'bg-emerald-700 text-white ring-4 ring-emerald-300/60 scale-[0.99]' : 'bg-emerald-600 hover:bg-emerald-700 text-white'">
+                            <span x-text="holding ? 'Sedang Dibuka (Lepas untuk Blur)' : 'Tekan & Tahan untuk Lihat Nilai'">Tekan &amp; Tahan untuk Lihat Nilai</span>
+                        </button>
+
+                        <button type="button"
+                                @click="togglePeek()"
+                                class="px-3.5 py-2.5 rounded-xl text-xs font-bold border transition cursor-pointer"
+                                :class="peekSeconds > 0 ? 'bg-amber-500 text-white border-amber-500' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'">
+                            <span x-text="peekSeconds > 0 ? `Tutup (${peekSeconds}d)` : 'Intip 8 Detik'">Intip 8 Detik</span>
+                        </button>
+                    </div>
                 </div>
+            @endif
 
-                <div class="flex flex-wrap items-center gap-2 shrink-0">
-                    <button type="button"
-                            @pointerdown.prevent="startHold()"
-                            @pointerup="stopHold()"
-                            @pointercancel="stopHold()"
-                            @mouseleave="stopHold()"
-                            @touchend="stopHold()"
-                            @touchcancel="stopHold()"
-                            @contextmenu.prevent
-                            class="hold-reveal-btn px-4 py-2.5 rounded-xl text-xs font-extrabold shadow-sm transition cursor-pointer flex-1 sm:flex-none text-center"
-                            :class="holding ? 'bg-emerald-700 text-white ring-4 ring-emerald-300/60 scale-[0.99]' : 'bg-emerald-600 hover:bg-emerald-700 text-white'">
-                        <span x-text="holding ? 'Sedang Dibuka (Lepas untuk Blur)' : 'Tekan & Tahan untuk Lihat Nilai'">Tekan &amp; Tahan untuk Lihat Nilai</span>
-                    </button>
-
-                    <button type="button"
-                            @click="togglePeek()"
-                            class="px-3.5 py-2.5 rounded-xl text-xs font-bold border transition cursor-pointer"
-                            :class="peekSeconds > 0 ? 'bg-amber-500 text-white border-amber-500' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'">
-                        <span x-text="peekSeconds > 0 ? `Tutup (${peekSeconds}d)` : 'Intip 8 Detik'">Intip 8 Detik</span>
-                    </button>
-                </div>
-            </div>
-
-            {{-- Kontainer Rincian Nilai (Efek Blur saat Terkunci) --}}
-            <div class="space-y-4 transition-all duration-150"
-                 :class="isRevealed ? 'blur-none opacity-100' : 'blur-md opacity-60 pointer-events-none'">
+            {{-- Kontainer Rincian Nilai --}}
+            <div class="space-y-4 {{ $antiSs ? 'transition-all duration-150' : '' }}"
+                 @if($antiSs) :class="isRevealed ? 'blur-none opacity-100' : 'blur-md opacity-60 pointer-events-none'" @endif>
 
                 {{-- Ringkasan Nilai Akhir (NA), KKTP & Status Ketuntasan --}}
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -464,13 +486,16 @@
             {{-- Footer Privasi --}}
             <div class="text-center text-[11px] text-slate-300/80 px-2 pb-4 leading-relaxed">
                 Halaman ini menampilkan data nilai khusus milik <strong>{{ $student->full_name }}</strong> ({{ $maskedNis }}).
-                Dilarang mengambil atau menyebarkan tangkapan layar tanpa izin guru pengampu.
+                @if($antiSs)
+                    Dilarang mengambil atau menyebarkan tangkapan layar tanpa izin guru pengampu.
+                @endif
             </div>
         </div>
     </div>
 
-    <script>
-        function studentGradeShield(cfg) {
+    @if($antiSs)
+        <script>
+            function studentGradeShield(cfg) {
             return {
                 holding: false,
                 peekSeconds: 0,
@@ -597,14 +622,15 @@
                     this.curtainLocked = true;
                 },
 
-                unlockCurtain() {
-                    this.stopAllReveal();
-                    this.curtainLocked = false;
-                    this.curtainReason = '';
-                }
-            };
-        }
-    </script>
+                    unlockCurtain() {
+                        this.stopAllReveal();
+                        this.curtainLocked = false;
+                        this.curtainReason = '';
+                    }
+                };
+            }
+        </script>
+    @endif
 @endif
 </body>
 </html>

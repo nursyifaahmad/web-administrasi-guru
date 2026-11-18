@@ -61,6 +61,7 @@ class StudentGradePortalController extends Controller
             'slug' => $slug,
             'report' => $report,
             'verifiedAt' => $request->session()->get($this->timeSessionKey($teachingClass->id)),
+            'antiScreenshotEnabled' => (bool) ($teachingClass->is_student_share_anti_screenshot ?? true),
         ]);
     }
 

@@ -25,6 +25,7 @@ class TeachingClass extends Model
         'only_teaching_days',
         'is_grade_shared_with_admin',
         'is_grade_shared_with_students',
+        'is_student_share_anti_screenshot',
         'student_share_slug',
         'student_share_enabled_at',
         'is_archived',
@@ -70,6 +71,7 @@ class TeachingClass extends Model
             'only_teaching_days' => 'boolean',
             'is_grade_shared_with_admin' => 'boolean',
             'is_grade_shared_with_students' => 'boolean',
+            'is_student_share_anti_screenshot' => 'boolean',
             'student_share_enabled_at' => 'datetime',
             'is_archived' => 'boolean',
         ];
