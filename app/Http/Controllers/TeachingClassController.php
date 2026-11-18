@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\ExcelExportImportService;
 use App\Services\GradeCalculationService;
 use App\Services\SchoolScheduleService;
+use App\Services\StudentGradeShareService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -111,11 +112,14 @@ class TeachingClassController extends Controller
 
         $scheduleService = app(SchoolScheduleService::class);
         $scheduleAllocations = $scheduleService->getTeacherClassAllocations($academicYear, $user);
+        $shareService = app(StudentGradeShareService::class);
+        $missingNisBySchoolClass = $shareService->countMissingNisBySchoolClass($classes->pluck('school_class_id'));
 
         return view('workspace.classes.index', [
             'classes' => $classes,
             'schoolClasses' => $schoolClasses,
             'attendanceDaysByClass' => $attendanceDaysByClass,
+            'missingNisBySchoolClass' => $missingNisBySchoolClass,
             'subjects' => Subject::query()->where('is_active', true)->with('kktps')->orderBy('name')->get(),
             'gradeLevels' => $school->gradeLevels(),
             'teachers' => $teachers,
@@ -691,5 +695,90 @@ class TeachingClassController extends Controller
         }
 
         return back()->with('success', "Berhasil mengimpor {$count} data peserta didik dari file Excel.");
+    }
+
+    public function toggleStudentSharing(
+        Request $request,
+        TeachingClass $teachingClass,
+        StudentGradeShareService $shareService
+    ): JsonResponse|RedirectResponse {
+        $this->authorizeSharingOwner($request, $teachingClass);
+
+        $newStatus = ! (bool) $teachingClass->is_grade_shared_with_students;
+        $slug = $newStatus
+            ? ($teachingClass->student_share_slug ?: $teachingClass->generateUniqueStudentShareSlug())
+            : $teachingClass->student_share_slug;
+
+        $teachingClass->update([
+            'is_grade_shared_with_students' => $newStatus,
+            'student_share_slug' => $slug,
+            'student_share_enabled_at' => $newStatus ? now() : $teachingClass->student_share_enabled_at,
+        ]);
+
+        $msg = $newStatus
+            ? "Sharing Nilai Murid untuk Kelas {$teachingClass->class_name} berhasil DIAKTIFKAN (ON)."
+            : "Sharing Nilai Murid untuk Kelas {$teachingClass->class_name} berhasil DINONAKTIFKAN (OFF).";
+
+        if ($request->wantsJson()) {
+            return response()->json($this->buildStudentSharingPayload($teachingClass, $shareService, $msg));
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    public function regenerateStudentShareSlug(
+        Request $request,
+        TeachingClass $teachingClass,
+        StudentGradeShareService $shareService
+    ): JsonResponse|RedirectResponse {
+        $this->authorizeSharingOwner($request, $teachingClass);
+
+        $newSlug = $teachingClass->generateUniqueStudentShareSlug();
+        $teachingClass->update([
+            'student_share_slug' => $newSlug,
+            'student_share_enabled_at' => $teachingClass->is_grade_shared_with_students
+                ? now()
+                : $teachingClass->student_share_enabled_at,
+        ]);
+
+        $msg = "Link slug baru untuk Kelas {$teachingClass->class_name} berhasil dibuat. Link lama otomatis tidak aktif.";
+
+        if ($request->wantsJson()) {
+            return response()->json($this->buildStudentSharingPayload($teachingClass, $shareService, $msg));
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    protected function authorizeSharingOwner(Request $request, TeachingClass $teachingClass): void
+    {
+        $this->authorizeClassAccess($request->user(), $teachingClass);
+
+        abort_unless(
+            (int) $teachingClass->teacher_id === (int) $request->user()->id,
+            403,
+            'Hanya guru pengampu pemilik buku kelas yang berhak mengatur sharing nilai untuk murid.'
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function buildStudentSharingPayload(
+        TeachingClass $teachingClass,
+        StudentGradeShareService $shareService,
+        string $message
+    ): array {
+        $missingMap = $shareService->countMissingNisBySchoolClass([$teachingClass->school_class_id]);
+        $missingCount = (int) ($missingMap[$teachingClass->school_class_id] ?? 0);
+
+        return [
+            'status' => 'ok',
+            'is_grade_shared_with_students' => (bool) $teachingClass->is_grade_shared_with_students,
+            'student_share_slug' => $teachingClass->student_share_slug,
+            'share_url' => $teachingClass->studentShareUrl(),
+            'missing_nis_count' => $missingCount,
+            'message' => $message,
+        ];
     }
 }

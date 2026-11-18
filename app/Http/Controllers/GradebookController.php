@@ -9,6 +9,7 @@ use App\Models\TeachingClass;
 use App\Services\AttendanceJournalSyncService;
 use App\Services\ExcelExportImportService;
 use App\Services\GradeCalculationService;
+use App\Services\StudentGradeShareService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -100,6 +101,12 @@ class GradebookController extends Controller
             $classJournalDates = $attendanceService->getClassAttendanceDateOptions($teachingClass);
         }
 
+        $missingNisCount = 0;
+        if ((int) $teachingClass->teacher_id === (int) $user->id && $teachingClass->school_class_id) {
+            $missingMap = app(StudentGradeShareService::class)->countMissingNisBySchoolClass([$teachingClass->school_class_id]);
+            $missingNisCount = (int) ($missingMap[$teachingClass->school_class_id] ?? 0);
+        }
+
         return view('workspace.grades.index', [
             'teachingClass' => $teachingClass,
             'gradebook' => $gradebook,
@@ -109,6 +116,7 @@ class GradebookController extends Controller
             'isAdminReadOnly' => $isAdminReadOnly,
             'phAbsentMap' => $phAbsentMap,
             'classJournalDates' => $classJournalDates,
+            'missingNisCount' => $missingNisCount,
         ]);
     }
 

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str;
 
 class TeachingClass extends Model
 {
@@ -23,6 +24,9 @@ class TeachingClass extends Model
         'homeroom_teacher_signature',
         'only_teaching_days',
         'is_grade_shared_with_admin',
+        'is_grade_shared_with_students',
+        'student_share_slug',
+        'student_share_enabled_at',
         'is_archived',
     ];
 
@@ -65,6 +69,8 @@ class TeachingClass extends Model
             'teaching_days' => 'array',
             'only_teaching_days' => 'boolean',
             'is_grade_shared_with_admin' => 'boolean',
+            'is_grade_shared_with_students' => 'boolean',
+            'student_share_enabled_at' => 'datetime',
             'is_archived' => 'boolean',
         ];
     }
@@ -271,5 +277,49 @@ class TeachingClass extends Model
                 ['type' => 'NT', 'label' => 'NT 2', 'sort_order' => 2],
             ]);
         }
+    }
+
+    /**
+     * Buat slug publik unik yang mudah dikenali untuk akses lihat nilai mandiri murid.
+     */
+    public function generateUniqueStudentShareSlug(): string
+    {
+        $this->loadMissing(['subject', 'academicYear']);
+
+        $prefix = Str::slug(implode('-', array_filter([
+            $this->class_name,
+            $this->subject?->code ?: $this->subject?->name,
+            $this->academicYear?->semester,
+        ])));
+        $prefix = $prefix !== '' ? Str::limit($prefix, 60, '') : 'kelas';
+
+        do {
+            $candidate = $prefix . '-' . strtolower(Str::random(6));
+        } while (self::query()->where('student_share_slug', $candidate)->where('id', '!=', $this->id)->exists());
+
+        return $candidate;
+    }
+
+    /**
+     * Pastikan buku kelas memiliki student_share_slug yang tersimpan dan kembalikan nilainya.
+     */
+    public function ensureStudentShareSlug(): string
+    {
+        if (empty($this->student_share_slug)) {
+            $this->student_share_slug = $this->generateUniqueStudentShareSlug();
+            $this->save();
+        }
+
+        return $this->student_share_slug;
+    }
+
+    /**
+     * Kembalikan URL publik halaman lihat nilai murid bila slug sudah tersedia.
+     */
+    public function studentShareUrl(): ?string
+    {
+        return ! empty($this->student_share_slug)
+            ? route('student-grades.show', $this->student_share_slug)
+            : null;
     }
 }

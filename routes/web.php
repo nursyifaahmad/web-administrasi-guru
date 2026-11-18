@@ -14,6 +14,7 @@ use App\Http\Controllers\DailyJournalController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\GradebookController;
 use App\Http\Controllers\MasterScheduleController;
+use App\Http\Controllers\StudentGradePortalController;
 use App\Http\Controllers\TeachingClassController;
 use App\Http\Controllers\TeachingModuleController;
 use App\Http\Controllers\TeachingScheduleController;
@@ -38,6 +39,15 @@ Route::middleware('guest')->group(function () {
 
 // Logout (Mendukung POST & GET, tidak dibatasi auth agar jika session kedaluwarsa tetap sukses keluar)
 Route::match(['GET', 'POST'], '/logout', [AuthController::class, 'logout'])->name('logout');
+
+// Portal Publik Lihat Nilai Mandiri Murid (Link Slug Unik + Anti-Screenshot)
+Route::prefix('/nilai-murid')->name('student-grades.')->group(function () {
+    Route::get('/{slug}', [StudentGradePortalController::class, 'show'])->name('show');
+    Route::post('/{slug}/cek', [StudentGradePortalController::class, 'verify'])
+        ->middleware('throttle:20,1')
+        ->name('verify');
+    Route::post('/{slug}/keluar', [StudentGradePortalController::class, 'logoutStudent'])->name('logout');
+});
 
 // Area Terautentikasi (Guru & Admin)
 Route::middleware(['auth', 'workspace'])->group(function () {
@@ -140,6 +150,10 @@ Route::middleware(['auth', 'workspace'])->group(function () {
     Route::delete('/kelas/hapus-massal', [TeachingClassController::class, 'bulkDestroy'])->name('classes.bulk-destroy');
     Route::put('/kelas/{teachingClass}', [TeachingClassController::class, 'update'])->name('classes.update');
     Route::delete('/kelas/{teachingClass}', [TeachingClassController::class, 'destroy'])->name('classes.destroy');
+    Route::patch('/kelas/{teachingClass}/sharing-murid', [TeachingClassController::class, 'toggleStudentSharing'])
+        ->name('classes.toggle-student-sharing');
+    Route::post('/kelas/{teachingClass}/sharing-murid/regenerate-slug', [TeachingClassController::class, 'regenerateStudentShareSlug'])
+        ->name('classes.regenerate-student-slug');
 
     // Pengaturan Buku Kelas & Identitas
     Route::get('/kelas/{teachingClass}/pengaturan', [TeachingClassController::class, 'students'])->name('classes.settings');

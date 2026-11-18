@@ -136,6 +136,95 @@
             return this.allDeletableClasses.filter(c => this.selectedClasses.includes(c.id));
         },
 
+        studentSharingMap: @js($classes->filter(fn($c) => (int)$c->teacher_id === (int)auth()->id())->mapWithKeys(fn($c) => [
+            (string) $c->id => [
+                'enabled' => (bool) $c->is_grade_shared_with_students,
+                'slug' => $c->student_share_slug,
+                'share_url' => $c->studentShareUrl(),
+                'missing_nis_count' => (int) ($missingNisBySchoolClass[$c->school_class_id] ?? 0),
+                'toggle_url' => route('classes.toggle-student-sharing', $c),
+                'regenerate_url' => route('classes.regenerate-student-slug', $c),
+                'loading' => false,
+                'copied' => false,
+            ],
+        ])),
+        shareToast: { show: false, message: '', _timer: null },
+
+        showShareToast(msg) {
+            this.shareToast.message = msg;
+            this.shareToast.show = true;
+            clearTimeout(this.shareToast._timer);
+            this.shareToast._timer = setTimeout(() => { this.shareToast.show = false; }, 3500);
+        },
+
+        async _postSharingAction(classId, method, urlKey, confirmMsg = null) {
+            const state = this.studentSharingMap[String(classId)];
+            if (!state || state.loading) return;
+            if (confirmMsg && !window.confirm(confirmMsg)) return;
+            state.loading = true;
+            try {
+                const res = await fetch(state[urlKey], {
+                    method: method,
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    },
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.message || 'Gagal memperbarui status sharing nilai murid.');
+                    return;
+                }
+                state.enabled = Boolean(data.is_grade_shared_with_students);
+                state.slug = data.student_share_slug || '';
+                state.share_url = data.share_url || '';
+                state.missing_nis_count = Number(data.missing_nis_count || 0);
+                if (data.message) this.showShareToast(data.message);
+            } catch (e) {
+                alert('Terjadi kesalahan jaringan saat memperbarui status sharing nilai murid.');
+            } finally {
+                state.loading = false;
+            }
+        },
+
+        toggleStudentSharing(classId) {
+            return this._postSharingAction(classId, 'PATCH', 'toggle_url');
+        },
+
+        regenerateStudentSlug(classId) {
+            return this._postSharingAction(
+                classId,
+                'POST',
+                'regenerate_url',
+                'Buat link slug baru untuk kelas ini?\n\nLink slug sebelumnya otomatis tidak dapat diakses lagi oleh murid.'
+            );
+        },
+
+        async copyStudentShareUrl(classId) {
+            const state = this.studentSharingMap[String(classId)];
+            if (!state || !state.share_url) return;
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(state.share_url);
+                } else {
+                    const tmp = document.createElement('textarea');
+                    tmp.value = state.share_url;
+                    tmp.style.position = 'fixed';
+                    tmp.style.opacity = '0';
+                    document.body.appendChild(tmp);
+                    tmp.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(tmp);
+                }
+                state.copied = true;
+                this.showShareToast('Link lihat nilai murid disalin: ' + state.share_url);
+                setTimeout(() => { state.copied = false; }, 2200);
+            } catch (_) {
+                alert('Salin manual link berikut: ' + state.share_url);
+            }
+        },
+
         init() {
             this.autoSelectFirstPending();
         }
@@ -403,6 +492,67 @@
                                 <div class="text-[10px] text-amber-700">Rata NA</div>
                             </div>
                         </div>
+
+                        @if($isOwnClass)
+                            @php
+                                $shareEnabled = (bool) $cls->is_grade_shared_with_students;
+                                $missingNis = (int) ($missingNisBySchoolClass[$cls->school_class_id] ?? 0);
+                            @endphp
+                            <div class="mt-3.5 pt-3 border-t border-slate-100 space-y-2"
+                                 x-data="{ get shareState() { return studentSharingMap['{{ $cls->id }}'] || { enabled: false, slug: '', share_url: '', missing_nis_count: 0, loading: false, copied: false }; } }">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <span class="text-[11px] font-bold text-slate-700 truncate">Sharing Nilai Murid</span>
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border"
+                                              :class="shareState.enabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'">
+                                            <span class="w-1.5 h-1.5 rounded-full" :class="shareState.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
+                                            <span x-text="shareState.enabled ? 'ON' : 'OFF'">{{ $shareEnabled ? 'ON' : 'OFF' }}</span>
+                                        </span>
+                                    </div>
+
+                                    <button type="button"
+                                            role="switch"
+                                            :aria-checked="shareState.enabled ? 'true' : 'false'"
+                                            :disabled="shareState.loading"
+                                            @click="toggleStudentSharing('{{ $cls->id }}')"
+                                            title="Aktifkan atau matikan akses lihat nilai mandiri untuk murid di kelas ini"
+                                            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                                            :class="shareState.enabled ? 'bg-emerald-600' : 'bg-slate-300'">
+                                        <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out"
+                                              :class="shareState.enabled ? 'translate-x-4' : 'translate-x-0'"></span>
+                                    </button>
+                                </div>
+
+                                <div x-show="shareState.enabled" x-cloak class="rounded-xl bg-emerald-50/70 border border-emerald-200/90 p-2 space-y-1.5">
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="flex-1 min-w-0 text-[10px] font-mono text-emerald-950 bg-white/90 border border-emerald-200 rounded-lg px-2 py-1 truncate"
+                                             :title="shareState.share_url"
+                                             x-text="shareState.slug ? ('/nilai-murid/' + shareState.slug) : ''">{{ $cls->student_share_slug ? '/nilai-murid/' . $cls->student_share_slug : '' }}</div>
+                                        <button type="button"
+                                                @click="copyStudentShareUrl('{{ $cls->id }}')"
+                                                class="px-2 py-1 rounded-lg text-[10px] font-bold transition shrink-0 cursor-pointer"
+                                                :class="shareState.copied ? 'bg-emerald-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'">
+                                            <span x-text="shareState.copied ? 'Tersalin!' : 'Salin Link'">Salin Link</span>
+                                        </button>
+                                        <a :href="shareState.share_url" target="_blank" rel="noopener"
+                                           title="Buka halaman lihat nilai murid di tab baru"
+                                           class="px-2 py-1 rounded-lg bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-100 text-[10px] font-bold shrink-0">
+                                            Buka
+                                        </a>
+                                        <button type="button"
+                                                @click="regenerateStudentSlug('{{ $cls->id }}')"
+                                                :disabled="shareState.loading"
+                                                title="Buat ulang link slug baru (link lama otomatis nonaktif)"
+                                                class="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-amber-800 hover:border-amber-300 text-[10px] font-bold shrink-0 cursor-pointer">
+                                            Reset
+                                        </button>
+                                    </div>
+                                    <div x-show="shareState.missing_nis_count > 0" class="text-[10px] text-amber-800 font-semibold flex items-center gap-1">
+                                        <span>⚠ <strong x-text="shareState.missing_nis_count">{{ $missingNis }}</strong> murid belum memiliki NIS/NISN di Rombel.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
                     </div>
 
                     {{-- Quick Action Footer --}}
@@ -862,6 +1012,20 @@
                 </div>
             </form>
         </div>
+    </div>
+
+    {{-- Toast Notifikasi Status / Salin Link Sharing Nilai Murid --}}
+    <div x-show="shareToast.show" x-cloak
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-2"
+         class="fixed bottom-5 right-5 z-50 max-w-sm bg-slate-900 text-white rounded-2xl shadow-xl border border-slate-700 px-4 py-3 text-xs flex items-center gap-2.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0"></span>
+        <span class="flex-1 font-semibold leading-snug" x-text="shareToast.message"></span>
+        <button type="button" @click="shareToast.show = false" class="text-slate-400 hover:text-white font-bold cursor-pointer">&times;</button>
     </div>
 </div>
 @endsection
