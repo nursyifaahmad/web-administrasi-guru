@@ -432,4 +432,24 @@ class AttendanceAndJournalSyncTest extends TestCase
         $adminResponse->assertOk()
             ->assertDontSee('x-ref="modeFab"', false);
     }
+
+    public function test_attendance_monthly_and_recap_tables_use_sticky_freeze_panes_headers(): void
+    {
+        [$guru, $tClass] = $this->createClassWithFiveStudents();
+
+        $monthlyRes = $this->actingAs($guru)->get(route('attendances.index', $tClass));
+        $monthlyRes->assertOk()
+            ->assertSee('spreadsheet-scroll spreadsheet-freeze', false)
+            ->assertSee('<thead class="sticky top-0 z-20 sticky-thead-shadow">', false)
+            ->assertSee('sticky left-0 z-30 bg-slate-100', false);
+
+        $recapRes = $this->actingAs($guru)->get(route('attendances.index', [
+            'teachingClass' => $tClass->id,
+            'tab' => 'recap',
+        ]));
+        $recapRes->assertOk()
+            ->assertSee('spreadsheet-scroll spreadsheet-freeze', false)
+            ->assertSee('sticky top-0 z-20 sticky-thead-shadow', false)
+            ->assertSee('sticky left-10 z-30 bg-slate-100', false);
+    }
 }

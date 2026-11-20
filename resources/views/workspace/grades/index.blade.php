@@ -446,16 +446,16 @@
 
     {{-- Tabel Spreadsheet Buku Nilai Dinamis --}}
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div class="overflow-x-auto spreadsheet-scroll">
+        <div class="spreadsheet-scroll spreadsheet-freeze">
             <table class="w-full text-xs border-collapse">
-                <thead>
+                <thead class="sticky top-0 z-20 sticky-thead-shadow">
                     <tr class="bg-slate-100 text-slate-800 uppercase text-[11px] border-b border-slate-300">
-                        <th rowspan="2" class="sticky left-0 z-20 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10">No</th>
-                        <th rowspan="2" class="sticky left-9 sm:left-10 z-20 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[195px] sticky-col-shadow">Nama Lengkap</th>
-                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 w-12">L/P</th>
+                        <th rowspan="2" class="sticky left-0 z-30 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10">No</th>
+                        <th rowspan="2" class="sticky left-9 sm:left-10 z-30 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[195px] sticky-col-shadow">Nama Lengkap</th>
+                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-slate-100 w-12">L/P</th>
 
                         @if($phColumns->count() > 0)
-                            <th colspan="{{ $phColumns->count() }}" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-sky-100/70 text-sky-950">
+                            <th colspan="{{ $phColumns->count() }}" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-sky-100 text-sky-950">
                                 Nilai Harian / Keaktifan / Karakter ({{ rtrim(rtrim(number_format($w->weight_ph, 2), '0'), '.') }}%)
                             </th>
                         @endif
@@ -464,27 +464,27 @@
                             Nilai Kehadiran<br>
                             <span class="text-[10px] font-normal text-emerald-700">({{ rtrim(rtrim(number_format($w->weight_attendance, 2), '0'), '.') }}%)</span>
                             @if($isAutoAtt)
-                                <div class="mt-0.5 text-[9px] font-extrabold text-emerald-800 bg-emerald-100/90 rounded px-1 py-0.25 inline-block normal-case">
+                                <div class="mt-0.5 text-[9px] font-extrabold text-emerald-800 bg-emerald-100 rounded px-1 py-0.25 inline-block normal-case">
                                     Auto &bull; Tol. {{ $tolValue }}x
                                 </div>
                             @endif
                         </th>
 
                         @if($ntColumns->count() > 0)
-                            <th colspan="{{ $ntColumns->count() }}" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-purple-100/70 text-purple-950">
+                            <th colspan="{{ $ntColumns->count() }}" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-purple-100 text-purple-950">
                                 Nilai Tugas ({{ rtrim(rtrim(number_format($w->weight_nt, 2), '0'), '.') }}%)
                             </th>
                         @endif
 
-                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50/70 text-amber-950 w-20">
+                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50 text-amber-950 w-20">
                             Nilai STS<br>
                             <span class="text-[10px] font-normal">({{ rtrim(rtrim(number_format($w->weight_sts, 2), '0'), '.') }}%)</span>
                         </th>
-                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50/70 text-amber-950 w-20">
+                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50 text-amber-950 w-20">
                             Nilai SAS<br>
                             <span class="text-[10px] font-normal">({{ rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.') }}%)</span>
                         </th>
-                        <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-300 bg-slate-200/80 text-slate-900 w-20 font-extrabold">
+                        <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-300 bg-slate-200 text-slate-900 w-20 font-extrabold">
                             NA<br>
                             <span class="text-[10px] font-normal">(Akhir)</span>
                         </th>
@@ -494,7 +494,7 @@
                     </tr>
                     <tr class="bg-slate-50 text-slate-700 text-[11px] border-b border-slate-300">
                         @foreach($phColumns as $col)
-                            <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-sky-50/50 min-w-[78px]">
+                            <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-sky-50 min-w-[78px]">
                                 @if(! $isAdminReadOnly)
                                     <button type="button"
                                             @click="openEditCol(@js([
@@ -549,7 +549,7 @@
                         @endforeach
 
                         @foreach($ntColumns as $col)
-                            <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-purple-50/50 min-w-[68px]">
+                            <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-purple-50 min-w-[68px]">
                                 @if(! $isAdminReadOnly)
                                     <button type="button"
                                             @click="openEditCol(@js([

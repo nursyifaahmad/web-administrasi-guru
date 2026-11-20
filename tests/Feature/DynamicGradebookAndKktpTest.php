@@ -536,6 +536,10 @@ class DynamicGradebookAndKktpTest extends TestCase
         $response->assertSee('name-cell-active', false);
         $response->assertSee('handleTableFocusOut', false);
         $response->assertSee('selectInput($event, row.student_id)', false);
+        $response->assertSee('spreadsheet-scroll spreadsheet-freeze', false);
+        $response->assertSee('<thead class="sticky top-0 z-20 sticky-thead-shadow">', false);
+        $response->assertSee('sticky left-0 z-30 bg-slate-100', false);
+        $response->assertSee('bg-sky-100 text-sky-950', false);
     }
 
     public function test_ph_assessment_date_absent_dispen_confirmation_data_and_null_preservation(): void

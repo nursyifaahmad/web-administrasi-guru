@@ -49,6 +49,27 @@ input.no-spinner[type=number] {
     box-shadow: 3px 0 6px -2px rgba(15, 23, 42, 0.08);
 }
 
+/* Bounded spreadsheet viewport for 2D Freeze Panes (sticky thead + sticky left cols) */
+.spreadsheet-freeze {
+    max-height: 70vh;
+    overflow: auto;
+    scroll-padding-top: 6.75rem;
+    scroll-padding-left: 11rem;
+}
+
+@media (min-width: 640px) {
+    .spreadsheet-freeze {
+        max-height: 72vh;
+        scroll-padding-top: 7.25rem;
+        scroll-padding-left: 15.5rem;
+    }
+}
+
+/* Crisp bottom divider + elevation for frozen 2-row table headers */
+.sticky-thead-shadow {
+    box-shadow: 0 2px 6px -1px rgba(15, 23, 42, 0.10), 0 1px 0 0 #cbd5e1;
+}
+
 /* Active student name cell purple outline highlight in Nilai & Absensi spreadsheets */
 .sticky-col-shadow.name-cell-active,
 .name-cell-active {
