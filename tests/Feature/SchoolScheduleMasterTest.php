@@ -1371,13 +1371,15 @@ class SchoolScheduleMasterTest extends TestCase
         $s->setCellValue('A3', 'SENIN')->setCellValue('B3', '1')->setCellValue('C3', '07.40 - 08.20')->setCellValue('D3', '4');
 
         $s->setCellValue('F1', 'Kode')->setCellValue('G1', 'Nama Guru')->setCellValue('H1', 'Mata Pelajaran');
-        $s->setCellValue('F2', '1')->setCellValue('G2', 'TETI KUSMIYATI, S.Pd., MM')->setCellValue('H2', 'Kep.Sek.');
-        $s->setCellValue('F3', '4')->setCellValue('G3', 'Dra. EEM AMIRAH')->setCellValue('H3', 'B.INDONESIA');
-        $s->setCellValue('F4', '10')->setCellValue('G4', 'TRI MULYANI, S.Pd')->setCellValue('H4', 'B. INGGRIS');
-        $s->setCellValue('F5', '13')->setCellValue('G5', 'SURYATI, S.Pd')->setCellValue('H5', 'B. CIREBON');
-        $s->setCellValue('F6', '14A')->setCellValue('G6', 'ISMAIL, S.Pd. I')->setCellValue('H6', 'a.PAI');
-        $s->setCellValue('F7', '14B')->setCellValue('G7', 'ISMAIL, S.Pd. I')->setCellValue('H7', 'b. B. DAERAH');
-        $s->setCellValue('F8', '24B')->setCellValue('G8', 'TETI OKTAVIANI, S.Pd')->setCellValue('H8', 'B. DAERAH');
+        // Merged 2-row header pada tabel Kode Guru tidak boleh menciptakan guru palsu "KODE / Nama Guru"
+        $s->mergeCells('F1:F2')->mergeCells('G1:G2')->mergeCells('H1:H2');
+        $s->setCellValue('F3', '1')->setCellValue('G3', 'TETI KUSMIYATI, S.Pd., MM')->setCellValue('H3', 'Kep.Sek.');
+        $s->setCellValue('F4', '4')->setCellValue('G4', 'Dra. EEM AMIRAH')->setCellValue('H4', 'B.INDONESIA');
+        $s->setCellValue('F5', '10')->setCellValue('G5', 'TRI MULYANI, S.Pd')->setCellValue('H5', 'B. INGGRIS');
+        $s->setCellValue('F6', '13')->setCellValue('G6', 'SURYATI, S.Pd')->setCellValue('H6', 'B. CIREBON');
+        $s->setCellValue('F7', '14A')->setCellValue('G7', 'ISMAIL, S.Pd. I')->setCellValue('H7', 'a.PAI');
+        $s->setCellValue('F8', '14B')->setCellValue('G8', 'ISMAIL, S.Pd. I')->setCellValue('H8', 'b. B. DAERAH');
+        $s->setCellValue('F9', '24B')->setCellValue('G9', 'TETI OKTAVIANI, S.Pd')->setCellValue('H9', 'B. DAERAH');
 
         // 2. Upload Excel berisi mata pelajaran asing yang belum terdaftar di Master KKTP
         $badSpreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
@@ -1402,6 +1404,8 @@ class SchoolScheduleMasterTest extends TestCase
             $okResp->assertSessionHas('success');
 
             $this->assertSame(4, Subject::query()->count(), 'Import alias dan Kep.Sek. tidak boleh menambah subject baru.');
+            $this->assertDatabaseMissing('teacher_subjects', ['teaching_code_normalized' => 'KODE']);
+            $this->assertDatabaseMissing('users', ['name' => 'Nama Guru']);
             $this->assertDatabaseHas('teacher_subjects', [
                 'teaching_code_normalized' => '1',
                 'subject_id' => null,

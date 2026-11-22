@@ -3880,6 +3880,13 @@ CSV;
             if (str_contains(strtoupper($name), 'NAMA GURU PIKET') || strtoupper($subj) === 'HARI') {
                 break;
             }
+            if (
+                strtoupper($code) === 'KODE'
+                || strtoupper($name) === 'NAMA GURU'
+                || str_contains(strtoupper($subj), 'MATA PELAJARAN')
+            ) {
+                continue;
+            }
             if ($code === '' || $name === '') {
                 continue;
             }
@@ -3913,6 +3920,9 @@ CSV;
 
             if (str_contains(strtoupper($rawDay), 'WALI KELAS') || str_contains(strtoupper($rawDay), 'WAL KELAS')) {
                 break;
+            }
+            if (str_contains(strtoupper($name), 'GURU PIKET') || strtoupper($rawDay) === 'HARI') {
+                continue;
             }
             $day = User::normalizePiketDay($rawDay);
             if ($name === '' || $day === null) {
@@ -3952,6 +3962,14 @@ CSV;
                 if (! empty($result)) {
                     break;
                 }
+                continue;
+            }
+
+            if (
+                strtoupper($name) === 'NAMA GURU'
+                || str_contains(strtoupper($clsRaw), 'WALI KELAS')
+                || str_contains(strtoupper($clsRaw), 'WAL KELAS')
+            ) {
                 continue;
             }
 
