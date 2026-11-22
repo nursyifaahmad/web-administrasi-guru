@@ -6,8 +6,8 @@ use App\Models\AcademicYear;
 use App\Models\ClassStudent;
 use App\Models\DailyJournal;
 use App\Models\SchoolScheduleItem;
-use App\Models\SchoolScheduleTeacher;
 use App\Models\Subject;
+use App\Models\TeacherSubject;
 use App\Models\TeachingClass;
 use App\Models\User;
 use App\Services\AttendanceJournalSyncService;
@@ -322,13 +322,11 @@ class AttendanceAndJournalSyncTest extends TestCase
         [$guru, $tClass, $students] = $this->createClassWithFiveStudents();
         $year = $tClass->academicYear;
 
-        // Buat guru jadwal dengan kode 32
-        $schedTeacher = SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '32',
-            'name' => $guru->name,
-            'subject' => 'Matematika',
+        // Hubungkan kode mengajar 32 pada Master Guru (TeacherSubject)
+        TeacherSubject::query()->create([
             'user_id' => $guru->id,
+            'subject_id' => $tClass->subject_id,
+            'teaching_code' => '32',
         ]);
 
         // Tanggal 2026-11-05 adalah hari Kamis (day_of_week = 4)

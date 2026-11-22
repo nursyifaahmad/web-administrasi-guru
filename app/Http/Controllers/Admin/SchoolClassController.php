@@ -5,13 +5,17 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ClassStudent;
 use App\Models\SchoolClass;
+use App\Models\SchoolScheduleItem;
 use App\Models\SchoolSetting;
+use App\Models\User;
 use App\Services\ExcelExportImportService;
 use App\Services\GradeCalculationService;
+use App\Services\SchoolScheduleService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class SchoolClassController extends Controller
@@ -25,7 +29,7 @@ class SchoolClassController extends Controller
         $gradeFilter = $request->string('grade_level')->trim()->toString() ?: null;
 
         $query = SchoolClass::query()
-            ->with(['academicYear', 'teachingClasses.teacher', 'teachingClasses.subject'])
+            ->with(['academicYear', 'homeroomTeacher', 'teachingClasses.teacher', 'teachingClasses.subject'])
             ->withCount(['students', 'activeStudents', 'teachingClasses'])
             ->where('academic_year_id', $academicYear->id);
 
@@ -35,15 +39,23 @@ class SchoolClassController extends Controller
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('homeroom_teacher_name', 'like', "%{$search}%");
+                    ->orWhere('homeroom_teacher_name', 'like', "%{$search}%")
+                    ->orWhereHas('homeroomTeacher', fn ($tq) => $tq->where('name', 'like', "%{$search}%"));
             });
         }
 
         $classes = $query->orderBy('grade_level')->orderBy('name')->get();
 
+        $masterTeachers = User::query()
+            ->with(['homeroomSchoolClasses' => fn ($q) => $q->where('academic_year_id', $academicYear->id)])
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
         return view('admin.classes.index', [
             'classes' => $classes,
             'gradeLevels' => $school->gradeLevels(),
+            'masterTeachers' => $masterTeachers,
             'filters' => [
                 'q' => $search,
                 'grade_level' => $gradeFilter,
@@ -63,11 +75,27 @@ class SchoolClassController extends Controller
                 'max:60',
                 Rule::unique('school_classes')->where(fn ($q) => $q->where('academic_year_id', $academicYear->id)),
             ],
-            'homeroom_teacher_name' => ['required', 'string', 'max:180'],
+            'homeroom_teacher_id' => ['nullable', 'integer', 'exists:users,id'],
+            'homeroom_teacher_name' => ['nullable', 'string', 'max:180'],
             'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
             'homeroom_teacher_signature_data' => ['nullable', 'string'],
             'homeroom_teacher_signature_file' => ['nullable', 'image', 'max:2048'],
         ]);
+
+        $homeroomTeacher = null;
+        if (! empty($validated['homeroom_teacher_id'])) {
+            $homeroomTeacher = User::query()->findOrFail((int) $validated['homeroom_teacher_id']);
+            $existingHomeroom = SchoolClass::query()
+                ->where('academic_year_id', $academicYear->id)
+                ->where('homeroom_teacher_id', $homeroomTeacher->id)
+                ->first();
+
+            if ($existingHomeroom) {
+                throw ValidationException::withMessages([
+                    'homeroom_teacher_id' => "Bentrok Wali Kelas: {$homeroomTeacher->name} sudah menjadi Wali Kelas di Rombel {$existingHomeroom->name}.",
+                ]);
+            }
+        }
 
         $wkSig = null;
         if ($request->hasFile('homeroom_teacher_signature_file')) {
@@ -80,9 +108,10 @@ class SchoolClassController extends Controller
             'academic_year_id' => $academicYear->id,
             'grade_level' => strtoupper(trim($validated['grade_level'])),
             'name' => trim($validated['name']),
-            'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
-            'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
-            'homeroom_teacher_signature' => $wkSig,
+            'homeroom_teacher_id' => $homeroomTeacher?->id,
+            'homeroom_teacher_name' => $homeroomTeacher?->name ?: (trim((string) ($validated['homeroom_teacher_name'] ?? '')) ?: '-'),
+            'homeroom_teacher_nip' => $homeroomTeacher?->nip ?? ($validated['homeroom_teacher_nip'] ?? null),
+            'homeroom_teacher_signature' => $homeroomTeacher?->signature_data ?? $wkSig,
         ]);
 
         return redirect()
@@ -94,6 +123,7 @@ class SchoolClassController extends Controller
     {
         $schoolClass->load([
             'academicYear',
+            'homeroomTeacher',
             'students',
             'teachingClasses.teacher',
             'teachingClasses.subject',
@@ -133,33 +163,66 @@ class SchoolClassController extends Controller
                 'max:60',
                 Rule::unique('school_classes')->where(fn ($q) => $q->where('academic_year_id', $schoolClass->academic_year_id))->ignore($schoolClass->id),
             ],
-            'homeroom_teacher_name' => ['required', 'string', 'max:180'],
+            'homeroom_teacher_id' => ['nullable', 'integer', 'exists:users,id'],
+            'homeroom_teacher_name' => ['nullable', 'string', 'max:180'],
             'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
             'homeroom_teacher_signature_data' => ['nullable', 'string'],
             'homeroom_teacher_signature_file' => ['nullable', 'image', 'max:2048'],
             'clear_homeroom_signature' => ['nullable', 'boolean'],
         ]);
 
-        $wkSig = $schoolClass->homeroom_teacher_signature;
-        if ($request->boolean('clear_homeroom_signature')) {
-            $wkSig = null;
-        } elseif ($request->hasFile('homeroom_teacher_signature_file')) {
-            $wkSig = $this->uploadedImageToDataUri($request->file('homeroom_teacher_signature_file'));
-        } elseif (! empty($validated['homeroom_teacher_signature_data']) && str_starts_with($validated['homeroom_teacher_signature_data'], 'data:image/')) {
-            $wkSig = $validated['homeroom_teacher_signature_data'];
+        $newName = trim($validated['name']);
+        $updates = [
+            'grade_level' => strtoupper(trim($validated['grade_level'])),
+            'name' => $newName,
+        ];
+
+        // Jika wali kelas diubah secara eksplisit via homeroom_teacher_id, validasi anti-bentrok dan tarik dari Master Guru
+        if ($request->exists('homeroom_teacher_id')) {
+            $targetTeacherId = ! empty($validated['homeroom_teacher_id']) ? (int) $validated['homeroom_teacher_id'] : null;
+            if ($targetTeacherId !== null) {
+                $conflictClass = SchoolClass::query()
+                    ->where('academic_year_id', $schoolClass->academic_year_id)
+                    ->where('homeroom_teacher_id', $targetTeacherId)
+                    ->where('id', '!=', $schoolClass->id)
+                    ->first();
+
+                if ($conflictClass) {
+                    throw ValidationException::withMessages([
+                        'homeroom_teacher_id' => "Bentrok Wali Kelas: guru terpilih sudah menjadi Wali Kelas di Rombel {$conflictClass->name}.",
+                    ]);
+                }
+
+                $teacher = User::query()->findOrFail($targetTeacherId);
+                $updates['homeroom_teacher_id'] = $teacher->id;
+                $updates['homeroom_teacher_name'] = $teacher->name;
+                $updates['homeroom_teacher_nip'] = $teacher->nip;
+                $updates['homeroom_teacher_signature'] = $teacher->signature_data;
+            } else {
+                $updates['homeroom_teacher_id'] = null;
+                $updates['homeroom_teacher_name'] = '-';
+                $updates['homeroom_teacher_nip'] = null;
+                $updates['homeroom_teacher_signature'] = null;
+            }
+        } elseif ($schoolClass->homeroomTeacher) {
+            // Pastikan snapshot tetap identik dengan Master Guru
+            $updates['homeroom_teacher_name'] = $schoolClass->homeroomTeacher->name;
+            $updates['homeroom_teacher_nip'] = $schoolClass->homeroomTeacher->nip;
+            $updates['homeroom_teacher_signature'] = $schoolClass->homeroomTeacher->signature_data;
         }
 
-        $schoolClass->update([
-            'grade_level' => strtoupper(trim($validated['grade_level'])),
-            'name' => trim($validated['name']),
-            'homeroom_teacher_name' => trim($validated['homeroom_teacher_name']),
-            'homeroom_teacher_nip' => $validated['homeroom_teacher_nip'] ?? null,
-            'homeroom_teacher_signature' => $wkSig,
-        ]);
-
+        $schoolClass->update($updates);
         $schoolClass->syncToTeachingClasses();
 
-        return back()->with('success', "Identitas Rombel {$schoolClass->name} & Wali Kelas berhasil diperbarui dan disinkronkan ke seluruh guru.");
+        // Sinkronkan juga class_name pada item jadwal yang tertaut ke rombel ini
+        $normClassCode = SchoolScheduleService::normalizeClassName($newName);
+        if ($normClassCode !== '') {
+            SchoolScheduleItem::query()
+                ->where('school_class_id', $schoolClass->id)
+                ->update(['class_name' => $normClassCode]);
+        }
+
+        return back()->with('success', "Identitas Rombel {$schoolClass->name} berhasil diperbarui dan disinkronkan.");
     }
 
     public function destroy(SchoolClass $schoolClass): RedirectResponse

@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\SchoolScheduleItem;
-use App\Models\SchoolScheduleTeacher;
 use App\Models\Subject;
+use App\Models\TeacherSubject;
 use App\Models\TeachingClass;
 use App\Models\User;
 use App\Services\SchoolScheduleService;
@@ -124,8 +124,9 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertRedirect(route('admin.schedules.master.index'));
         $response->assertSessionHas('status');
 
-        // Check that 21 classes and teachers exist
-        $this->assertDatabaseCount('school_schedule_teachers', 36);
+        // Check that 21 classes and 36 master teaching codes exist
+        $this->assertSame(36, TeacherSubject::query()->whereNotNull('teaching_code_normalized')->count());
+        $this->assertSame(21, SchoolClass::query()->where('academic_year_id', $year->id)->count());
         $conflictCount = SchoolScheduleItem::query()->where('academic_year_id', $year->id)->where('is_conflict', true)->count();
         $this->assertGreaterThan(0, $conflictCount);
     }
@@ -206,11 +207,12 @@ class SchoolScheduleMasterTest extends TestCase
         $service = app(SchoolScheduleService::class);
         $service->importFromWakasekCsv($year);
 
-        // Associate Rudi Indrawan (code 3) with guru user
-        SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $year->id)
-            ->where('code', '3')
-            ->update(['user_id' => $guru->id]);
+        // Pastikan Kode 3 (RUDI INDRAWAN, S.Pd.) otomatis tertaut ke akun Master Guru Rudi Indrawan
+        $this->assertDatabaseHas('school_schedule_items', [
+            'academic_year_id' => $year->id,
+            'teacher_code' => '3',
+            'user_id' => $guru->id,
+        ]);
 
         $response = $this->actingAs($admin)->post(route('admin.schedules.master.sync-classes'), [
             'academic_year_id' => $year->id,
@@ -229,12 +231,6 @@ class SchoolScheduleMasterTest extends TestCase
 
         $service = app(SchoolScheduleService::class);
         $service->importFromWakasekCsv($year);
-
-        // Associate teacher Rudi Indrawan (code 3) with guru
-        SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $year->id)
-            ->where('code', '3')
-            ->update(['user_id' => $guru->id]);
 
         $response = $this->actingAs($guru)->get(route('schedules.main.index'));
         $response->assertOk();
@@ -267,10 +263,14 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertSee('Kode Guru: 32');
         $response->assertDontSee('Total: 0 Jam Pelajaran');
 
-        // Pastikan record SchoolScheduleTeacher otomatis terhubung ke akunnya
-        $this->assertDatabaseHas('school_schedule_teachers', [
+        // Pastikan master kode guru 32 dan slot jadwal otomatis terhubung ke akunnya
+        $this->assertDatabaseHas('teacher_subjects', [
+            'user_id' => $ahmad->id,
+            'teaching_code_normalized' => '32',
+        ]);
+        $this->assertDatabaseHas('school_schedule_items', [
             'academic_year_id' => $year->id,
-            'code' => '32',
+            'teacher_code' => '32',
             'user_id' => $ahmad->id,
         ]);
     }
@@ -297,9 +297,13 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertDontSee('Total: <strong>738 Jam Pelajaran</strong>', false);
 
         // 3. Admin tidak boleh otomatis ditautkan ke Kode Guru 1
-        $this->assertDatabaseMissing('school_schedule_teachers', [
+        $this->assertDatabaseMissing('teacher_subjects', [
+            'user_id' => $admin->id,
+            'teaching_code_normalized' => '1',
+        ]);
+        $this->assertDatabaseMissing('school_schedule_items', [
             'academic_year_id' => $year->id,
-            'code' => '1',
+            'teacher_code' => '1',
             'user_id' => $admin->id,
         ]);
     }
@@ -457,27 +461,27 @@ class SchoolScheduleMasterTest extends TestCase
         $service = app(SchoolScheduleService::class);
         $service->importFromWakasekCsv($year);
 
-        // 1. Verifikasi database: Bu Teti bukan wali kelas, melainkan guru piket hari Rabu
-        $tetiList = SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $year->id)
-            ->whereIn('code', ['24a', '24b'])
+        // 1. Verifikasi database terpusat: Bu Teti bukan wali kelas, melainkan guru piket hari RABU
+        $tetiCodes = TeacherSubject::query()
+            ->with('user')
+            ->whereIn('teaching_code_normalized', ['24A', '24B'])
             ->get();
-        $this->assertNotEmpty($tetiList);
-        foreach ($tetiList as $teti) {
-            $this->assertNull($teti->homeroom_class, 'Bu Teti tidak boleh memiliki homeroom_class RABU');
-            $this->assertSame('RABU', $teti->piket_day, 'Bu Teti harus berstatus guru piket hari RABU');
-        }
+        $this->assertCount(2, $tetiCodes);
+        $tetiUser = $tetiCodes->first()->user;
+        $this->assertNotNull($tetiUser);
+        $this->assertNull($tetiUser->homeroomClassForYear($year->id), 'Bu Teti tidak boleh memiliki tugas wali kelas');
+        $this->assertSame(['RABU'], $tetiUser->piket_days_list, 'Bu Teti harus berstatus guru piket hari RABU');
 
-        // 2. Verifikasi database: Pak Moh. Rifki Firdiansyah wali kelas 9B dan piket Senin
-        $rifki = SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $year->id)
-            ->where('code', '20')
+        // 2. Verifikasi database terpusat: Pak M. Rifki Firdiansyah wali kelas IX-B dan piket SENIN
+        $rifkiTs = TeacherSubject::query()
+            ->with('user')
+            ->where('teaching_code_normalized', '20')
             ->first();
-        $this->assertNotNull($rifki);
-        $this->assertSame('9B', $rifki->homeroom_class);
-        $this->assertSame('SENIN', $rifki->piket_day);
+        $this->assertNotNull($rifkiTs?->user);
+        $this->assertSame('IX-B', $rifkiTs->user->homeroomClassForYear($year->id)?->name);
+        $this->assertSame(['SENIN'], $rifkiTs->user->piket_days_list);
 
-        // 3. Verifikasi getHomeroomList terurut rapi 21 kelas
+        // 3. Verifikasi getHomeroomList terurut rapi 21 kelas dari Master Rombel
         $homeroomList = $service->getHomeroomList($year);
         $this->assertCount(21, $homeroomList);
 
@@ -492,10 +496,10 @@ class SchoolScheduleMasterTest extends TestCase
         // Pastikan tidak ada "RABU" di daftar wali kelas
         $this->assertNotContains('RABU', $actualClasses);
 
-        // 4. Verifikasi UI Master Jadwal Tab Piket
+        // 4. Verifikasi UI Master Jadwal Tab Piket membaca dinamis dari Master Data
         $response = $this->actingAs($guru)->get(route('schedules.main.index', ['tab' => 'piket']));
         $response->assertOk();
-        $response->assertSee('Daftar 21 Wali Kelas (Tingkat VII, VIII, IX)');
+        $response->assertSee('Daftar Wali Kelas (21 Rombel)');
         $response->assertSee('Kelas 7A');
         $response->assertSee('Kelas 9G');
         $response->assertDontSee('Kelas RABU');
@@ -692,20 +696,41 @@ class SchoolScheduleMasterTest extends TestCase
     {
         [$admin, $guru, $year] = $this->createEnvironment();
 
-        SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '1',
+        $mtk = Subject::query()->create(['code' => 'MTK', 'name' => 'MATEMATIKA', 'default_kktp' => 75, 'is_active' => true]);
+        $ipa = Subject::query()->create(['code' => 'IPA', 'name' => 'IPA', 'default_kktp' => 75, 'is_active' => true]);
+
+        $budi = User::query()->create([
             'name' => 'Budi Santoso, S.Pd',
-            'subject' => 'MATEMATIKA',
-            'piket_day' => 'SENIN',
-            'homeroom_class' => '7A',
+            'email' => 'budi.poster@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'piket_days' => ['SENIN'],
+            'password' => bcrypt('password'),
+            'is_active' => true,
         ]);
-        SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '2',
+        $siti = User::query()->create([
             'name' => 'Siti Aminah, M.Pd',
-            'subject' => 'IPA',
-            'homeroom_class' => '8A',
+            'email' => 'siti.poster@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'password' => bcrypt('password'),
+            'is_active' => true,
+        ]);
+
+        TeacherSubject::query()->create(['user_id' => $budi->id, 'subject_id' => $mtk->id, 'teaching_code' => '1']);
+        TeacherSubject::query()->create(['user_id' => $siti->id, 'subject_id' => $ipa->id, 'teaching_code' => '2']);
+
+        SchoolClass::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level' => 'VII',
+            'name' => 'VII-A',
+            'homeroom_teacher_id' => $budi->id,
+            'homeroom_teacher_name' => $budi->name,
+        ]);
+        SchoolClass::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level' => 'VIII',
+            'name' => 'VIII-A',
+            'homeroom_teacher_id' => $siti->id,
+            'homeroom_teacher_name' => $siti->name,
         ]);
 
         // Shift 1 (Pagi): VII & IX
@@ -726,8 +751,9 @@ class SchoolScheduleMasterTest extends TestCase
             'time_range' => '08.00 - 08.40',
             'class_name' => '7A',
             'teacher_code' => '1',
-            'teacher_name' => 'Budi Santoso, S.Pd',
+            'teacher_name' => $budi->name,
             'subject_name' => 'MATEMATIKA',
+            'user_id' => $budi->id,
         ]);
         SchoolScheduleItem::query()->create([
             'academic_year_id' => $year->id,
@@ -737,8 +763,9 @@ class SchoolScheduleMasterTest extends TestCase
             'time_range' => '08.00 - 08.40',
             'class_name' => '9A',
             'teacher_code' => '1',
-            'teacher_name' => 'Budi Santoso, S.Pd',
+            'teacher_name' => $budi->name,
             'subject_name' => 'MATEMATIKA',
+            'user_id' => $budi->id,
         ]);
         SchoolScheduleItem::query()->create([
             'academic_year_id' => $year->id,
@@ -759,8 +786,9 @@ class SchoolScheduleMasterTest extends TestCase
             'time_range' => '12.30 - 13.05',
             'class_name' => '8A',
             'teacher_code' => '2',
-            'teacher_name' => 'Siti Aminah, M.Pd',
+            'teacher_name' => $siti->name,
             'subject_name' => 'IPA',
+            'user_id' => $siti->id,
         ]);
 
         $response = $this->actingAs($admin)->get(route('admin.schedules.master.export'));
@@ -791,12 +819,15 @@ class SchoolScheduleMasterTest extends TestCase
     {
         [$admin, $guru, $year] = $this->createEnvironment();
 
-        SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '5',
+        $pai = Subject::query()->create(['code' => 'PAI', 'name' => 'PAI', 'default_kktp' => 75, 'is_active' => true]);
+        $tohir = User::query()->create([
             'name' => 'Tohir, S.Ag',
-            'subject' => 'PAI',
+            'email' => 'tohir@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'password' => bcrypt('password'),
+            'is_active' => true,
         ]);
+        TeacherSubject::query()->create(['user_id' => $tohir->id, 'subject_id' => $pai->id, 'teaching_code' => '5']);
 
         foreach (['7A', '8A', '9A'] as $idx => $cls) {
             SchoolScheduleItem::query()->create([
@@ -832,13 +863,22 @@ class SchoolScheduleMasterTest extends TestCase
     {
         [$admin, $guru, $year] = $this->createEnvironment();
 
-        SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '1',
+        $mtk = Subject::query()->create(['code' => 'MTK', 'name' => 'MATEMATIKA', 'default_kktp' => 75, 'is_active' => true]);
+        $budi = User::query()->create([
             'name' => 'Budi Santoso, S.Pd',
-            'subject' => 'MATEMATIKA',
-            'piket_day' => 'SENIN',
-            'homeroom_class' => '7A',
+            'email' => 'budi.xls@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'piket_days' => ['SENIN'],
+            'password' => bcrypt('password'),
+            'is_active' => true,
+        ]);
+        TeacherSubject::query()->create(['user_id' => $budi->id, 'subject_id' => $mtk->id, 'teaching_code' => '1']);
+        SchoolClass::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level' => 'VII',
+            'name' => 'VII-A',
+            'homeroom_teacher_id' => $budi->id,
+            'homeroom_teacher_name' => $budi->name,
         ]);
 
         SchoolScheduleItem::query()->create([
@@ -849,6 +889,7 @@ class SchoolScheduleMasterTest extends TestCase
             'time_range' => '08.20 - 09.00',
             'class_name' => '7A',
             'teacher_code' => '1',
+            'user_id' => $budi->id,
         ]);
         SchoolScheduleItem::query()->create([
             'academic_year_id' => $year->id,
@@ -858,6 +899,7 @@ class SchoolScheduleMasterTest extends TestCase
             'time_range' => '12.30 - 13.05',
             'class_name' => '8A',
             'teacher_code' => '1',
+            'user_id' => $budi->id,
         ]);
 
         // 2-Shift Excel export
@@ -926,27 +968,27 @@ class SchoolScheduleMasterTest extends TestCase
     {
         [$admin, $guru, $year] = $this->createEnvironment();
 
-        Subject::query()->create([
-            'name' => 'Penjasorkes',
-            'code' => 'PJOK',
-            'default_kktp' => 75,
+        $mtk = Subject::query()->create(['name' => 'MATEMATIKA', 'code' => 'MTK', 'default_kktp' => 75, 'is_active' => true]);
+        $pjok = Subject::query()->create(['name' => 'Penjasorkes', 'code' => 'PJOK', 'default_kktp' => 75, 'is_active' => true]);
+
+        $budi = User::query()->create([
+            'name' => 'Budi Santoso, S.Pd',
+            'email' => 'budi.rt@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'piket_days' => ['SENIN'],
+            'password' => bcrypt('password'),
             'is_active' => true,
         ]);
 
-        SchoolScheduleTeacher::query()->create([
+        TeacherSubject::query()->create(['user_id' => $budi->id, 'subject_id' => $mtk->id, 'teaching_code' => '1']);
+        TeacherSubject::query()->create(['user_id' => $guru->id, 'subject_id' => $pjok->id, 'teaching_code' => '2']);
+
+        SchoolClass::query()->create([
             'academic_year_id' => $year->id,
-            'code' => '1',
-            'name' => 'Budi Santoso, S.Pd',
-            'subject' => 'MATEMATIKA',
-            'piket_day' => 'SENIN',
-            'homeroom_class' => '7A',
-        ]);
-        SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '2',
-            'name' => $guru->name,
-            'subject' => 'Penjasorkes',
-            'user_id' => $guru->id,
+            'grade_level' => 'VII',
+            'name' => 'VII-A',
+            'homeroom_teacher_id' => $budi->id,
+            'homeroom_teacher_name' => $budi->name,
         ]);
 
         SchoolScheduleItem::query()->create([
@@ -957,6 +999,7 @@ class SchoolScheduleMasterTest extends TestCase
             'time_range' => '08.20 - 09.00',
             'class_name' => '7A',
             'teacher_code' => '1',
+            'user_id' => $budi->id,
         ]);
         SchoolScheduleItem::query()->create([
             'academic_year_id' => $year->id,
@@ -966,6 +1009,7 @@ class SchoolScheduleMasterTest extends TestCase
             'time_range' => '12.30 - 13.05',
             'class_name' => '8A',
             'teacher_code' => '1',
+            'user_id' => $budi->id,
         ]);
 
         // Export -> Edit nilai cell 7A (ganti '1' ke '2') -> Save -> Import ulang dengan sync_to_classes=1
@@ -1026,6 +1070,117 @@ class SchoolScheduleMasterTest extends TestCase
         } finally {
             @unlink($tmpFile);
         }
+    }
+
+    public function test_import_excel_rejects_code_conflict_and_auto_creates_missing_master_teachers(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        $mtk = Subject::query()->create(['name' => 'MATEMATIKA', 'code' => 'MTK', 'default_kktp' => 75, 'is_active' => true]);
+        TeacherSubject::query()->create([
+            'user_id' => $guru->id,
+            'subject_id' => $mtk->id,
+            'teaching_code' => '1',
+        ]);
+
+        // 1. Buat Excel dimana Kode '1' ditulis atas nama GURU BERBEDA -> HARUS DITOLAK
+        $conflictSpreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $conflictSpreadsheet->getActiveSheet();
+        $sheet->setCellValue('A1', 'HARI')->setCellValue('B1', 'JP KE')->setCellValue('C1', 'WAKTU')->setCellValue('D1', 'KELAS VII');
+        $sheet->setCellValue('D2', 'A');
+        $sheet->setCellValue('A3', 'SENIN')->setCellValue('B3', '1')->setCellValue('C3', '07.40 - 08.20')->setCellValue('D3', '1');
+        $sheet->setCellValue('F1', 'Kode')->setCellValue('G1', 'Nama Guru')->setCellValue('H1', 'Mata Pelajaran');
+        $sheet->setCellValue('F2', '1')->setCellValue('G2', 'Guru Penyerobot, S.Pd')->setCellValue('H2', 'MATEMATIKA');
+
+        $conflictTmp = tempnam(sys_get_temp_dir(), 'xlscnf_') . '.xlsx';
+        $validTmp = tempnam(sys_get_temp_dir(), 'xlsok_') . '.xlsx';
+
+        try {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($conflictSpreadsheet))->save($conflictTmp);
+            $conflictUpload = \Illuminate\Http\UploadedFile::fake()->createWithContent(
+                'conflict.xlsx',
+                (string) file_get_contents($conflictTmp)
+            );
+
+            $respConflict = $this->actingAs($admin)->post(route('admin.schedules.master.import'), [
+                'file' => $conflictUpload,
+            ]);
+            $respConflict->assertRedirect();
+            $respConflict->assertSessionHas('error');
+            $this->assertStringContainsString('Bentrok Kode Mengajar', (string) session('error'));
+
+            // 2. Buat Excel dengan kode baru '99' (Guru Baru, Piket KAMIS, Wali Kelas VII-B) -> otomatis masuk Master Guru & Rombel
+            $okSpreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sOk = $okSpreadsheet->getActiveSheet();
+            $sOk->setCellValue('A1', 'HARI')->setCellValue('B1', 'JP KE')->setCellValue('C1', 'WAKTU')->setCellValue('D1', 'KELAS VII');
+            $sOk->setCellValue('D2', 'B');
+            $sOk->setCellValue('A3', 'SENIN')->setCellValue('B3', '1')->setCellValue('C3', '07.40 - 08.20')->setCellValue('D3', '99');
+
+            $sOk->setCellValue('F1', 'Kode')->setCellValue('G1', 'Nama Guru')->setCellValue('H1', 'Mata Pelajaran');
+            $sOk->setCellValue('F2', '99')->setCellValue('G2', 'Guru Impor Otomatis, S.Pd')->setCellValue('H2', 'INFORMATIKA');
+
+            $sOk->setCellValue('F4', 'No')->setCellValue('G4', 'NAMA GURU PIKET')->setCellValue('H4', 'HARI');
+            $sOk->setCellValue('F5', '1')->setCellValue('G5', 'Guru Impor Otomatis, S.Pd')->setCellValue('H5', 'KAMIS');
+
+            $sOk->setCellValue('F7', 'No')->setCellValue('G7', 'NAMA GURU')->setCellValue('H7', 'WALI KELAS');
+            $sOk->setCellValue('F8', '1')->setCellValue('G8', 'Guru Impor Otomatis, S.Pd')->setCellValue('H8', '7B');
+
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($okSpreadsheet))->save($validTmp);
+            $validUpload = \Illuminate\Http\UploadedFile::fake()->createWithContent(
+                'valid_new_teacher.xlsx',
+                (string) file_get_contents($validTmp)
+            );
+
+            $respOk = $this->actingAs($admin)->post(route('admin.schedules.master.import'), [
+                'file' => $validUpload,
+            ]);
+            $respOk->assertRedirect();
+            $respOk->assertSessionHas('success');
+
+            $newTeacher = User::query()->where('name', 'Guru Impor Otomatis, S.Pd')->first();
+            $this->assertNotNull($newTeacher);
+            $this->assertSame(['KAMIS'], $newTeacher->piket_days_list);
+            $this->assertDatabaseHas('teacher_subjects', [
+                'user_id' => $newTeacher->id,
+                'teaching_code_normalized' => '99',
+            ]);
+            $this->assertDatabaseHas('school_classes', [
+                'academic_year_id' => $year->id,
+                'name' => 'VII-B',
+                'homeroom_teacher_id' => $newTeacher->id,
+                'homeroom_teacher_name' => 'Guru Impor Otomatis, S.Pd',
+            ]);
+        } finally {
+            @unlink($conflictTmp);
+            @unlink($validTmp);
+        }
+    }
+
+    public function test_dual_code_teacher_with_piket_appears_once_in_piket_legend_and_excel(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        $pai = Subject::query()->create(['name' => 'PAI', 'code' => 'PAI', 'default_kktp' => 75, 'is_active' => true]);
+        $snd = Subject::query()->create(['name' => 'B. Daerah', 'code' => 'SND', 'default_kktp' => 75, 'is_active' => true]);
+
+        $ismail = User::query()->create([
+            'name' => 'ISMAIL, S.Pd. I',
+            'email' => 'ismail.dual@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'piket_days' => ['SELASA'],
+            'password' => bcrypt('password'),
+            'is_active' => true,
+        ]);
+
+        TeacherSubject::query()->create(['user_id' => $ismail->id, 'subject_id' => $pai->id, 'teaching_code' => '14A']);
+        TeacherSubject::query()->create(['user_id' => $ismail->id, 'subject_id' => $snd->id, 'teaching_code' => '14B']);
+
+        /** @var SchoolScheduleService $service */
+        $service = app(SchoolScheduleService::class);
+        $piketList = $service->getPiketScheduleList();
+
+        $selasaEntries = $piketList->where('piket_day', 'SELASA')->where('name', 'ISMAIL, S.Pd. I');
+        $this->assertCount(1, $selasaEntries);
     }
 
     public function test_import_master_schedule_rejects_invalid_excel_and_denies_guru(): void

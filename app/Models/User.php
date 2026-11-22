@@ -11,6 +11,8 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
+    public const PIKET_DAYS = ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'SABTU'];
+
     protected $fillable = [
         'name',
         'email',
@@ -18,6 +20,7 @@ class User extends Authenticatable
         'role',
         'phone',
         'default_subject',
+        'piket_days',
         'signature_data',
         'is_active',
         'password',
@@ -33,6 +36,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'piket_days' => 'array',
             'is_active' => 'boolean',
         ];
     }
@@ -72,6 +76,76 @@ class User extends Authenticatable
         return $this->belongsToMany(Subject::class, 'teacher_subjects')
             ->withPivot('teaching_code')
             ->withTimestamps();
+    }
+
+    public function homeroomSchoolClasses(): HasMany
+    {
+        return $this->hasMany(SchoolClass::class, 'homeroom_teacher_id');
+    }
+
+    public function homeroomClassForYear(?int $academicYearId = null): ?SchoolClass
+    {
+        $yearId = $academicYearId ?: AcademicYear::active()?->id;
+        if (! $yearId) {
+            return null;
+        }
+
+        if ($this->relationLoaded('homeroomSchoolClasses')) {
+            return $this->homeroomSchoolClasses->firstWhere('academic_year_id', $yearId);
+        }
+
+        return $this->homeroomSchoolClasses()->where('academic_year_id', $yearId)->first();
+    }
+
+    public static function normalizePiketDay(?string $day): ?string
+    {
+        $upper = strtoupper(trim((string) $day));
+        if ($upper === '' || $upper === '-') {
+            return null;
+        }
+        if ($upper === 'JUMAT' || $upper === 'JUM’AT') {
+            $upper = "JUM'AT";
+        }
+
+        return in_array($upper, self::PIKET_DAYS, true) ? $upper : null;
+    }
+
+    /**
+     * @param array<int, mixed>|null $days
+     * @return list<string>
+     */
+    public static function normalizePiketDays(?array $days): array
+    {
+        if (empty($days)) {
+            return [];
+        }
+
+        $clean = [];
+        foreach ($days as $day) {
+            $norm = self::normalizePiketDay(is_string($day) ? $day : (string) $day);
+            if ($norm !== null) {
+                $clean[$norm] = true;
+            }
+        }
+
+        $ordered = [];
+        foreach (self::PIKET_DAYS as $validDay) {
+            if (isset($clean[$validDay])) {
+                $ordered[] = $validDay;
+            }
+        }
+
+        return $ordered;
+    }
+
+    public function getPiketDaysListAttribute(): array
+    {
+        return self::normalizePiketDays(is_array($this->piket_days) ? $this->piket_days : []);
+    }
+
+    public function getPiketDaysStringAttribute(): string
+    {
+        return implode(', ', $this->piket_days_list);
     }
 
     public function getSubjectCodesListAttribute(): array

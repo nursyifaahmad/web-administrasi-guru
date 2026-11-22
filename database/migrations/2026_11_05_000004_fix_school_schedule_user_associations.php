@@ -2,16 +2,21 @@
 
 use App\Models\AcademicYear;
 use App\Models\SchoolScheduleItem;
-use App\Models\SchoolScheduleTeacher;
 use App\Models\User;
 use App\Services\SchoolScheduleService;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasTable('school_schedule_teachers')) {
+            return;
+        }
+
         try {
             // 1. Bersihkan asosiasi user_id akun Admin dari tabel jadwal guru & item
             $adminIds = User::query()
@@ -22,7 +27,7 @@ return new class extends Migration
                 ->all();
 
             if (! empty($adminIds)) {
-                SchoolScheduleTeacher::query()->whereIn('user_id', $adminIds)->update(['user_id' => null]);
+                DB::table('school_schedule_teachers')->whereIn('user_id', $adminIds)->update(['user_id' => null]);
                 SchoolScheduleItem::query()->whereIn('user_id', $adminIds)->update(['user_id' => null]);
             }
 
@@ -37,7 +42,7 @@ return new class extends Migration
 
             $activeYear = AcademicYear::query()->where('is_active', true)->first();
             if ($activeYear) {
-                $teachers = SchoolScheduleTeacher::query()
+                $teachers = DB::table('school_schedule_teachers')
                     ->where('academic_year_id', $activeYear->id)
                     ->get();
 
@@ -66,7 +71,7 @@ return new class extends Migration
                     });
 
                     if ($matched) {
-                        $t->update(['user_id' => $matched->id]);
+                        DB::table('school_schedule_teachers')->where('id', $t->id)->update(['user_id' => $matched->id]);
                         SchoolScheduleItem::query()
                             ->where('academic_year_id', $activeYear->id)
                             ->where('teacher_code', $t->code)

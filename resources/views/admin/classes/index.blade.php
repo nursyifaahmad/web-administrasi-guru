@@ -63,8 +63,13 @@
                                     <span class="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white text-xs font-extrabold">{{ $c->name }}</span>
                                     <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold">Tingkat {{ $c->grade_level }}</span>
                                 </div>
-                                <h3 class="mt-2 text-sm font-bold text-slate-900">Wali Kelas: {{ $c->homeroom_teacher_name }}</h3>
-                                <div class="text-xs text-slate-500">NIP: {{ $c->homeroom_teacher_nip ?: '-' }}</div>
+                                @php
+                                    $wkName = $c->homeroomTeacher?->name ?: ($c->homeroom_teacher_name ?: '-');
+                                    $wkNip = $c->homeroomTeacher?->nip ?: $c->homeroom_teacher_nip;
+                                    $wkSig = $c->homeroomTeacher?->signature_data ?: $c->homeroom_teacher_signature;
+                                @endphp
+                                <h3 class="mt-2 text-sm font-bold text-slate-900">Wali Kelas: {{ $wkName }}</h3>
+                                <div class="text-xs text-slate-500">NIP: {{ $wkNip ?: '-' }}</div>
                             </div>
                             <span class="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-extrabold shrink-0">
                                 {{ $c->active_students_count }} Murid
@@ -74,7 +79,7 @@
                         {{-- Status TTD Digital Wali Kelas --}}
                         <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
                             <span class="text-slate-500">TTD Digital Wali Kelas:</span>
-                            @if(!empty($c->homeroom_teacher_signature))
+                            @if(!empty($wkSig))
                                 <span class="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">Tersedia</span>
                             @else
                                 <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-semibold">Belum Ada</span>
@@ -150,24 +155,20 @@
                     </div>
                 </div>
 
-                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-                    <div class="font-bold text-slate-800">Identitas Wali Kelas (Otomatis tercetak di PDF & Excel semua guru)</div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-1">Nama Lengkap & Gelar Wali Kelas *</label>
-                            <input type="text" name="homeroom_teacher_name" required placeholder="Contoh: Dra. Ratna Sari Dewi"
-                                   class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2">
-                        </div>
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-1">NIP Wali Kelas</label>
-                            <input type="text" name="homeroom_teacher_nip" placeholder="19750618 200501 2 007"
-                                   class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2">
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Upload File Tanda Tangan Wali Kelas (Opsional, PNG/JPG)</label>
-                        <input type="file" name="homeroom_teacher_signature_file" accept="image/*" class="w-full text-xs">
-                    </div>
+                <div class="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2">
+                    <div class="font-bold text-slate-800">Wali Kelas (Pilih dari Master Guru)</div>
+                    <select name="homeroom_teacher_id" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-semibold">
+                        <option value="">-- Atur Nanti Lewat Master Guru --</option>
+                        @foreach($masterTeachers as $mt)
+                            @php $assignedSc = $mt->homeroomSchoolClasses->first(); @endphp
+                            <option value="{{ $mt->id }}" @disabled($assignedSc !== null)>
+                                {{ $mt->name }} {{ $mt->teaching_codes_string ? '[Kode ' . $mt->teaching_codes_string . ']' : '' }} {{ $assignedSc ? '— Sudah Wali ' . $assignedSc->name : '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <p class="text-[11px] text-slate-500">
+                        Nama, NIP, dan Tanda Tangan Digital wali kelas otomatis diambil dari Data Master Guru dan dapat diubah terpusat melalui menu <strong>Data Master Guru</strong>.
+                    </p>
                 </div>
 
                 <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">

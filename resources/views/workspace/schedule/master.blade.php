@@ -355,40 +355,40 @@
 
     {{-- TAB 3: GURU PIKET & WALI KELAS --}}
     <div x-show="tab === 'piket'" class="space-y-5" style="display: none;">
-        {{-- Jadwal Guru Piket Harian --}}
+        {{-- Jadwal Guru Piket Harian (Bersumber Dinamis dari Data Master Guru) --}}
         <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
             <h3 class="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-2">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                 <span>Jadwal Guru Piket Harian (Senin s.d. Sabtu)</span>
             </h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                @php
-                    $piketList = [
-                        'SENIN' => 'MOH. RIFKI FIRDIANSYAH, S.Pd',
-                        'SELASA' => 'ISMAIL, S.Pd. I',
-                        'RABU' => 'TETI OKTAVIANI, S.Pd',
-                        'KAMIS' => 'PURWANTO, S.Pd',
-                        'JUM\'AT' => 'NURUL MAULINA F., S.Pd',
-                        'SABTU' => 'LAILINA MUZIYAH, S.Pd',
-                    ];
-                @endphp
-                @foreach($piketList as $hName => $gName)
-                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <div>
+                @foreach(($piketGrouped ?? []) as $hName => $entries)
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start justify-between gap-2">
+                        <div class="min-w-0">
                             <span class="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider">{{ $hName }}</span>
-                            <div class="text-xs font-extrabold text-slate-900 mt-0.5">{{ $gName }}</div>
+                            @if(!empty($entries))
+                                <div class="mt-1 space-y-1">
+                                    @foreach($entries as $pEntry)
+                                        <div class="text-xs font-extrabold text-slate-900 truncate" title="{{ $pEntry->name }}">
+                                            {{ $pEntry->name }}
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @else
+                                <div class="text-xs text-slate-400 italic mt-1">Belum Ditentukan</div>
+                            @endif
                         </div>
-                        <span class="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-bold">Piket</span>
+                        <span class="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-bold shrink-0">Piket</span>
                     </div>
                 @endforeach
             </div>
         </div>
 
-        {{-- Daftar 21 Wali Kelas --}}
+        {{-- Daftar Wali Kelas (Dinamis dari Master Rombel & Master Guru) --}}
         <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
             <h3 class="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-2">
                 <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-                <span>Daftar 21 Wali Kelas (Tingkat VII, VIII, IX)</span>
+                <span>Daftar Wali Kelas ({{ ($homeroomList ?? collect())->count() }} Rombel)</span>
             </h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 @foreach(($homeroomList ?? collect()) as $item)

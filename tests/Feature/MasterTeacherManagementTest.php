@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\AcademicYear;
+use App\Models\SchoolClass;
 use App\Models\Subject;
 use App\Models\TeacherSubject;
+use App\Models\TeachingClass;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -278,5 +280,132 @@ class MasterTeacherManagementTest extends TestCase
 
         // Kode '3' harus mendahului kode '25'
         $this->assertTrue(array_search('Guru Kode Kecil', $names) < array_search('Budi Santoso, S.Pd.', $names));
+    }
+
+    public function test_admin_cannot_assign_duplicate_teaching_code_across_teachers(): void
+    {
+        [$admin, $teacher, , $subjectMtk, $subjectIpa] = $this->createEnvironment();
+
+        TeacherSubject::query()->create([
+            'user_id' => $teacher->id,
+            'subject_id' => $subjectMtk->id,
+            'teaching_code' => '14A',
+        ]);
+
+        // Tambah guru baru dengan kode sama ('14 a' yang ternormalisasi ke '14A') -> harus ditolak
+        $storeConflict = $this->actingAs($admin)->post(route('admin.teachers.store'), [
+            'name' => 'Guru Duplikat Kode',
+            'email' => 'duplikat@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'password' => 'guru123',
+            'teacher_subjects' => [
+                ['subject_id' => $subjectIpa->id, 'teaching_code' => '14 a'],
+            ],
+        ]);
+        $storeConflict->assertSessionHasErrors('teacher_subjects');
+        $this->assertDatabaseMissing('users', ['email' => 'duplikat@smpn2lemahabang.sch.id']);
+
+        // Update guru lain ke kode '14A' -> harus ditolak juga
+        $guruLain = User::query()->create([
+            'name' => 'Guru Lain, S.Pd.',
+            'email' => 'lain@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'password' => bcrypt('guru123'),
+            'is_active' => true,
+        ]);
+
+        $updateConflict = $this->actingAs($admin)->put(route('admin.teachers.update', $guruLain), [
+            'name' => $guruLain->name,
+            'email' => $guruLain->email,
+            'role' => 'guru',
+            'teacher_subjects' => [
+                ['subject_id' => $subjectIpa->id, 'teaching_code' => '14A'],
+            ],
+        ]);
+        $updateConflict->assertSessionHasErrors('teacher_subjects');
+    }
+
+    public function test_admin_can_manage_homeroom_and_multi_piket_from_master_teacher_with_conflict_prevention_and_sync(): void
+    {
+        [$admin, $teacher, $year, $subjectMtk, $subjectIpa] = $this->createEnvironment();
+
+        $sc7A = SchoolClass::query()->create([
+            'academic_year_id' => $year->id,
+            'grade_level' => 'VII',
+            'name' => 'VII-A',
+            'homeroom_teacher_name' => '-',
+        ]);
+
+        $otherGuru = User::query()->create([
+            'name' => 'Siti Aminah, S.Pd.',
+            'email' => 'siti.wali@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'nip' => '199101012019032001',
+            'password' => bcrypt('guru123'),
+            'is_active' => true,
+        ]);
+
+        $tc = TeachingClass::query()->create([
+            'teacher_id' => $otherGuru->id,
+            'academic_year_id' => $year->id,
+            'school_class_id' => $sc7A->id,
+            'subject_id' => $subjectIpa->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-A',
+            'homeroom_teacher_name' => '-',
+        ]);
+
+        // 1. Admin menetapkan Wali Kelas VII-A dan multi-hari Piket untuk Budi langsung dari Master Guru
+        $resp = $this->actingAs($admin)->put(route('admin.teachers.update', $teacher), [
+            'name' => 'Budi Santoso, M.Pd.',
+            'email' => $teacher->email,
+            'nip' => '198002022005011999',
+            'role' => 'guru',
+            'homeroom_school_class_id' => $sc7A->id,
+            'has_piket_input' => '1',
+            'piket_days' => ['SENIN', 'KAMIS'],
+            'teacher_subjects' => [
+                ['subject_id' => $subjectMtk->id, 'teaching_code' => '7'],
+            ],
+        ]);
+        $resp->assertRedirect();
+        $resp->assertSessionHas('success');
+
+        $sc7A->refresh();
+        $tc->refresh();
+        $teacher->refresh();
+
+        $this->assertSame($teacher->id, $sc7A->homeroom_teacher_id);
+        $this->assertSame('Budi Santoso, M.Pd.', $sc7A->homeroom_teacher_name);
+        $this->assertSame('198002022005011999', $sc7A->homeroom_teacher_nip);
+        $this->assertSame('Budi Santoso, M.Pd.', $tc->homeroom_teacher_name);
+        $this->assertSame('198002022005011999', $tc->homeroom_teacher_nip);
+        $this->assertSame(['SENIN', 'KAMIS'], $teacher->piket_days_list);
+
+        // 2. Guru lain tidak bisa mengambil alih VII-A selagi masih diampu Budi (anti-bentrok)
+        $conflictWk = $this->actingAs($admin)->put(route('admin.teachers.update', $otherGuru), [
+            'name' => $otherGuru->name,
+            'email' => $otherGuru->email,
+            'role' => 'guru',
+            'homeroom_school_class_id' => $sc7A->id,
+        ]);
+        $conflictWk->assertSessionHasErrors('homeroom_school_class_id');
+
+        // 3. Guru lain BOLEH piket di hari SENIN juga (>= 1 guru piket per hari)
+        $okPiket = $this->actingAs($admin)->put(route('admin.teachers.update', $otherGuru), [
+            'name' => $otherGuru->name,
+            'email' => $otherGuru->email,
+            'role' => 'guru',
+            'has_piket_input' => '1',
+            'piket_days' => ['SENIN'],
+        ]);
+        $okPiket->assertRedirect();
+
+        // 4. Verifikasi Tab Guru Piket & Wali Kelas di Jadwal Utama membaca dinamis tanpa hardcode
+        $jadwalUtama = $this->actingAs($otherGuru)->get(route('schedules.main.index', ['tab' => 'piket']));
+        $jadwalUtama->assertOk();
+        $jadwalUtama->assertSee('Budi Santoso, M.Pd.');
+        $jadwalUtama->assertSee('Siti Aminah, S.Pd.');
+        $jadwalUtama->assertSee('Kelas 7A');
     }
 }

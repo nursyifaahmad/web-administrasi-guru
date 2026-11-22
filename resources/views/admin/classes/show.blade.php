@@ -229,51 +229,36 @@
                     </div>
                 </div>
 
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">Nama Lengkap & Gelar Wali Kelas *</label>
-                    <input type="text" name="homeroom_teacher_name" value="{{ old('homeroom_teacher_name', $schoolClass->homeroom_teacher_name) }}" required
-                           class="w-full rounded-xl border border-slate-300 px-3 py-2 font-semibold">
-                </div>
+                @php
+                    $wkName = $schoolClass->homeroomTeacher?->name ?: ($schoolClass->homeroom_teacher_name ?: '-');
+                    $wkNip = $schoolClass->homeroomTeacher?->nip ?: $schoolClass->homeroom_teacher_nip;
+                    $wkSig = $schoolClass->homeroomTeacher?->signature_data ?: $schoolClass->homeroom_teacher_signature;
+                @endphp
 
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">NIP Wali Kelas</label>
-                    <input type="text" name="homeroom_teacher_nip" value="{{ old('homeroom_teacher_nip', $schoolClass->homeroom_teacher_nip) }}"
-                           class="w-full rounded-xl border border-slate-300 px-3 py-2">
-                </div>
-
-                {{-- Tanda Tangan Digital Wali Kelas --}}
-                <div class="pt-3 border-t border-slate-100 space-y-2.5">
-                    <label class="block font-bold text-slate-700">Tanda Tangan Digital Wali Kelas</label>
-                    @if(!empty($schoolClass->homeroom_teacher_signature))
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
-                            <img src="{{ $schoolClass->homeroom_teacher_signature }}" class="h-12 max-w-[140px] object-contain bg-white border rounded p-1" alt="TTD Wali Kelas">
-                            <label class="flex items-center gap-1.5 text-rose-600 font-semibold cursor-pointer text-xs">
-                                <input type="checkbox" name="clear_homeroom_signature" value="1"> Hapus TTD
-                            </label>
+                {{-- Identitas Wali Kelas Sinkron Otomatis dari Master Guru --}}
+                <div class="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="font-bold text-slate-800 text-xs">Wali Kelas (Sinkron dari Master Guru)</span>
+                        <a href="{{ route('admin.teachers.index', $schoolClass->homeroomTeacher ? ['q' => $schoolClass->homeroomTeacher->name] : []) }}"
+                           class="text-[11px] font-bold text-emerald-700 hover:underline shrink-0">
+                            Kelola / Ubah di Master Guru &rarr;
+                        </a>
+                    </div>
+                    <div class="text-xs font-extrabold text-slate-900">{{ $wkName }}</div>
+                    <div class="text-[11px] text-slate-600 font-mono">NIP: {{ $wkNip ?: '-' }}</div>
+                    @if(!empty($wkSig))
+                        <div class="pt-1">
+                            <img src="{{ $wkSig }}" class="h-12 max-w-[140px] object-contain bg-white border border-slate-200 rounded p-1" alt="TTD Wali Kelas">
                         </div>
+                    @else
+                        <div class="text-[11px] text-slate-400 italic">TTD Digital belum diunggah pada profil Master Guru.</div>
                     @endif
-
-                    <div class="space-y-1.5">
-                        <span class="text-[11px] text-slate-500 font-medium">Unggah Berkas Gambar TTD:</span>
-                        <input type="file" name="homeroom_teacher_signature_file" accept="image/*" class="w-full text-xs">
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <div class="flex items-center justify-between">
-                            <span class="text-[11px] text-slate-500 font-medium">Atau Buat TTD di Kanvas:</span>
-                            <button type="button" @click="if(wkPad) { wkPad.clear(); wkSigData = ''; }" class="text-[11px] text-rose-600 underline">Bersihkan</button>
-                        </div>
-                        <div class="border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
-                            <canvas x-ref="wkCanvas" width="320" height="110" class="w-full h-24 touch-none cursor-crosshair bg-white"></canvas>
-                        </div>
-                        <input type="hidden" name="homeroom_teacher_signature_data" :value="wkSigData">
-                    </div>
                 </div>
             </div>
 
             <div class="pt-2">
                 <button type="submit" class="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">
-                    Simpan Perubahan Rombel
+                    Simpan Nama &amp; Tingkat Rombel
                 </button>
             </div>
         </form>

@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\SchoolScheduleItem;
-use App\Models\SchoolScheduleTeacher;
 use App\Models\SchoolSetting;
 use App\Models\Subject;
 use App\Models\TeachingClass;

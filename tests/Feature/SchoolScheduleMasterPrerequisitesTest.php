@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
-use App\Models\SchoolScheduleTeacher;
+use App\Models\SchoolScheduleItem;
 use App\Models\Subject;
 use App\Models\TeacherSubject;
 use App\Models\User;
@@ -165,18 +165,52 @@ class SchoolScheduleMasterPrerequisitesTest extends TestCase
             'teaching_code' => '14B',
         ]);
 
+        $class7A = SchoolClass::query()->create([
+            'academic_year_id' => $year->id,
+            'name' => 'VII-A',
+            'grade_level' => 'VII',
+            'homeroom_teacher_name' => 'Wali VII-A',
+        ]);
+
+        $item14A = SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '08.20 - 09.00',
+            'class_name' => '7A',
+            'school_class_id' => $class7A->id,
+            'teacher_code' => '14A',
+        ]);
+
+        $item14B = SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 2,
+            'time_range' => '09.00 - 09.40',
+            'class_name' => '7A',
+            'school_class_id' => $class7A->id,
+            'teacher_code' => '14B',
+        ]);
+
         $synced = $service->syncScheduleTeachersFromMaster($year);
-        $this->assertSame(2, $synced);
+        $this->assertGreaterThanOrEqual(2, $synced);
 
-        $st14A = SchoolScheduleTeacher::query()->where('academic_year_id', $year->id)->where('code', '14A')->first();
-        $this->assertNotNull($st14A);
-        $this->assertSame('Ahmad Guru Multi Mapel', $st14A->name);
-        $this->assertSame('Matematika', $st14A->subject);
-        $this->assertSame($guru->id, $st14A->user_id);
+        $item14A->refresh();
+        $item14B->refresh();
+        $this->assertSame('Ahmad Guru Multi Mapel', $item14A->teacher_name);
+        $this->assertSame('Matematika', $item14A->subject_name);
+        $this->assertSame($guru->id, $item14A->user_id);
 
-        $st14B = SchoolScheduleTeacher::query()->where('academic_year_id', $year->id)->where('code', '14B')->first();
-        $this->assertNotNull($st14B);
-        $this->assertSame('Ilmu Pengetahuan Alam', $st14B->subject);
-        $this->assertSame($guru->id, $st14B->user_id);
+        $this->assertSame('Ahmad Guru Multi Mapel', $item14B->teacher_name);
+        $this->assertSame('Ilmu Pengetahuan Alam', $item14B->subject_name);
+        $this->assertSame($guru->id, $item14B->user_id);
+
+        $directory = $service->getMasterTeacherDirectory($year)->keyBy('code');
+        $this->assertTrue($directory->has('14A'));
+        $this->assertTrue($directory->has('14B'));
+        $this->assertSame($guru->id, $directory->get('14A')->user_id);
+        $this->assertSame($guru->id, $directory->get('14B')->user_id);
     }
 }

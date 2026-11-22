@@ -5,14 +5,16 @@ namespace App\Services;
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\SchoolScheduleItem;
-use App\Models\SchoolScheduleTeacher;
 use App\Models\Subject;
+use App\Models\TeacherSubject;
 use App\Models\TeachingClass;
 use App\Models\User;
 use App\Support\IndonesianDate;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -60,6 +62,14 @@ class SchoolScheduleService
         $upper = str_replace('VII', '7', $upper);
         $upper = str_replace('IX', '9', $upper);
         return trim($upper);
+    }
+
+    /**
+     * Normalisasi kode mengajar agar konsisten antar form Master Guru, Matriks, & Excel (mis. '14 a' -> '14A').
+     */
+    public static function normalizeTeachingCode(?string $code): string
+    {
+        return strtoupper((string) preg_replace('/\s+/', '', trim((string) $code)));
     }
 
     /**
@@ -262,24 +272,24 @@ CSV;
     }
 
     /**
-     * Memuat jadwal resmi Wakasek SMPN 2 Lemahabang (21 Rombel, 36 Guru, 2 Shift)
+     * Memuat jadwal resmi Wakasek SMPN 2 Lemahabang (21 Rombel, 36 Kode Guru, 2 Shift)
+     * sekaligus menautkan / membuat entri terpusat pada Master Guru & Master Rombel.
      */
     public function importFromWakasekCsv(AcademicYear $academicYear, ?string $csvContent = null): array
     {
         $content = $csvContent ?: self::RAW_WAKASEK_CSV;
         $lines = preg_split('/\r\n|\r|\n/', trim($content));
 
-        // 1. Ekstrak guru, wali kelas, dan guru piket dari kolom kanan
         $teachersData = [];
         $homeroomMap = [];
-        $piketMap = [];
+        $piketEntries = [];
 
         foreach ($lines as $idx => $line) {
             if ($idx < 5) {
                 continue;
             }
             $row = str_getcsv($line);
-            $code = trim($row[27] ?? '');
+            $code = self::normalizeTeachingCode($row[27] ?? '');
             $name = trim($row[28] ?? '');
             $subject = trim($row[29] ?? '');
 
@@ -291,73 +301,26 @@ CSV;
                 ];
             }
 
-            // Wali Kelas (Hanya baris 5 s.d. 25 dengan nama rombel resmi 7A-9G)
+            // Wali Kelas (baris 5 s.d. 25 dengan rombel resmi 7A-9G)
             $wkName = trim($row[31] ?? '');
-            $wkClass = strtoupper(trim($row[32] ?? ''));
+            $wkClass = self::normalizeClassName($row[32] ?? '');
             if ($wkName !== '' && preg_match('/^[7-9][A-G]$/', $wkClass)) {
                 $homeroomMap[$wkClass] = $wkName;
             }
 
-            // Guru Piket (Hanya hari Senin s.d. Sabtu)
+            // Guru Piket (Senin s.d. Sabtu)
             $piketGuru = trim($row[31] ?? '');
-            $piketHari = strtoupper(trim($row[32] ?? ''));
-            $validPiketDays = ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'JUMAT', 'SABTU'];
-            if ($piketGuru !== '' && in_array($piketHari, $validPiketDays, true)) {
-                $piketMap[$piketHari] = $piketGuru;
+            $piketHari = User::normalizePiketDay($row[32] ?? '');
+            if ($piketGuru !== '' && $piketHari !== null) {
+                $piketEntries[] = [
+                    'day' => $piketHari,
+                    'name' => $piketGuru,
+                ];
             }
         }
 
-        // Hubungkan kode guru ke akun users bila ada kecocokan nama (guru maupun admin yang bertugas mengajar)
-        $users = User::query()
-            ->where('is_active', true)
-            ->get();
-        $subjects = Subject::query()->get();
-
-        DB::transaction(function () use ($academicYear, $teachersData, $homeroomMap, $piketMap, $users, $subjects, $lines) {
-            // Simpan / update guru jadwal
-            foreach ($teachersData as $code => $t) {
-                $matchedUser = $users->first(function ($u) use ($t) {
-                    return self::isNameMatch($t['name'], $u->name);
-                });
-
-                $matchedSubject = $subjects->first(function ($s) use ($t) {
-                    return self::isSubjectMatch($t['subject'], $s);
-                });
-
-                // Cek penugasan wali kelas
-                $assignedWk = null;
-                foreach ($homeroomMap as $cName => $wName) {
-                    if (self::isNameMatch($t['name'], $wName)) {
-                        $assignedWk = $cName;
-                        break;
-                    }
-                }
-
-                // Cek guru piket
-                $assignedPiket = null;
-                foreach ($piketMap as $dayName => $pName) {
-                    if (self::isNameMatch($t['name'], $pName)) {
-                        $assignedPiket = $dayName;
-                        break;
-                    }
-                }
-
-                SchoolScheduleTeacher::query()->updateOrCreate(
-                    [
-                        'academic_year_id' => $academicYear->id,
-                        'code' => $code,
-                    ],
-                    [
-                        'name' => $t['name'],
-                        'subject' => $t['subject'],
-                        'user_id' => $matchedUser?->id,
-                        'homeroom_class' => $assignedWk,
-                        'piket_day' => $assignedPiket,
-                    ]
-                );
-            }
-
-            // 2. Pastikan 21 Rombel tersedia di SchoolClass
+        DB::transaction(function () use ($academicYear, $teachersData, $homeroomMap, $piketEntries, $lines) {
+            // Pastikan 21 Rombel dasar tersedia sebelum sinkronisasi wali kelas
             $allClassNames = [
                 '7A' => 'VII', '7B' => 'VII', '7C' => 'VII', '7D' => 'VII', '7E' => 'VII', '7F' => 'VII', '7G' => 'VII',
                 '8A' => 'VIII', '8B' => 'VIII', '8C' => 'VIII', '8D' => 'VIII', '8E' => 'VIII', '8F' => 'VIII', '8G' => 'VIII',
@@ -366,9 +329,7 @@ CSV;
 
             $schoolClassesMap = [];
             foreach ($allClassNames as $cName => $grade) {
-                $wkName = $homeroomMap[$cName] ?? null;
-                $formattedName = $grade . '-' . substr($cName, -1); // e.g. VII-A
-
+                $formattedName = $grade . '-' . substr($cName, -1);
                 $sc = SchoolClass::query()->firstOrCreate(
                     [
                         'academic_year_id' => $academicYear->id,
@@ -376,21 +337,29 @@ CSV;
                     ],
                     [
                         'grade_level' => $grade,
-                        'homeroom_teacher_name' => $wkName ?: 'Wali Kelas ' . $formattedName,
+                        'homeroom_teacher_name' => '-',
                     ]
                 );
                 $schoolClassesMap[$cName] = $sc;
                 $schoolClassesMap[$formattedName] = $sc;
             }
 
-            // 3. Bersihkan items lama pada tahun ajaran ini
+            // Sinkronkan Master Guru (users + teacher_subjects + piket_days) & Wali Kelas (school_classes)
+            $codeTeacherMap = $this->syncImportedMasterEntities($academicYear, $teachersData, $piketEntries, $homeroomMap);
+
+            // Bersihkan items lama pada tahun ajaran ini
             SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->delete();
 
-            // 4. Parse grid jadwal
             $currentDayM = 'SENIN';
             $currentDayA = 'SENIN';
 
-            $scheduleTeachers = SchoolScheduleTeacher::query()->where('academic_year_id', $academicYear->id)->get()->keyBy('code');
+            $pagiColumns = [
+                3 => '7A', 4 => '7B', 5 => '7C', 6 => '7D', 7 => '7E', 8 => '7F', 9 => '7G',
+                10 => '9A', 11 => '9B', 12 => '9C', 13 => '9D', 14 => '9E', 15 => '9F', 16 => '9G',
+            ];
+            $siangColumns = [
+                20 => '8A', 21 => '8B', 22 => '8C', 23 => '8D', 24 => '8E', 25 => '8F', 26 => '8G',
+            ];
 
             foreach ($lines as $idx => $line) {
                 if ($idx < 5) {
@@ -410,82 +379,61 @@ CSV;
                 $jamA = trim($row[18] ?? '');
                 $waktuA = trim($row[19] ?? '');
 
-                // Shift Pagi (Kelas 7 dan Kelas 9)
+                $shiftPayloads = [];
                 if ($waktuM !== '') {
-                    $dayNum = $this->parseDayOfWeek($currentDayM);
-                    $periodOrder = is_numeric($jamM) ? (int) $jamM : 0;
-
-                    $pagiColumns = [
-                        3 => '7A', 4 => '7B', 5 => '7C', 6 => '7D', 7 => '7E', 8 => '7F', 9 => '7G',
-                        10 => '9A', 11 => '9B', 12 => '9C', 13 => '9D', 14 => '9E', 15 => '9F', 16 => '9G',
+                    $shiftPayloads[] = [
+                        'shift' => 'pagi',
+                        'day_num' => $this->parseDayOfWeek($currentDayM),
+                        'period_order' => is_numeric($jamM) ? (int) $jamM : 0,
+                        'time_range' => $waktuM,
+                        'columns' => $pagiColumns,
                     ];
-
-                    foreach ($pagiColumns as $colIdx => $clsShort) {
-                        $rawVal = trim($row[$colIdx] ?? '');
-                        if ($rawVal === '') {
-                            continue;
-                        }
-
-                        $sc = $schoolClassesMap[$clsShort] ?? null;
-                        $tRecord = $scheduleTeachers->get($rawVal);
-
-                        SchoolScheduleItem::query()->create([
-                            'academic_year_id' => $academicYear->id,
-                            'day_of_week' => $dayNum,
-                            'shift' => 'pagi',
-                            'period_order' => $periodOrder,
-                            'time_range' => $waktuM,
-                            'class_name' => $clsShort,
-                            'school_class_id' => $sc?->id,
-                            'teacher_code' => $rawVal,
-                            'teacher_name' => $tRecord?->name,
-                            'subject_name' => $tRecord?->subject,
-                            'user_id' => $tRecord?->user_id,
-                        ]);
-                    }
+                }
+                if ($waktuA !== '') {
+                    $shiftPayloads[] = [
+                        'shift' => 'siang',
+                        'day_num' => $this->parseDayOfWeek($currentDayA),
+                        'period_order' => is_numeric($jamA) ? (int) $jamA : 0,
+                        'time_range' => $waktuA,
+                        'columns' => $siangColumns,
+                    ];
                 }
 
-                // Shift Siang (Kelas 8)
-                if ($waktuA !== '') {
-                    $dayNum = $this->parseDayOfWeek($currentDayA);
-                    $periodOrder = is_numeric($jamA) ? (int) $jamA : 0;
-
-                    $siangColumns = [
-                        20 => '8A', 21 => '8B', 22 => '8C', 23 => '8D', 24 => '8E', 25 => '8F', 26 => '8G',
-                    ];
-
-                    foreach ($siangColumns as $colIdx => $clsShort) {
+                foreach ($shiftPayloads as $sp) {
+                    foreach ($sp['columns'] as $colIdx => $clsShort) {
                         $rawVal = trim($row[$colIdx] ?? '');
                         if ($rawVal === '') {
                             continue;
                         }
 
+                        $normVal = self::normalizeTeachingCode($rawVal);
                         $sc = $schoolClassesMap[$clsShort] ?? null;
-                        $tRecord = $scheduleTeachers->get($rawVal);
+                        $isAct = SchoolScheduleItem::isCommonActivityLabel($rawVal);
+                        $tMeta = $isAct ? null : ($codeTeacherMap[$normVal] ?? null);
 
                         SchoolScheduleItem::query()->create([
                             'academic_year_id' => $academicYear->id,
-                            'day_of_week' => $dayNum,
-                            'shift' => 'siang',
-                            'period_order' => $periodOrder,
-                            'time_range' => $waktuA,
+                            'day_of_week' => $sp['day_num'],
+                            'shift' => $sp['shift'],
+                            'period_order' => $sp['period_order'],
+                            'time_range' => $sp['time_range'],
                             'class_name' => $clsShort,
                             'school_class_id' => $sc?->id,
-                            'teacher_code' => $rawVal,
-                            'teacher_name' => $tRecord?->name,
-                            'subject_name' => $tRecord?->subject,
-                            'user_id' => $tRecord?->user_id,
+                            'teacher_code' => $isAct ? $rawVal : $normVal,
+                            'teacher_name' => $tMeta['name'] ?? ($isAct ? $rawVal : null),
+                            'subject_name' => $tMeta['subject'] ?? null,
+                            'user_id' => $tMeta['user_id'] ?? null,
+                            'subject_id' => $tMeta['subject_id'] ?? null,
                         ]);
                     }
                 }
             }
         });
 
-        // 5. Jalankan deteksi bentrok otomatis
         $conflicts = $this->detectConflicts($academicYear);
 
         return [
-            'teachers_count' => SchoolScheduleTeacher::query()->where('academic_year_id', $academicYear->id)->count(),
+            'teachers_count' => $this->getMasterTeacherDirectory($academicYear)->count(),
             'items_count' => SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->count(),
             'conflicts_count' => count($conflicts),
             'conflicts' => $conflicts,
@@ -568,101 +516,488 @@ CSV;
     }
 
     /**
-     * Sinkronkan tabel SchoolScheduleTeacher langsung dari Data Master Guru (User + teacher_subjects)
+     * Direktori terpadu kode mengajar aktif langsung dari Master Guru (User + TeacherSubject)
+     * yang otomatis terhubung ke tugas Wali Kelas (SchoolClass) & Hari Piket (User::piket_days).
+     *
+     * @return Collection<int, object>
+     */
+    public function getMasterTeacherDirectory(?AcademicYear $academicYear = null): Collection
+    {
+        $yearId = $academicYear?->id ?: AcademicYear::active()?->id;
+
+        $teacherSubjects = TeacherSubject::query()
+            ->with(['user', 'subject'])
+            ->whereNotNull('teaching_code_normalized')
+            ->where('teaching_code_normalized', '!=', '')
+            ->get()
+            ->filter(fn (TeacherSubject $ts) => $ts->user !== null && $ts->user->is_active);
+
+        $homeroomByTeacher = $yearId
+            ? SchoolClass::query()
+                ->where('academic_year_id', $yearId)
+                ->whereNotNull('homeroom_teacher_id')
+                ->get()
+                ->keyBy('homeroom_teacher_id')
+            : collect();
+
+        return $teacherSubjects
+            ->map(function (TeacherSubject $ts) use ($homeroomByTeacher) {
+                $user = $ts->user;
+                $sc = $homeroomByTeacher->get($user->id);
+                $homeroomCode = $sc ? self::normalizeClassName($sc->name) : null;
+                $piketDays = $user->piket_days_list;
+
+                return (object) [
+                    'id' => $ts->id,
+                    'code' => $ts->teaching_code_normalized ?: self::normalizeTeachingCode($ts->teaching_code),
+                    'name' => $user->name,
+                    'subject' => $ts->subject?->name ?? ($user->default_subject ?: '-'),
+                    'subject_code' => $ts->subject?->code,
+                    'subject_id' => $ts->subject_id,
+                    'user_id' => $user->id,
+                    'nip' => $user->nip,
+                    'homeroom_class' => $homeroomCode !== '' ? $homeroomCode : null,
+                    'homeroom_class_name' => $sc?->name,
+                    'school_class_id' => $sc?->id,
+                    'piket_days' => $piketDays,
+                    'piket_day' => ! empty($piketDays) ? implode(', ', $piketDays) : null,
+                ];
+            })
+            ->sort(fn (object $a, object $b) => strnatcasecmp((string) $a->code, (string) $b->code))
+            ->values();
+    }
+
+    /**
+     * Daftar jadwal Guru Piket langsung dari Master Guru (`users.piket_days`),
+     * terurut Senin s.d. Sabtu lalu nama guru tanpa duplikasi untuk guru berkode ganda.
+     *
+     * @return Collection<int, object>
+     */
+    public function getPiketScheduleList(): Collection
+    {
+        $orderMap = array_flip(User::PIKET_DAYS);
+        $users = User::query()
+            ->with(['teacherSubjects'])
+            ->where('is_active', true)
+            ->whereNotNull('piket_days')
+            ->get();
+
+        $entries = collect();
+        $seenKeys = [];
+
+        foreach ($users as $user) {
+            foreach ($user->piket_days_list as $day) {
+                $dedupKey = "{$day}|{$user->id}";
+                if (isset($seenKeys[$dedupKey])) {
+                    continue;
+                }
+                $seenKeys[$dedupKey] = true;
+
+                $entries->push((object) [
+                    'user_id' => $user->id,
+                    'name' => $user->name,
+                    'nip' => $user->nip,
+                    'piket_day' => $day,
+                    'day_order' => $orderMap[$day] ?? 99,
+                    'teaching_codes_string' => $user->teaching_codes_string,
+                ]);
+            }
+        }
+
+        return $entries->sort(function (object $a, object $b) {
+            if ($a->day_order !== $b->day_order) {
+                return $a->day_order <=> $b->day_order;
+            }
+
+            return strnatcasecmp($a->name, $b->name);
+        })->values();
+    }
+
+    /**
+     * Kelompokkan jadwal Guru Piket per hari Senin s.d. Sabtu dari Master Guru.
+     *
+     * @return array<string, list<object>>
+     */
+    public function getPiketGroupedByDay(): array
+    {
+        $grouped = [];
+        foreach (User::PIKET_DAYS as $day) {
+            $grouped[$day] = [];
+        }
+
+        foreach ($this->getPiketScheduleList() as $entry) {
+            if (isset($grouped[$entry->piket_day])) {
+                $grouped[$entry->piket_day][] = $entry;
+            }
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * Sinkronkan metadata item jadwal pada suatu tahun ajaran langsung dari Data Master Guru
+     * (`users`, `teacher_subjects`, dan `subjects`).
      */
     public function syncScheduleTeachersFromMaster(AcademicYear $academicYear): int
     {
-        $activeTeachers = User::query()
-            ->with(['teacherSubjects.subject'])
-            ->where('is_active', true)
-            ->get();
-
         $syncedCount = 0;
 
-        DB::transaction(function () use ($academicYear, $activeTeachers, &$syncedCount) {
-            $allScheduleTeachers = SchoolScheduleTeacher::query()
-                ->where('academic_year_id', $academicYear->id)
+        DB::transaction(function () use ($academicYear, &$syncedCount) {
+            $teacherSubjects = TeacherSubject::query()
+                ->with(['user', 'subject'])
+                ->whereHas('user', fn ($q) => $q->where('is_active', true))
                 ->get();
 
-            foreach ($activeTeachers as $user) {
-                if ($user->teacherSubjects->isNotEmpty()) {
-                    foreach ($user->teacherSubjects as $ts) {
-                        $code = trim((string) $ts->teaching_code);
-                        if ($code === '') {
-                            continue;
-                        }
+            foreach ($teacherSubjects as $ts) {
+                $code = $ts->teaching_code_normalized ?: self::normalizeTeachingCode($ts->teaching_code);
+                if ($code === '') {
+                    continue;
+                }
 
-                        $subjectName = $ts->subject?->name ?? $user->default_subject;
+                $user = $ts->user;
+                $subjectName = $ts->subject?->name ?? $user->default_subject;
 
-                        SchoolScheduleTeacher::query()->updateOrCreate(
-                            [
-                                'academic_year_id' => $academicYear->id,
-                                'code' => $code,
-                            ],
-                            [
-                                'name' => $user->name,
-                                'subject' => $subjectName,
-                                'user_id' => $user->id,
-                            ]
-                        );
+                $affected = SchoolScheduleItem::query()
+                    ->where('academic_year_id', $academicYear->id)
+                    ->whereRaw("UPPER(REPLACE(TRIM(teacher_code), ' ', '')) = ?", [$code])
+                    ->update([
+                        'teacher_code' => $code,
+                        'user_id' => $user->id,
+                        'teacher_name' => $user->name,
+                        'subject_id' => $ts->subject_id,
+                        'subject_name' => $subjectName,
+                    ]);
 
-                        SchoolScheduleItem::query()
-                            ->where('academic_year_id', $academicYear->id)
-                            ->where('teacher_code', $code)
-                            ->update([
-                                'user_id' => $user->id,
-                                'teacher_name' => $user->name,
-                            ]);
+                $syncedCount += max(1, $affected);
+            }
 
-                        $syncedCount++;
-                    }
-                } elseif (! empty($user->teaching_codes_list)) {
-                    foreach ($user->teaching_codes_list as $code) {
-                        SchoolScheduleTeacher::query()->updateOrCreate(
-                            [
-                                'academic_year_id' => $academicYear->id,
-                                'code' => $code,
-                            ],
-                            [
-                                'name' => $user->name,
-                                'subject' => $user->default_subject ?: 'Mata Pelajaran',
-                                'user_id' => $user->id,
-                            ]
-                        );
+            // Sinkronkan juga item yang sudah memiliki user_id tanpa kode atau berbeda ejaan nama
+            $activeUsers = User::query()->where('is_active', true)->get();
+            foreach ($activeUsers as $user) {
+                SchoolScheduleItem::query()
+                    ->where('academic_year_id', $academicYear->id)
+                    ->where('user_id', $user->id)
+                    ->update(['teacher_name' => $user->name]);
+            }
 
-                        SchoolScheduleItem::query()
-                            ->where('academic_year_id', $academicYear->id)
-                            ->where('teacher_code', $code)
-                            ->update([
-                                'user_id' => $user->id,
-                                'teacher_name' => $user->name,
-                            ]);
+            // Tautkan item slot tanpa user_id bila nama pengajar di item cocok dengan Master Guru
+            $unlinkedItems = SchoolScheduleItem::query()
+                ->where('academic_year_id', $academicYear->id)
+                ->whereNull('user_id')
+                ->whereNotNull('teacher_name')
+                ->get();
 
-                        $syncedCount++;
-                    }
-                } else {
-                    // Coba cocokkan via nama ke guru di Master Jadwal
-                    $matched = $allScheduleTeachers->first(function ($st) use ($user) {
-                        return self::isNameMatch($st->name, $user->name);
-                    });
-
-                    if ($matched) {
-                        $matched->update(['user_id' => $user->id]);
-                        SchoolScheduleItem::query()
-                            ->where('academic_year_id', $academicYear->id)
-                            ->where('teacher_code', $matched->code)
-                            ->update([
-                                'user_id' => $user->id,
-                                'teacher_name' => $user->name,
-                            ]);
-
-                        $syncedCount++;
-                    }
+            foreach ($unlinkedItems as $item) {
+                if ($item->isCommonActivity()) {
+                    continue;
+                }
+                $matched = $activeUsers->first(fn (User $u) => self::isNameMatch($item->teacher_name, $u->name));
+                if ($matched) {
+                    $item->update([
+                        'user_id' => $matched->id,
+                        'teacher_name' => $matched->name,
+                    ]);
+                    $syncedCount++;
                 }
             }
         });
 
         return $syncedCount;
+    }
+
+    /**
+     * Validasi anti-bentrok dan sinkronkan seluruh kode guru, piket, serta wali kelas hasil impor
+     * langsung ke sumber data tunggal (`users`, `teacher_subjects`, `subjects`, `school_classes`).
+     *
+     * @param array<string, array{code?: string, name: string, subject?: string}> $parsedTeachers
+     * @param list<array{day: string, name: string}> $parsedPiket
+     * @param array<string, string> $parsedHomerooms Map classCode ('7A') => teacherName
+     * @return array<string, array{user_id: int, name: string, subject: ?string, subject_id: ?int}>
+     *
+     * @throws \InvalidArgumentException
+     */
+    protected function syncImportedMasterEntities(
+        AcademicYear $academicYear,
+        array $parsedTeachers,
+        array $parsedPiket,
+        array $parsedHomerooms
+    ): array {
+        // 1. Validasi anti-bentrok internal & terhadap pemilik kode aktif di Master Guru
+        $normalizedFileTeachers = [];
+        foreach ($parsedTeachers as $rawCode => $tData) {
+            $normCode = self::normalizeTeachingCode((string) ($tData['code'] ?? $rawCode));
+            $tName = trim((string) ($tData['name'] ?? ''));
+            $tSubj = trim((string) ($tData['subject'] ?? ''));
+            if ($normCode === '' || $tName === '') {
+                continue;
+            }
+
+            if (isset($normalizedFileTeachers[$normCode])) {
+                if (! self::isNameMatch($normalizedFileTeachers[$normCode]['name'], $tName)) {
+                    throw new \InvalidArgumentException(
+                        "Bentrok Kode Guru '{$normCode}' di dalam file: dipakai oleh '{$normalizedFileTeachers[$normCode]['name']}' dan '{$tName}'."
+                    );
+                }
+                continue;
+            }
+
+            $normalizedFileTeachers[$normCode] = [
+                'code' => $normCode,
+                'name' => $tName,
+                'subject' => $tSubj,
+            ];
+        }
+
+        $existingByCode = TeacherSubject::query()
+            ->with(['user', 'subject'])
+            ->whereNotNull('teaching_code_normalized')
+            ->get()
+            ->keyBy('teaching_code_normalized');
+
+        foreach ($normalizedFileTeachers as $normCode => $tData) {
+            $holderTs = $existingByCode->get($normCode);
+            if ($holderTs && $holderTs->user && ! self::isNameMatch($holderTs->user->name, $tData['name'])) {
+                throw new \InvalidArgumentException(
+                    "Bentrok Kode Mengajar '{$normCode}': di file terdaftar atas nama '{$tData['name']}', sedangkan di Data Master Guru kode '{$normCode}' sudah dimiliki oleh '{$holderTs->user->name}'."
+                );
+            }
+        }
+
+        // 2. Validasi anti-bentrok Wali Kelas dalam file (1 guru tidak boleh menjadi wali > 1 rombel)
+        $homeroomAssignments = [];
+        foreach ($parsedHomerooms as $clsCode => $wName) {
+            $normCls = self::normalizeClassName((string) $clsCode);
+            $cleanWName = trim((string) $wName);
+            if ($normCls === '' || $cleanWName === '' || $cleanWName === '-') {
+                continue;
+            }
+
+            foreach ($homeroomAssignments as $assignedEntry) {
+                if ($assignedEntry['class_code'] !== $normCls && self::isNameMatch($assignedEntry['teacher_name'], $cleanWName)) {
+                    throw new \InvalidArgumentException(
+                        "Bentrok Wali Kelas pada file: guru '{$cleanWName}' tercatat menjadi Wali Kelas untuk lebih dari satu rombel ({$assignedEntry['class_code']} & {$normCls})."
+                    );
+                }
+            }
+            $homeroomAssignments[$normCls] = [
+                'class_code' => $normCls,
+                'teacher_name' => $cleanWName,
+            ];
+        }
+
+        $users = User::query()->get();
+        $subjects = Subject::query()->get();
+        $codeMetaMap = [];
+
+        // 3. Buat / tautkan akun Master Guru & kode mengajar untuk tabel kode guru
+        foreach ($normalizedFileTeachers as $normCode => $tData) {
+            $holderTs = $existingByCode->get($normCode);
+            $user = $holderTs?->user ?: $users->first(fn (User $u) => self::isNameMatch($u->name, $tData['name']));
+
+            if (! $user) {
+                $user = $this->createMasterTeacherAccount($tData['name'], $tData['subject'], $normCode, $users);
+            } elseif (! $user->is_active) {
+                $user->update(['is_active' => true]);
+            }
+
+            $subject = $this->resolveOrCreateSubjectFromLabel($tData['subject'], $normCode, $subjects);
+
+            $existingPair = TeacherSubject::query()
+                ->where('user_id', $user->id)
+                ->where('subject_id', $subject->id)
+                ->first();
+
+            if ($existingPair) {
+                if ($existingPair->teaching_code_normalized !== $normCode) {
+                    $existingPair->update(['teaching_code' => $normCode]);
+                }
+            } else {
+                TeacherSubject::query()->create([
+                    'user_id' => $user->id,
+                    'subject_id' => $subject->id,
+                    'teaching_code' => $normCode,
+                ]);
+            }
+
+            if (empty($user->default_subject)) {
+                $user->update(['default_subject' => $subject->name]);
+            }
+
+            $codeMetaMap[$normCode] = [
+                'user_id' => $user->id,
+                'name' => $user->name,
+                'subject' => $subject->name,
+                'subject_id' => $subject->id,
+            ];
+        }
+
+        // Lengkapi juga peta kode untuk guru yang sudah ada di Master Guru walau file tidak menyertakan tabel legenda
+        foreach ($existingByCode as $normCode => $ts) {
+            if (! isset($codeMetaMap[$normCode]) && $ts->user && $ts->user->is_active) {
+                $codeMetaMap[$normCode] = [
+                    'user_id' => $ts->user->id,
+                    'name' => $ts->user->name,
+                    'subject' => $ts->subject?->name ?? $ts->user->default_subject,
+                    'subject_id' => $ts->subject_id,
+                ];
+            }
+        }
+
+        // 4. Sinkronkan Guru Piket ke users.piket_days
+        if (! empty($parsedPiket)) {
+            $piketDaysByUserId = [];
+            foreach ($parsedPiket as $pRow) {
+                $pDay = User::normalizePiketDay($pRow['day'] ?? '');
+                $pName = trim((string) ($pRow['name'] ?? ''));
+                if ($pDay === null || $pName === '') {
+                    continue;
+                }
+
+                $pUser = $users->first(fn (User $u) => self::isNameMatch($u->name, $pName));
+                if (! $pUser) {
+                    $pUser = $this->createMasterTeacherAccount($pName, null, 'piket', $users);
+                }
+                $piketDaysByUserId[$pUser->id][] = $pDay;
+            }
+
+            // Perbarui jadwal piket agar mencerminkan tabel piket terbaru tanpa menyisakan entri usang
+            User::query()->whereNotNull('piket_days')->update(['piket_days' => null]);
+            foreach ($piketDaysByUserId as $uId => $days) {
+                $normDays = User::normalizePiketDays($days);
+                User::query()->where('id', $uId)->update([
+                    'piket_days' => ! empty($normDays) ? json_encode($normDays) : null,
+                ]);
+            }
+        }
+
+        // 5. Sinkronkan Wali Kelas ke school_classes tahun ajaran aktif + Buku Kelas
+        if (! empty($homeroomAssignments)) {
+            $resolvedHomeroomUsers = [];
+            foreach ($homeroomAssignments as $normCls => $entry) {
+                $wkUser = $users->first(fn (User $u) => self::isNameMatch($u->name, $entry['teacher_name']));
+                if (! $wkUser) {
+                    $wkUser = $this->createMasterTeacherAccount($entry['teacher_name'], null, 'wk-' . strtolower($normCls), $users);
+                }
+                $resolvedHomeroomUsers[$normCls] = $wkUser;
+            }
+
+            $assignedUserIds = collect($resolvedHomeroomUsers)->pluck('id')->unique()->all();
+
+            // Lepaskan sementara posisi lama untuk rombel target dan guru target agar pemindahan kelas bebas constraint unik
+            $existingYearClasses = SchoolClass::query()
+                ->where('academic_year_id', $academicYear->id)
+                ->get();
+
+            foreach ($existingYearClasses as $existingSc) {
+                $scCode = self::normalizeClassName($existingSc->name);
+                if (isset($resolvedHomeroomUsers[$scCode]) || in_array($existingSc->homeroom_teacher_id, $assignedUserIds, true)) {
+                    $existingSc->update(['homeroom_teacher_id' => null]);
+                }
+            }
+
+            foreach ($resolvedHomeroomUsers as $normCls => $wkUser) {
+                $formattedName = self::formatClassDisplayName($normCls);
+                $gradeRoman = explode('-', $formattedName)[0] ?: 'VII';
+
+                $sc = SchoolClass::query()
+                    ->where('academic_year_id', $academicYear->id)
+                    ->get()
+                    ->first(fn (SchoolClass $c) => self::normalizeClassName($c->name) === $normCls);
+
+                if (! $sc) {
+                    $sc = SchoolClass::query()->create([
+                        'academic_year_id' => $academicYear->id,
+                        'grade_level' => $gradeRoman,
+                        'name' => $formattedName,
+                        'homeroom_teacher_name' => $wkUser->name,
+                    ]);
+                }
+
+                $sc->applyHomeroomTeacher($wkUser);
+            }
+        }
+
+        return $codeMetaMap;
+    }
+
+    protected function createMasterTeacherAccount(string $name, ?string $subjectLabel, string $fallbackSlug, Collection $usersCache): User
+    {
+        $baseName = trim(explode(',', $name)[0] ?? $name);
+        $slug = Str::slug($baseName ?: ('guru-' . $fallbackSlug), '.');
+        if ($slug === '') {
+            $slug = 'guru.' . strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $fallbackSlug));
+        }
+
+        $email = $slug . '@smpn2lemahabang.sch.id';
+        $idx = 1;
+        while (User::query()->where('email', $email)->exists()) {
+            $email = $slug . '.' . $idx++ . '@smpn2lemahabang.sch.id';
+        }
+
+        $cleanSubj = $subjectLabel !== null
+            ? trim((string) preg_replace('/^[a-z]\.\s*/i', '', trim($subjectLabel)))
+            : null;
+
+        $created = User::query()->create([
+            'name' => trim($name),
+            'email' => $email,
+            'role' => 'guru',
+            'default_subject' => $cleanSubj ?: null,
+            'is_active' => true,
+            'password' => Hash::make('guru123'),
+        ]);
+
+        $usersCache->push($created);
+
+        return $created;
+    }
+
+    protected function resolveOrCreateSubjectFromLabel(?string $rawLabel, string $codeSeed, Collection $subjectsCache): Subject
+    {
+        $clean = trim((string) preg_replace('/^[a-z]\.\s*/i', '', trim((string) $rawLabel)));
+        if ($clean === '') {
+            $clean = 'Mata Pelajaran';
+        }
+
+        $matched = $subjectsCache->first(fn (Subject $s) => self::isSubjectMatch($clean, $s));
+        if ($matched) {
+            return $matched;
+        }
+
+        $baseCode = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $clean));
+        $baseCode = substr($baseCode ?: ('MP' . $codeSeed), 0, 12);
+        $subjCode = $baseCode;
+        $i = 1;
+        while (Subject::query()->where('code', $subjCode)->exists()) {
+            $subjCode = substr($baseCode, 0, 10) . $i++;
+        }
+
+        $created = Subject::query()->create([
+            'code' => $subjCode,
+            'name' => $clean,
+            'default_kktp' => 75,
+            'is_active' => true,
+        ]);
+
+        $subjectsCache->push($created);
+
+        return $created;
+    }
+
+    public static function formatClassDisplayName(string $normalizedClassCode): string
+    {
+        if (preg_match('/^(\d+)([A-Z0-9]+)$/', $normalizedClassCode, $m)) {
+            $gradeRoman = match ($m[1]) {
+                '7' => 'VII',
+                '8' => 'VIII',
+                '9' => 'IX',
+                default => $m[1],
+            };
+
+            return $gradeRoman . '-' . $m[2];
+        }
+
+        return $normalizedClassCode;
     }
 
     /**
@@ -690,8 +1025,8 @@ CSV;
         $grouped = $items->groupBy(fn ($item) => "{$item->day_of_week}_{$item->shift}_{$item->time_range}");
 
         foreach ($grouped as $key => $slotItems) {
-            // Kelompokkan per kode guru
-            $teacherGroups = $slotItems->groupBy(fn ($item) => strtoupper(trim((string) $item->teacher_code)));
+            // Kelompokkan per kode guru ternormalisasi
+            $teacherGroups = $slotItems->groupBy(fn ($item) => self::normalizeTeachingCode((string) $item->teacher_code));
 
             foreach ($teacherGroups as $code => $clashingItems) {
                 if ($code === '' || $clashingItems->first()->isCommonActivity()) {
@@ -766,7 +1101,7 @@ CSV;
             $classesSiang = ($shiftMode === 'double') ? ['8A', '8B', '8C', '8D', '8E', '8F', '8G'] : [];
         }
 
-        // 2. Sinkronkan data guru dari Master Guru ke SchoolScheduleTeacher
+        // 2. Sinkronkan item jadwal dengan Data Master Guru (users + teacher_subjects)
         $this->syncScheduleTeachersFromMaster($academicYear);
 
         // Standar slot jam per hari
@@ -1147,7 +1482,7 @@ CSV;
             }
         }
 
-        // 2. Sinkronkan data pengajar dari Master Guru ke SchoolScheduleTeacher
+        // 2. Sinkronkan item jadwal pengajar dengan Data Master Guru (users + teacher_subjects)
         $this->syncScheduleTeachersFromMaster($academicYear);
 
         // Pastikan timeConfig menyertakan start_time_siang jika ada
@@ -1412,35 +1747,50 @@ CSV;
     }
 
     /**
-     * Update isi satu sel jadwal
+     * Update isi satu sel jadwal dan otomatis sinkronkan metadata guru/mapel dari Master Guru.
      */
     public function updateSlot(int $itemId, array $data): SchoolScheduleItem
     {
         $item = SchoolScheduleItem::query()->findOrFail($itemId);
 
-        $teacherCode = trim($data['teacher_code'] ?? '');
+        $rawCode = trim((string) ($data['teacher_code'] ?? ''));
+        $isActivity = $rawCode !== '' && SchoolScheduleItem::isCommonActivityLabel($rawCode);
+        $teacherCode = $isActivity ? $rawCode : self::normalizeTeachingCode($rawCode);
         $teacherName = $data['teacher_name'] ?? null;
         $subjectName = $data['subject_name'] ?? null;
         $userId = $data['user_id'] ?? null;
+        $subjectId = $item->subject_id;
 
-        if ($teacherCode !== '') {
-            $scheduleTeacher = SchoolScheduleTeacher::query()
-                ->where('academic_year_id', $item->academic_year_id)
-                ->where('code', $teacherCode)
+        if ($teacherCode !== '' && ! $isActivity) {
+            $ts = TeacherSubject::query()
+                ->with(['user', 'subject'])
+                ->where('teaching_code_normalized', $teacherCode)
                 ->first();
 
-            if ($scheduleTeacher) {
-                $teacherName = $scheduleTeacher->name;
-                $subjectName = $scheduleTeacher->subject;
-                $userId = $scheduleTeacher->user_id;
+            if ($ts && $ts->user) {
+                $teacherName = $ts->user->name;
+                $subjectName = $ts->subject?->name ?? $ts->user->default_subject;
+                $userId = $ts->user_id;
+                $subjectId = $ts->subject_id;
             }
+        } elseif ($isActivity) {
+            $teacherName = $teacherCode;
+            $subjectName = null;
+            $userId = null;
+            $subjectId = null;
+        } else {
+            $teacherName = null;
+            $subjectName = null;
+            $userId = null;
+            $subjectId = null;
         }
 
         $item->update([
-            'teacher_code' => $teacherCode ?: null,
+            'teacher_code' => $teacherCode !== '' ? $teacherCode : null,
             'teacher_name' => $teacherName,
             'subject_name' => $subjectName,
             'user_id' => $userId,
+            'subject_id' => $subjectId,
         ]);
 
         $this->detectConflicts($item->academicYear);
@@ -1459,10 +1809,7 @@ CSV;
             ->get()
             ->filter(fn ($item) => ! $item->isCommonActivity());
 
-        $teachers = SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $academicYear->id)
-            ->get()
-            ->keyBy('code');
+        $teachers = $this->getMasterTeacherDirectory($academicYear)->keyBy('code');
 
         $users = User::query()->where('is_active', true)->get();
         $schoolClasses = SchoolClass::query()->where('academic_year_id', $academicYear->id)->get();
@@ -1471,24 +1818,25 @@ CSV;
         $syncedCount = 0;
         $createdCount = 0;
 
-        // Kelompokkan per (guru, rombel)
-        $grouped = $items->groupBy(fn ($i) => "{$i->teacher_code}_{$i->class_name}");
+        // Kelompokkan per (kode guru ternormalisasi, rombel)
+        $grouped = $items->groupBy(fn ($i) => self::normalizeTeachingCode($i->teacher_code) . "_{$i->class_name}");
 
         DB::transaction(function () use ($academicYear, $grouped, $teachers, $users, $schoolClasses, $subjects, &$syncedCount, &$createdCount) {
             foreach ($grouped as $key => $classItems) {
                 $first = $classItems->first();
-                $tRecord = $teachers->get($first->teacher_code);
+                $normCode = self::normalizeTeachingCode($first->teacher_code);
+                $tRecord = $teachers->get($normCode);
 
-                // Cari User yang cocok
+                // Cari User yang cocok langsung dari item atau Master Guru
                 $user = null;
                 if ($first->user_id) {
                     $user = $users->find($first->user_id);
                 } elseif ($tRecord?->user_id) {
                     $user = $users->find($tRecord->user_id);
                 } elseif ($tRecord) {
-                    $user = $users->first(function ($u) use ($tRecord) {
-                        return self::isNameMatch($tRecord->name, $u->name);
-                    });
+                    $user = $users->first(fn ($u) => self::isNameMatch($tRecord->name, $u->name));
+                } elseif (! empty($first->teacher_name)) {
+                    $user = $users->first(fn ($u) => self::isNameMatch($first->teacher_name, $u->name));
                 }
 
                 if (! $user) {
@@ -1611,6 +1959,83 @@ CSV;
     }
 
     /**
+     * Selesaikan daftar kode mengajar aktif seorang guru dan tautkan item jadwal unlinked yang cocok nama.
+     *
+     * @return array{codes: list<string>, subject_label: ?string, has_schedule: bool}
+     */
+    protected function resolveUserScheduleScope(AcademicYear $year, User $user): array
+    {
+        $teacherSubjects = $user->id
+            ? TeacherSubject::query()
+                ->with('subject')
+                ->where('user_id', $user->id)
+                ->get()
+            : collect();
+
+        $codes = $teacherSubjects
+            ->map(fn (TeacherSubject $ts) => $ts->teaching_code_normalized ?: self::normalizeTeachingCode($ts->teaching_code))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $subjectNames = $teacherSubjects->map(fn (TeacherSubject $ts) => $ts->subject?->name)->filter()->unique()->values()->all();
+
+        if ($user->exists && $user->id) {
+            // Tautkan slot jadwal yang belum terhubung user_id bila kode atau namanya cocok
+            if (! empty($codes)) {
+                SchoolScheduleItem::query()
+                    ->where('academic_year_id', $year->id)
+                    ->whereNull('user_id')
+                    ->whereIn('teacher_code', $codes)
+                    ->update(['user_id' => $user->id, 'teacher_name' => $user->name]);
+            }
+
+            $unlinkedByName = SchoolScheduleItem::query()
+                ->where('academic_year_id', $year->id)
+                ->whereNull('user_id')
+                ->whereNotNull('teacher_name')
+                ->get()
+                ->filter(fn (SchoolScheduleItem $item) => ! $item->isCommonActivity() && self::isNameMatch($item->teacher_name, $user->name));
+
+            if ($unlinkedByName->isNotEmpty()) {
+                SchoolScheduleItem::query()
+                    ->whereIn('id', $unlinkedByName->pluck('id')->all())
+                    ->update(['user_id' => $user->id]);
+
+                foreach ($unlinkedByName as $uItem) {
+                    $c = self::normalizeTeachingCode($uItem->teacher_code);
+                    if ($c !== '' && ! in_array($c, $codes, true)) {
+                        $codes[] = $c;
+                    }
+                    if (! empty($uItem->subject_name) && ! in_array($uItem->subject_name, $subjectNames, true)) {
+                        $subjectNames[] = $uItem->subject_name;
+                    }
+                }
+            }
+        }
+
+        $hasItems = $user->id
+            ? SchoolScheduleItem::query()
+                ->where('academic_year_id', $year->id)
+                ->where(function ($q) use ($user, $codes) {
+                    $q->where('user_id', $user->id);
+                    if (! empty($codes)) {
+                        $q->orWhereIn('teacher_code', $codes);
+                    }
+                })
+                ->get()
+                ->contains(fn (SchoolScheduleItem $item) => ! $item->isCommonActivity())
+            : false;
+
+        return [
+            'codes' => array_values(array_unique($codes)),
+            'subject_label' => ! empty($subjectNames) ? implode(', ', $subjectNames) : ($user->default_subject ?: null),
+            'has_schedule' => ! empty($codes) || $hasItems,
+        ];
+    }
+
+    /**
      * Ambil jadwal pribadi seorang guru (untuk tab "Jadwal Saya" di Jadwal Utama)
      */
     public function getTeacherSchedule(User $user, ?AcademicYear $academicYear = null): array
@@ -1620,37 +2045,14 @@ CSV;
             return [];
         }
 
-        // 1. Cari kode guru yang sudah tertaut langsung via user_id
-        $scheduleTeacher = $user->id
-            ? SchoolScheduleTeacher::query()
-                ->where('academic_year_id', $year->id)
-                ->where('user_id', $user->id)
-                ->first()
-            : null;
+        $scope = $this->resolveUserScheduleScope($year, $user);
+        $codes = $scope['codes'];
+        $homeroomSc = $user->homeroomClassForYear($year->id);
+        $homeroomLabel = $homeroomSc ? self::normalizeClassName($homeroomSc->name) : '-';
+        $piketLabel = $user->piket_days_string ?: '-';
 
-        // 2. Jika akun (guru maupun admin pengampu) belum tertaut user_id, cocokkan via nama akun dengan nama di jadwal
-        if (! $scheduleTeacher) {
-            $allTeachers = SchoolScheduleTeacher::query()
-                ->where('academic_year_id', $year->id)
-                ->get();
-
-            $scheduleTeacher = $allTeachers->first(function ($t) use ($user) {
-                return self::isNameMatch($t->name, $user->name);
-            });
-
-            // Tautkan user_id ke guru dan seluruh slot jadwal terkait secara otomatis
-            if ($scheduleTeacher && $user->exists && $user->id) {
-                $scheduleTeacher->update(['user_id' => $user->id]);
-                SchoolScheduleItem::query()
-                    ->where('academic_year_id', $year->id)
-                    ->where('teacher_code', $scheduleTeacher->code)
-                    ->update(['user_id' => $user->id]);
-            }
-        }
-
-        // 3. Jika setelah pencocokan nama tetap tidak ditemukan DAN akun adalah admin murni tanpa tugas KBM:
-        // Admin murni tidak memiliki jadwal KBM pribadi di kelas -> tampilkan 0 jam
-        if ($user->isAdmin() && ! $scheduleTeacher) {
+        // Admin murni tanpa kode mengajar maupun jadwal KBM pribadi -> 0 jam
+        if ($user->isAdmin() && ! $scope['has_schedule']) {
             $emptyByDay = [];
             for ($d = 1; $d <= 6; $d++) {
                 $emptyByDay[$d] = [
@@ -1666,8 +2068,8 @@ CSV;
                     'code' => '-',
                     'name' => $user->name,
                     'subject' => $user->default_subject ?? 'Administrator Sekolah',
-                    'homeroom_class' => '-',
-                    'piket_day' => '-',
+                    'homeroom_class' => $homeroomLabel,
+                    'piket_day' => $piketLabel,
                 ],
                 'by_day' => $emptyByDay,
                 'total_hours' => 0,
@@ -1678,23 +2080,33 @@ CSV;
         $query = SchoolScheduleItem::query()
             ->where('academic_year_id', $year->id);
 
-        if ($scheduleTeacher) {
-            $query->where('teacher_code', $scheduleTeacher->code);
-        } elseif ($user->id) {
-            $query->where('user_id', $user->id);
+        if ($user->id || ! empty($codes)) {
+            $query->where(function ($q) use ($user, $codes) {
+                $applied = false;
+                if ($user->id) {
+                    $q->where('user_id', $user->id);
+                    $applied = true;
+                }
+                if (! empty($codes)) {
+                    $applied ? $q->orWhereIn('teacher_code', $codes) : $q->whereIn('teacher_code', $codes);
+                }
+            });
         } else {
             $query->whereRaw('1 = 0');
         }
 
-        $items = $query->get()->sortBy(function ($item) {
-            return ($item->day_of_week * 10000) + (int) str_replace(':', '', self::extractStartTime($item->time_range));
-        })->values();
+        $items = $query->get()
+            ->filter(fn (SchoolScheduleItem $item) => ! $item->isCommonActivity())
+            ->sortBy(fn ($item) => ($item->day_of_week * 10000) + (int) str_replace(':', '', self::extractStartTime($item->time_range)))
+            ->values();
+
+        if (empty($codes) && $items->isNotEmpty()) {
+            $codes = $items->pluck('teacher_code')->map(fn ($c) => self::normalizeTeachingCode($c))->filter()->unique()->values()->all();
+        }
 
         $byDay = [];
         for ($d = 1; $d <= 6; $d++) {
-            $dayItems = $items->where('day_of_week', $d)->sortBy(function ($item) {
-                return self::extractStartTime($item->time_range);
-            })->values();
+            $dayItems = $items->where('day_of_week', $d)->sortBy(fn ($item) => self::extractStartTime($item->time_range))->values();
             $byDay[$d] = [
                 'day_num' => $d,
                 'day_name' => self::DAYS_MAP[$d] ?? 'Hari ' . $d,
@@ -1704,12 +2116,12 @@ CSV;
         }
 
         return [
-            'teacher' => $scheduleTeacher ?: [
-                'code' => '-',
+            'teacher' => [
+                'code' => ! empty($codes) ? implode(', ', $codes) : '-',
                 'name' => $user->name,
-                'subject' => $user->default_subject ?? '-',
-                'homeroom_class' => '-',
-                'piket_day' => '-',
+                'subject' => $scope['subject_label'] ?? '-',
+                'homeroom_class' => $homeroomLabel,
+                'piket_day' => $piketLabel,
             ],
             'by_day' => $byDay,
             'total_hours' => $items->count(),
@@ -1718,52 +2130,28 @@ CSV;
 
     /**
      * Ambil daftar alokasi mengajar unik seorang guru dari Master Jadwal Sekolah untuk tahun ajaran aktif.
-     * Mengembalikan Collection alokasi kelas (Rombel, Mapel, Total JP, Hari Mengajar, Jadwal Mengajar, Status Pembuatan).
      *
      * @return Collection<int, array>
      */
     public function getTeacherClassAllocations(AcademicYear $year, User $user): Collection
     {
-        // 1. Cari kode guru yang sudah tertaut langsung via user_id
-        $scheduleTeacher = $user->id
-            ? SchoolScheduleTeacher::query()
-                ->where('academic_year_id', $year->id)
-                ->where('user_id', $user->id)
-                ->first()
-            : null;
+        $scope = $this->resolveUserScheduleScope($year, $user);
+        $codes = $scope['codes'];
 
-        if (! $scheduleTeacher) {
-            $allTeachers = SchoolScheduleTeacher::query()
-                ->where('academic_year_id', $year->id)
-                ->get();
-
-            $scheduleTeacher = $allTeachers->first(function ($t) use ($user) {
-                return self::isNameMatch($t->name, $user->name);
-            });
-
-            if ($scheduleTeacher && $user->exists && $user->id) {
-                $scheduleTeacher->update(['user_id' => $user->id]);
-                SchoolScheduleItem::query()
-                    ->where('academic_year_id', $year->id)
-                    ->where('teacher_code', $scheduleTeacher->code)
-                    ->update(['user_id' => $user->id]);
-            }
-        }
-
-        if (! $scheduleTeacher && ! $user->id) {
+        if (empty($codes) && ! $user->id) {
             return collect();
         }
 
         $items = SchoolScheduleItem::query()
             ->where('academic_year_id', $year->id)
-            ->where(function ($q) use ($user, $scheduleTeacher) {
-                if ($scheduleTeacher) {
-                    $q->where('teacher_code', $scheduleTeacher->code);
-                    if ($user->id) {
-                        $q->orWhere('user_id', $user->id);
-                    }
-                } elseif ($user->id) {
-                    $q->where('user_id', $user->id);
+            ->where(function ($q) use ($user, $codes) {
+                $applied = false;
+                if (! empty($codes)) {
+                    $q->whereIn('teacher_code', $codes);
+                    $applied = true;
+                }
+                if ($user->id) {
+                    $applied ? $q->orWhere('user_id', $user->id) : $q->where('user_id', $user->id);
                 }
             })
             ->get()
@@ -1802,7 +2190,7 @@ CSV;
             $formattedClassName = $gradeRoman . '-' . substr($clsShort, 1);
 
             $sc = $schoolClasses->first(function ($s) use ($formattedClassName, $clsShort) {
-                return $s->name === $formattedClassName 
+                return $s->name === $formattedClassName
                     || str_replace('-', '', $s->name) === $clsShort
                     || str_replace('-', ' ', $s->name) === $formattedClassName;
             });
@@ -1812,21 +2200,16 @@ CSV;
                 $matchedSubject = $subjects->find($first->subject_id);
             }
             if (! $matchedSubject && $first->subject_name) {
-                $matchedSubject = $subjects->first(function ($s) use ($first) {
-                    return self::isSubjectMatch($first->subject_name, $s);
-                });
+                $matchedSubject = $subjects->first(fn ($s) => self::isSubjectMatch($first->subject_name, $s));
             }
-            if (! $matchedSubject && $scheduleTeacher?->subject) {
-                $matchedSubject = $subjects->first(function ($s) use ($scheduleTeacher) {
-                    return self::isSubjectMatch($scheduleTeacher->subject, $s);
-                });
+            if (! $matchedSubject && ! empty($scope['subject_label'])) {
+                $matchedSubject = $subjects->first(fn ($s) => self::isSubjectMatch($scope['subject_label'], $s));
             }
             if (! $matchedSubject && ! empty($user->default_subject)) {
-                $matchedSubject = $subjects->first(function ($s) use ($user) {
-                    return self::isSubjectMatch($user->default_subject, $s);
-                });
+                $matchedSubject = $subjects->first(fn ($s) => self::isSubjectMatch($user->default_subject, $s));
             }
-            if (! $matchedSubject && $user->relationLoaded('teacherSubjects') && $user->teacherSubjects->isNotEmpty()) {
+            if (! $matchedSubject) {
+                $user->loadMissing('teacherSubjects.subject');
                 $matchedSubject = $user->teacherSubjects->first()?->subject;
             }
 
@@ -1970,95 +2353,47 @@ CSV;
     }
 
     /**
-     * Ambil daftar 21 Wali Kelas resmi (Tingkat VII, VIII, IX) yang diurutkan rapi berdasarkan kelas (7A s.d. 9G).
+     * Ambil daftar Wali Kelas dinamis langsung dari Master Rombel (`school_classes`) & Master Guru (`users`),
+     * terurut rapi per tingkat dan nama kelas tanpa daftar hardcoded.
      *
-     * @return Collection<int, array{class_code: string, class_label: string, class_roman: string, grade_level: string, teacher_name: string, teacher_code: ?string}>
+     * @return Collection<int, array{class_code: string, class_label: string, class_roman: string, grade_level: string, teacher_name: string, teacher_nip: ?string, teacher_code: ?string, teacher_id: ?int, school_class_id: int}>
      */
     public function getHomeroomList(AcademicYear $academicYear): Collection
     {
-        // 21 Rombel standar berurutan
-        $order = [
-            '7A', '7B', '7C', '7D', '7E', '7F', '7G',
-            '8A', '8B', '8C', '8D', '8E', '8F', '8G',
-            '9A', '9B', '9C', '9D', '9E', '9F', '9G',
-        ];
-
-        // Sanitasi otomatis: bersihkan data residu jika pernah ada homeroom_class berupa nama hari
-        SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $academicYear->id)
-            ->whereIn('homeroom_class', ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'JUMAT', 'SABTU', 'HARI'])
-            ->update(['homeroom_class' => null]);
-
-        // Pastikan kode 20 (M. Rifki Firdiansyah) terhubung ke 9B jika belum
-        SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $academicYear->id)
-            ->where('code', '20')
-            ->whereNull('homeroom_class')
-            ->update(['homeroom_class' => '9B', 'piket_day' => 'SENIN']);
-
         $schoolClasses = SchoolClass::query()
+            ->with(['homeroomTeacher.teacherSubjects'])
             ->where('academic_year_id', $academicYear->id)
-            ->get();
+            ->get()
+            ->sort(function (SchoolClass $a, SchoolClass $b) {
+                $codeA = self::normalizeClassName($a->name) ?: $a->name;
+                $codeB = self::normalizeClassName($b->name) ?: $b->name;
 
-        $scheduleTeachers = SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $academicYear->id)
-            ->whereNotNull('homeroom_class')
-            ->get();
+                return strnatcasecmp($codeA, $codeB);
+            })
+            ->values();
 
-        $allScheduleTeachers = SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $academicYear->id)
-            ->get();
-
-        $result = collect();
-
-        foreach ($order as $classCode) {
-            $grade = substr($classCode, 0, 1);
-            $gradeRoman = match ($grade) {
-                '7' => 'VII',
-                '8' => 'VIII',
-                '9' => 'IX',
-                default => $grade,
-            };
-            $section = substr($classCode, 1, 1);
-            $formattedClass = $gradeRoman . '-' . $section;
-
-            // Cari di SchoolClass
-            $sc = $schoolClasses->first(function ($c) use ($classCode, $formattedClass) {
-                $norm = self::normalizeClassName($c->name);
-                return $norm === $classCode || $c->name === $formattedClass;
-            });
-
-            // Cari di SchoolScheduleTeacher yang di-assign kelas ini
-            $st = $scheduleTeachers->first(function ($t) use ($classCode, $formattedClass) {
-                $norm = self::normalizeClassName($t->homeroom_class);
-                return $norm === $classCode || $t->homeroom_class === $classCode || $t->homeroom_class === $formattedClass;
-            });
-
-            // Tentukan nama wali kelas
-            $teacherName = $st?->name ?: ($sc?->homeroom_teacher_name ?: 'Belum Ditentukan');
-            $teacherCode = $st?->code;
-
-            // Jika kode belum ketemu di st, coba cari di allScheduleTeachers berdasarkan nama wali kelas
-            if (! $teacherCode && $teacherName && $teacherName !== 'Belum Ditentukan') {
-                $matchedTeacher = $allScheduleTeachers->first(function ($t) use ($teacherName) {
-                    return self::isNameMatch($t->name, $teacherName);
-                });
-                $teacherCode = $matchedTeacher?->code;
+        return $schoolClasses->map(function (SchoolClass $sc) {
+            $classCode = self::normalizeClassName($sc->name) ?: $sc->name;
+            $teacher = $sc->homeroomTeacher;
+            $rawSnapshot = trim((string) $sc->homeroom_teacher_name);
+            $teacherName = $teacher?->name ?: (($rawSnapshot !== '' && $rawSnapshot !== '-') ? $rawSnapshot : 'Belum Ditentukan');
+            $teacherCode = $teacher?->teaching_codes_string ?: null;
+            if ($teacherCode === '') {
+                $teacherCode = null;
             }
 
-            $result->push([
+            return [
                 'class_code' => $classCode,
                 'class_label' => 'Kelas ' . $classCode,
-                'class_roman' => $formattedClass,
-                'grade_level' => $gradeRoman,
+                'class_roman' => $sc->name,
+                'grade_level' => $sc->grade_level,
                 'teacher_name' => $teacherName,
+                'teacher_nip' => $teacher?->nip ?: $sc->homeroom_teacher_nip,
                 'teacher_code' => $teacherCode,
-                'teacher_id' => $st?->id,
-                'school_class_id' => $sc?->id,
-            ]);
-        }
-
-        return $result;
+                'teacher_id' => $teacher?->id,
+                'school_class_id' => $sc->id,
+            ];
+        })->values();
     }
 
     /**
@@ -2066,12 +2401,6 @@ CSV;
      */
     public function getMasterMatrix(AcademicYear $academicYear, ?int $dayOfWeek = null, ?array $conflicts = null): array
     {
-        // Sanitasi otomatis: bersihkan data residu jika pernah ada homeroom_class berupa nama hari
-        SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $academicYear->id)
-            ->whereIn('homeroom_class', ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'JUMAT', 'SABTU', 'HARI'])
-            ->update(['homeroom_class' => null]);
-
         // Jika $conflicts belum disediakan, jalankan deteksi bentrok agar status is_conflict di DB selalu segar
         if ($conflicts === null) {
             $conflicts = $this->detectConflicts($academicYear);
@@ -2102,7 +2431,7 @@ CSV;
             }
         }
 
-        $teachers = SchoolScheduleTeacher::query()->where('academic_year_id', $academicYear->id)->get()->keyBy('code');
+        $teachers = $this->getMasterTeacherDirectory($academicYear)->keyBy('code');
 
         $days = $dayOfWeek ? [$dayOfWeek] : [1, 2, 3, 4, 5, 6];
         $matrixByDay = [];
@@ -2190,24 +2519,8 @@ CSV;
         $normalizedClass = self::normalizeClassName($teachingClass->class_name);
         $schoolClassId = $teachingClass->school_class_id;
 
-        // 1. Cari kode guru dari SchoolScheduleTeacher jika ada
-        $teacherCode = null;
-        if ($yearId && $teacherUser) {
-            $scheduleTeacher = SchoolScheduleTeacher::query()
-                ->where('academic_year_id', $yearId)
-                ->where('user_id', $teacherUser->id)
-                ->first();
-
-            if (! $scheduleTeacher) {
-                $scheduleTeacher = SchoolScheduleTeacher::query()
-                    ->where('academic_year_id', $yearId)
-                    ->get()
-                    ->first(function ($t) use ($teacherUser) {
-                        return self::isNameMatch($t->name, $teacherUser->name);
-                    });
-            }
-            $teacherCode = $scheduleTeacher?->code;
-        }
+        // 1. Ambil daftar kode mengajar aktif langsung dari Master Guru (teacher_subjects)
+        $teacherCodes = $teacherUser ? $teacherUser->teaching_codes_list : [];
 
         // 2. Query item jadwal dari school_schedule_items
         $items = collect();
@@ -2227,14 +2540,16 @@ CSV;
                 }
             });
 
-            // Cocokkan guru
-            if ($teacherUser || $teacherCode) {
-                $query->where(function ($q) use ($teacherUser, $teacherCode) {
+            // Cocokkan guru berdasarkan user_id atau daftar kode mengajar Master Guru
+            if ($teacherUser || ! empty($teacherCodes)) {
+                $query->where(function ($q) use ($teacherUser, $teacherCodes) {
+                    $applied = false;
                     if ($teacherUser) {
                         $q->where('user_id', $teacherUser->id);
+                        $applied = true;
                     }
-                    if ($teacherCode) {
-                        $q->orWhere('teacher_code', $teacherCode);
+                    if (! empty($teacherCodes)) {
+                        $applied ? $q->orWhereIn('teacher_code', $teacherCodes) : $q->whereIn('teacher_code', $teacherCodes);
                     }
                 });
             }
@@ -2342,18 +2657,19 @@ CSV;
     }
 
     /**
-     * Urutkan koleksi guru jadwal secara natural berdasarkan kode (1, 2, ... 14a, 14b, ... 34).
+     * Urutkan koleksi direktori kode guru secara natural berdasarkan kode (1, 2, ... 14A, 14B, ... 34).
      */
     public function sortScheduleTeachersByCode(Collection $teachers): Collection
     {
-        return $teachers->sort(function (SchoolScheduleTeacher $a, SchoolScheduleTeacher $b) {
-            return strnatcasecmp(trim((string) $a->code), trim((string) $b->code));
+        return $teachers->sort(function (object $a, object $b) {
+            return strnatcasecmp(trim((string) ($a->code ?? '')), trim((string) ($b->code ?? '')));
         })->values();
     }
 
     /**
      * Susun paket data lengkap untuk Cetak Poster, Download PDF, maupun Export Excel
-     * yang otomatis mendukung mode 1 Shift maupun 2 Shift berdampingan.
+     * yang otomatis mendukung mode 1 Shift maupun 2 Shift berdampingan,
+     * bersumber 100% dari Master Guru & Master Rombel tunggal.
      */
     public function getMasterExportData(AcademicYear $academicYear, ?array $conflicts = null, bool $forTemplate = false): array
     {
@@ -2370,30 +2686,8 @@ CSV;
         $shift2SlotTotal = collect($shift2['days'])->sum(fn (array $d) => count($d['slots']));
         $isTwoShift = count($shift2['flat_classes']) > 0 && $shift2SlotTotal > 0;
 
-        $allTeachers = $this->sortScheduleTeachersByCode(
-            SchoolScheduleTeacher::query()
-                ->where('academic_year_id', $academicYear->id)
-                ->get()
-        );
-
-        $piketOrder = [
-            'SENIN' => 1,
-            'SELASA' => 2,
-            'RABU' => 3,
-            'KAMIS' => 4,
-            "JUM'AT" => 5,
-            'JUMAT' => 5,
-            'SABTU' => 6,
-        ];
-
-        $piketList = $allTeachers
-            ->filter(fn (SchoolScheduleTeacher $t) => trim((string) $t->piket_day) !== '')
-            ->sortBy(function (SchoolScheduleTeacher $t) use ($piketOrder) {
-                $upper = strtoupper(trim((string) $t->piket_day));
-                return sprintf('%02d_%s', $piketOrder[$upper] ?? 99, $t->name);
-            })
-            ->values();
-
+        $allTeachers = $this->getMasterTeacherDirectory($academicYear);
+        $piketList = $this->getPiketScheduleList();
         $homeroomList = $this->getHomeroomList($academicYear);
 
         return [
@@ -2754,96 +3048,22 @@ CSV;
             throw new \InvalidArgumentException('Tidak ditemukan satu pun slot jadwal pada tabel untuk diimpor.');
         }
 
-        $users = User::query()->where('is_active', true)->get();
-
         DB::transaction(function () use (
             $academicYear,
             $parsedTeachers,
             $parsedPiket,
             $parsedHomerooms,
-            $parsedItems,
-            $users
+            $parsedItems
         ) {
-            if (! empty($parsedTeachers)) {
-                $importedCodes = array_keys($parsedTeachers);
-                SchoolScheduleTeacher::query()
-                    ->where('academic_year_id', $academicYear->id)
-                    ->whereNotIn('code', $importedCodes)
-                    ->delete();
+            // 1. Validasi anti-bentrok & sinkronkan langsung ke Master Guru, Piket, dan Master Rombel
+            $codeTeacherMap = $this->syncImportedMasterEntities($academicYear, $parsedTeachers, $parsedPiket, $parsedHomerooms);
 
-                foreach ($parsedTeachers as $code => $tData) {
-                    $matchedUser = $users->first(fn (User $u) => self::isNameMatch($tData['name'], $u->name));
-
-                    $assignedWk = null;
-                    foreach ($parsedHomerooms as $clsCode => $wName) {
-                        if (self::isNameMatch($tData['name'], $wName)) {
-                            $assignedWk = $clsCode;
-                            break;
-                        }
-                    }
-
-                    $assignedPiket = null;
-                    foreach ($parsedPiket as $dayLabel => $pName) {
-                        if (self::isNameMatch($tData['name'], $pName)) {
-                            $assignedPiket = $dayLabel;
-                            break;
-                        }
-                    }
-
-                    SchoolScheduleTeacher::query()->updateOrCreate(
-                        [
-                            'academic_year_id' => $academicYear->id,
-                            'code' => $code,
-                        ],
-                        [
-                            'name' => $tData['name'],
-                            'subject' => $tData['subject'],
-                            'user_id' => $matchedUser?->id,
-                            'homeroom_class' => $assignedWk,
-                            'piket_day' => $assignedPiket,
-                        ]
-                    );
-                }
-            } elseif (! empty($parsedPiket) || ! empty($parsedHomerooms)) {
-                $existingTeachers = SchoolScheduleTeacher::query()
-                    ->where('academic_year_id', $academicYear->id)
-                    ->get();
-
-                foreach ($existingTeachers as $st) {
-                    $updates = [];
-                    foreach ($parsedHomerooms as $clsCode => $wName) {
-                        if (self::isNameMatch($st->name, $wName)) {
-                            $updates['homeroom_class'] = $clsCode;
-                            break;
-                        }
-                    }
-                    foreach ($parsedPiket as $dayLabel => $pName) {
-                        if (self::isNameMatch($st->name, $pName)) {
-                            $updates['piket_day'] = $dayLabel;
-                            break;
-                        }
-                    }
-                    if (! empty($updates)) {
-                        $st->update($updates);
-                    }
-                }
-            }
-
+            // 2. Pastikan seluruh rombel pada matriks tersedia di Master Rombel
             $allClassCodes = collect($parsedItems)->pluck('class_name')->unique()->filter()->values();
             $schoolClassesMap = [];
             foreach ($allClassCodes as $cCode) {
-                if (preg_match('/^(\d+)([A-Z0-9]+)$/', $cCode, $m)) {
-                    $grade = match ($m[1]) {
-                        '7' => 'VII',
-                        '8' => 'VIII',
-                        '9' => 'IX',
-                        default => $m[1],
-                    };
-                    $formatted = $grade . '-' . $m[2];
-                } else {
-                    $grade = 'VII';
-                    $formatted = $cCode;
-                }
+                $formatted = self::formatClassDisplayName($cCode);
+                $grade = explode('-', $formatted)[0] ?: 'VII';
 
                 $sc = SchoolClass::query()
                     ->where('academic_year_id', $academicYear->id)
@@ -2851,7 +3071,6 @@ CSV;
                     ->first(fn (SchoolClass $c) => self::normalizeClassName($c->name) === $cCode);
 
                 if (! $sc) {
-                    $wkName = $parsedHomerooms[$cCode] ?? ('Wali Kelas ' . $formatted);
                     $sc = SchoolClass::query()->firstOrCreate(
                         [
                             'academic_year_id' => $academicYear->id,
@@ -2859,7 +3078,7 @@ CSV;
                         ],
                         [
                             'grade_level' => $grade,
-                            'homeroom_teacher_name' => $wkName,
+                            'homeroom_teacher_name' => '-',
                         ]
                     );
                 }
@@ -2867,16 +3086,14 @@ CSV;
                 $schoolClassesMap[$cCode] = $sc;
             }
 
-            $scheduleTeachers = SchoolScheduleTeacher::query()
-                ->where('academic_year_id', $academicYear->id)
-                ->get()
-                ->keyBy('code');
-
+            // 3. Tulis ulang item matriks dengan user_id, teacher_name, dan subject_id tersinkron dari Master Guru
             SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->delete();
 
             foreach ($parsedItems as $row) {
                 $tCode = $row['teacher_code'];
-                $tRecord = $tCode !== null ? $scheduleTeachers->get($tCode) : null;
+                $isAct = (bool) $row['is_activity'];
+                $normCode = (! $isAct && $tCode !== null) ? self::normalizeTeachingCode($tCode) : '';
+                $tMeta = $normCode !== '' ? ($codeTeacherMap[$normCode] ?? null) : null;
                 $sc = $schoolClassesMap[$row['class_name']] ?? null;
 
                 SchoolScheduleItem::query()->create([
@@ -2887,10 +3104,11 @@ CSV;
                     'time_range' => $row['time_range'],
                     'class_name' => $row['class_name'],
                     'school_class_id' => $sc?->id,
-                    'teacher_code' => $tCode,
-                    'teacher_name' => $tRecord?->name ?? ($row['is_activity'] ? $tCode : null),
-                    'subject_name' => $tRecord?->subject,
-                    'user_id' => $tRecord?->user_id,
+                    'teacher_code' => $isAct ? $tCode : ($normCode !== '' ? $normCode : null),
+                    'teacher_name' => $tMeta['name'] ?? ($isAct ? $tCode : null),
+                    'subject_name' => $tMeta['subject'] ?? null,
+                    'user_id' => $tMeta['user_id'] ?? null,
+                    'subject_id' => $tMeta['subject_id'] ?? null,
                 ]);
             }
         });
@@ -2902,7 +3120,7 @@ CSV;
         }
 
         return [
-            'teachers_count' => SchoolScheduleTeacher::query()->where('academic_year_id', $academicYear->id)->count(),
+            'teachers_count' => $this->getMasterTeacherDirectory($academicYear)->count(),
             'items_count' => SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->count(),
             'conflicts_count' => count($conflicts),
             'shifts_detected' => count($shiftBlocks),
@@ -3141,7 +3359,7 @@ CSV;
     }
 
     /**
-     * @return array<string, array{code: string, name: string, subject: string}>
+     * @return list<array{code: string, name: string, subject: string}>
      */
     protected function parseTeacherLegend(array $grid, ?array $anchor): array
     {
@@ -3161,13 +3379,10 @@ CSV;
                 break;
             }
             if ($code === '' || $name === '') {
-                if (! empty($result) && strtoupper($name) === '' && $subj === '') {
-                    continue;
-                }
                 continue;
             }
 
-            $result[$code] = [
+            $result[] = [
                 'code' => $code,
                 'name' => $name,
                 'subject' => $subj,
@@ -3178,7 +3393,7 @@ CSV;
     }
 
     /**
-     * @return array<string, string>
+     * @return list<array{day: string, name: string}>
      */
     protected function parsePiketLegend(array $grid, ?array $anchor): array
     {
@@ -3186,29 +3401,29 @@ CSV;
             return [];
         }
 
-        $validDays = ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'JUMAT', 'SABTU'];
         $result = [];
         $totalRows = count($grid);
 
         for ($r = $anchor['row'] + 1; $r < $totalRows; $r++) {
             $row = $grid[$r] ?? [];
             $name = trim((string) ($row[$anchor['second_col']] ?? ''));
-            $day = strtoupper(trim((string) ($row[$anchor['third_col']] ?? '')));
+            $rawDay = trim((string) ($row[$anchor['third_col']] ?? ''));
 
-            if (str_contains(strtoupper($day), 'WALI KELAS') || str_contains(strtoupper($day), 'WAL KELAS')) {
+            if (str_contains(strtoupper($rawDay), 'WALI KELAS') || str_contains(strtoupper($rawDay), 'WAL KELAS')) {
                 break;
             }
-            if ($name === '' || $day === '') {
-                continue;
-            }
-            if (! in_array($day, $validDays, true)) {
-                if (! empty($result)) {
+            $day = User::normalizePiketDay($rawDay);
+            if ($name === '' || $day === null) {
+                if (! empty($result) && $rawDay !== '' && $day === null) {
                     break;
                 }
                 continue;
             }
 
-            $result[$day] = $name;
+            $result[] = [
+                'day' => $day,
+                'name' => $name,
+            ];
         }
 
         return $result;

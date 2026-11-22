@@ -2,7 +2,7 @@
 
 @section('title', 'Data Master Guru')
 @section('page_title', 'Data Master Guru & Tenaga Pendidik')
-@section('page_subtitle', 'Pusat basis data tenaga pendidik SMPN 2 Lemahabang: NIP, nomor telepon, kode mapel, kode mengajar jadwal, dan tanda tangan digital (TTD).')
+@section('page_subtitle', 'Pusat tunggal Master Data Sekolah: identitas guru, kode mapel, kode mengajar (unik), wali kelas, jadwal piket, dan tanda tangan digital.')
 
 @section('content')
 <div class="space-y-5" x-data="{
@@ -10,6 +10,8 @@
     editUser: null,
     quickSig: { open: false, user_id: null, user_name: '', signature_data: '', pad: null, sigData: '' },
     allSubjects: @js($subjects->map(fn($s) => ['id' => $s->id, 'code' => $s->code, 'name' => $s->name])->values()->all()),
+    allClasses: @js($schoolClasses->map(fn($c) => ['id' => $c->id, 'name' => $c->name, 'homeroom_teacher_id' => $c->homeroom_teacher_id, 'homeroom_teacher_name' => $c->homeroomTeacher?->name ?: $c->homeroom_teacher_name])->values()->all()),
+    usedCodesMap: @js($usedCodesMap),
     createPad: null,
     editPad: null,
     createSigData: '',
@@ -21,9 +23,21 @@
         email: '',
         phone: '',
         password: 'guru123',
+        homeroom_school_class_id: '',
+        piket_days: [],
         teacher_subjects: [
             { subject_id: '', teaching_code: '' }
         ],
+    },
+    normalizeCode(val) {
+        return String(val || '').replace(/\s+/g, '').trim().toUpperCase();
+    },
+    findCodeConflict(val, currentUserId) {
+        const code = this.normalizeCode(val);
+        if (!code || !this.usedCodesMap[code]) return null;
+        const owner = this.usedCodesMap[code];
+        if (currentUserId && Number(owner.user_id) === Number(currentUserId)) return null;
+        return owner.user_name || 'Guru lain';
     },
     resetCreateForm() {
         this.createSigData = '';
@@ -35,6 +49,8 @@
             email: '',
             phone: '',
             password: 'guru123',
+            homeroom_school_class_id: '',
+            piket_days: [],
             teacher_subjects: [
                 { subject_id: '', teaching_code: '' }
             ],
@@ -121,6 +137,8 @@
                     <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'phone', 'dir' => 'asc'])) }}" {{ $sort === 'phone' && $dir === 'asc' ? 'selected' : '' }}>Nomor Telepon</option>
                     <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'mapel', 'dir' => 'asc'])) }}" {{ $sort === 'mapel' && $dir === 'asc' ? 'selected' : '' }}>Kode Mapel (A → Z)</option>
                     <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'teaching_code', 'dir' => 'asc'])) }}" {{ $sort === 'teaching_code' && $dir === 'asc' ? 'selected' : '' }}>Kode Mengajar (1 → 9)</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'homeroom', 'dir' => 'asc'])) }}" {{ $sort === 'homeroom' && $dir === 'asc' ? 'selected' : '' }}>Wali Kelas</option>
+                    <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'piket', 'dir' => 'asc'])) }}" {{ $sort === 'piket' && $dir === 'asc' ? 'selected' : '' }}>Hari Piket</option>
                     <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'ttd', 'dir' => 'asc'])) }}" {{ $sort === 'ttd' && $dir === 'asc' ? 'selected' : '' }}>TTD (Belum Ada TTD Dulu)</option>
                     <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'ttd', 'dir' => 'desc'])) }}" {{ $sort === 'ttd' && $dir === 'desc' ? 'selected' : '' }}>TTD (Sudah Ada TTD Dulu)</option>
                     <option value="{{ route('admin.teachers.index', array_merge(request()->query(), ['sort' => 'status', 'dir' => 'asc'])) }}" {{ $sort === 'status' && $dir === 'asc' ? 'selected' : '' }}>Status (Aktif Dulu)</option>
@@ -254,6 +272,34 @@
                             </a>
                         </th>
 
+                        {{-- 6b. Wali Kelas (Sortable) --}}
+                        <th class="px-3 py-3 w-28 border-r border-slate-200 text-center">
+                            <a href="{{ $buildSortUrl('homeroom') }}" class="group flex items-center justify-center gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan Wali Kelas">
+                                <span>Wali Kelas</span>
+                                <span class="inline-flex items-center text-xs">
+                                    @if($sort === 'homeroom' || $sort === 'wali_kelas')
+                                        <span class="text-emerald-600 font-black">{{ $dir === 'asc' ? '▲' : '▼' }}</span>
+                                    @else
+                                        <span class="text-slate-300 group-hover:text-slate-500">⇅</span>
+                                    @endif
+                                </span>
+                            </a>
+                        </th>
+
+                        {{-- 6c. Guru Piket (Sortable) --}}
+                        <th class="px-3 py-3 w-32 border-r border-slate-200 text-center">
+                            <a href="{{ $buildSortUrl('piket') }}" class="group flex items-center justify-center gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan Hari Piket">
+                                <span>Guru Piket</span>
+                                <span class="inline-flex items-center text-xs">
+                                    @if($sort === 'piket')
+                                        <span class="text-emerald-600 font-black">{{ $dir === 'asc' ? '▲' : '▼' }}</span>
+                                    @else
+                                        <span class="text-slate-300 group-hover:text-slate-500">⇅</span>
+                                    @endif
+                                </span>
+                            </a>
+                        </th>
+
                         {{-- 7. TTD Digital (Sortable) --}}
                         <th class="px-3 py-3 w-28 text-center border-r border-slate-200">
                             <a href="{{ $buildSortUrl('ttd') }}" class="group flex items-center justify-center gap-1 text-slate-700 hover:text-emerald-700 font-bold" title="Klik untuk mengurutkan berdasarkan Kelengkapan TTD">
@@ -359,6 +405,8 @@
                             <td class="px-3 py-3 border-r border-slate-100 text-center">
                                 @php
                                     $teachingCodes = $userTeacherSubjects->pluck('teaching_code')->filter()->unique()->values();
+                                    $homeroomClassObj = $u->homeroomClassForYear($academicYear->id);
+                                    $uPiketDays = $u->piket_days_list;
                                 @endphp
                                 @if($teachingCodes->isNotEmpty())
                                     <div class="flex flex-wrap items-center justify-center gap-1">
@@ -366,6 +414,32 @@
                                             <span class="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-extrabold text-[11px]"
                                                   title="Kode Mengajar di Master Jadwal">
                                                 {{ $tc }}
+                                            </span>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <span class="text-slate-400">-</span>
+                                @endif
+                            </td>
+
+                            {{-- 6b. Wali Kelas --}}
+                            <td class="px-3 py-3 border-r border-slate-100 text-center">
+                                @if($homeroomClassObj)
+                                    <span class="px-2 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200 font-extrabold text-[11px]">
+                                        {{ $homeroomClassObj->name }}
+                                    </span>
+                                @else
+                                    <span class="text-slate-400">-</span>
+                                @endif
+                            </td>
+
+                            {{-- 6c. Guru Piket --}}
+                            <td class="px-3 py-3 border-r border-slate-100 text-center">
+                                @if(!empty($uPiketDays))
+                                    <div class="flex flex-wrap items-center justify-center gap-1">
+                                        @foreach($uPiketDays as $pDay)
+                                            <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-[10px]">
+                                                {{ $pDay }}
                                             </span>
                                         @endforeach
                                     </div>
@@ -413,12 +487,16 @@
                                                 'phone' => $u->phone,
                                                 'default_subject' => $u->default_subject,
                                                 'signature_data' => $u->signature_data,
-                                                'is_active' => (bool)$u->is_active,
+                                                'is_active' => (bool) $u->is_active,
+                                                'homeroom_school_class_id' => $homeroomClassObj?->id ? (string) $homeroomClassObj->id : '',
+                                                'piket_days' => $uPiketDays,
                                                 'update_url' => route('admin.teachers.update', $u),
-                                                'teacher_subjects' => $userTeacherSubjects->map(fn($ts) => [
-                                                    'subject_id' => $ts->subject_id,
-                                                    'teaching_code' => $ts->teaching_code ?? '',
-                                                ])->values()->all(),
+                                                'teacher_subjects' => $userTeacherSubjects->isNotEmpty()
+                                                    ? $userTeacherSubjects->map(fn($ts) => [
+                                                        'subject_id' => (string) $ts->subject_id,
+                                                        'teaching_code' => $ts->teaching_code ?? '',
+                                                    ])->values()->all()
+                                                    : [['subject_id' => '', 'teaching_code' => '']],
                                             ]))"
                                             class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 cursor-pointer">
                                         Edit
@@ -448,7 +526,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="px-5 py-10 text-center text-slate-500">
+                            <td colspan="11" class="px-5 py-10 text-center text-slate-500">
                                 Tidak ada data guru yang cocok dengan pencarian.
                             </td>
                         </tr>
@@ -510,49 +588,12 @@
                     </div>
                 </div>
 
-                {{-- Bagian 2: Mata Pelajaran & Kode Mengajar (Multi-Mapel) --}}
-                <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <span class="block font-bold text-slate-800 text-xs">Mata Pelajaran yang Diampu &amp; Kode Mengajar</span>
-                            <span class="block text-[11px] text-slate-500">Satu guru dapat mengampu lebih dari satu mapel dengan kode mengajar masing-masing.</span>
-                        </div>
-                        <button type="button" @click="addSubjectRow(form.teacher_subjects)"
-                                class="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-[11px] cursor-pointer">
-                            + Tambah Mapel
-                        </button>
-                    </div>
-
-                    <div class="space-y-2">
-                        <template x-for="(row, rIdx) in form.teacher_subjects" :key="'create-ts-'+rIdx">
-                            <div class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200">
-                                <div class="flex-1">
-                                    <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Mata Pelajaran (Dari tabel Mapel &amp; KKTP):</label>
-                                    <select :name="'teacher_subjects['+rIdx+'][subject_id]'" x-model="row.subject_id"
-                                            class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white">
-                                        <option value="">-- Pilih Mata Pelajaran --</option>
-                                        <template x-for="sb in allSubjects" :key="sb.id">
-                                            <option :value="sb.id" x-text="'[' + sb.code + '] ' + sb.name"></option>
-                                        </template>
-                                    </select>
-                                </div>
-                                <div class="w-36">
-                                    <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Kode Mengajar:</label>
-                                    <input type="text" :name="'teacher_subjects['+rIdx+'][teaching_code]'" x-model="row.teaching_code"
-                                           placeholder="Misal: 14A, 7"
-                                           class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-center text-amber-900 bg-amber-50/50">
-                                </div>
-                                <div class="pt-4">
-                                    <button type="button" @click="removeSubjectRow(form.teacher_subjects, rIdx)"
-                                            class="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 cursor-pointer"
-                                            title="Hapus baris mapel ini">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                    </button>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
+                {{-- Bagian 2: Mata Pelajaran, Kode Mengajar, Wali Kelas & Jadwal Piket --}}
+                @include('admin.partials.teacher-assignments-fields', [
+                    'prefix' => 'form',
+                    'currentUserId' => 'null',
+                    'mode' => 'create',
+                ])
 
                 {{-- Bagian 3: Tanda Tangan Digital (TTD) --}}
                 <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
@@ -641,49 +682,12 @@
                         </div>
                     </div>
 
-                    {{-- Penugasan Mapel & Kode Mengajar --}}
-                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span class="block font-bold text-slate-800 text-xs">Mata Pelajaran &amp; Kode Mengajar</span>
-                                <span class="block text-[11px] text-slate-500">Satu guru dapat memiliki lebih dari satu kode mengajar dan kode mapel.</span>
-                            </div>
-                            <button type="button" @click="addSubjectRow(editUser.teacher_subjects)"
-                                    class="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-[11px] cursor-pointer">
-                                + Tambah Mapel
-                            </button>
-                        </div>
-
-                        <div class="space-y-2">
-                            <template x-for="(row, rIdx) in editUser.teacher_subjects" :key="'edit-ts-'+rIdx">
-                                <div class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200">
-                                    <div class="flex-1">
-                                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Mata Pelajaran:</label>
-                                        <select :name="'teacher_subjects['+rIdx+'][subject_id]'" x-model="row.subject_id"
-                                                class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white">
-                                            <option value="">-- Pilih Mata Pelajaran --</option>
-                                            <template x-for="sb in allSubjects" :key="sb.id">
-                                                <option :value="sb.id" :selected="sb.id == row.subject_id" x-text="'[' + sb.code + '] ' + sb.name"></option>
-                                            </template>
-                                        </select>
-                                    </div>
-                                    <div class="w-36">
-                                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Kode Mengajar:</label>
-                                        <input type="text" :name="'teacher_subjects['+rIdx+'][teaching_code]'" x-model="row.teaching_code"
-                                               placeholder="Misal: 14A, 7"
-                                               class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-bold text-center text-amber-900 bg-amber-50/50">
-                                    </div>
-                                    <div class="pt-4">
-                                        <button type="button" @click="removeSubjectRow(editUser.teacher_subjects, rIdx)"
-                                                class="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 cursor-pointer"
-                                                title="Hapus baris mapel ini">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
+                    {{-- Penugasan Mapel, Kode Mengajar, Wali Kelas & Jadwal Piket --}}
+                    @include('admin.partials.teacher-assignments-fields', [
+                        'prefix' => 'editUser',
+                        'currentUserId' => 'editUser.id',
+                        'mode' => 'edit',
+                    ])
 
                     {{-- Pengelolaan Tanda Tangan Digital (TTD) --}}
                     <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">

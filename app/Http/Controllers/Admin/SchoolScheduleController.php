@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\SchoolScheduleItem;
-use App\Models\SchoolScheduleTeacher;
 use App\Models\SchoolSetting;
 use App\Models\Subject;
 use App\Models\User;
@@ -59,10 +58,9 @@ class SchoolScheduleController extends Controller
         $matrixData = $this->scheduleService->getMasterMatrix($academicYear, $activeDay, $conflicts);
         $prerequisites = $this->scheduleService->checkMasterPrerequisites($academicYear);
 
-        $teachers = SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $academicYear->id)
-            ->orderBy('code')
-            ->get();
+        $teachers = $this->scheduleService->getMasterTeacherDirectory($academicYear);
+        $piketGrouped = $this->scheduleService->getPiketGroupedByDay();
+        $homeroomList = $this->scheduleService->getHomeroomList($academicYear);
 
         $allUsers = User::query()->where('is_active', true)->orderBy('name')->get();
         $allSubjects = Subject::query()->where('is_active', true)->orderBy('name')->get();
@@ -78,6 +76,8 @@ class SchoolScheduleController extends Controller
             'conflicts' => $conflicts,
             'prerequisites' => $prerequisites,
             'teachers' => $teachers,
+            'piketGrouped' => $piketGrouped,
+            'homeroomList' => $homeroomList,
             'allUsers' => $allUsers,
             'allSubjects' => $allSubjects,
             'allSchoolClasses' => $allSchoolClasses,
@@ -172,10 +172,7 @@ class SchoolScheduleController extends Controller
                 ];
             });
 
-        $scheduleTeachers = SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $academicYear->id)
-            ->orderBy('code')
-            ->get();
+        $scheduleTeachers = $this->scheduleService->getMasterTeacherDirectory($academicYear);
 
         $subjects = Subject::query()
             ->where('is_active', true)

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
-use App\Models\SchoolScheduleTeacher;
 use App\Models\SchoolSetting;
 use App\Services\SchoolScheduleService;
 use Carbon\Carbon;
@@ -29,10 +28,11 @@ class MasterScheduleController extends Controller
             $academicYear = AcademicYear::query()->first();
         }
 
-        // Jika data jadwal masih kosong, muat template resmi Wakasek secara otomatis
+        // Jika data jadwal dan master kode guru masih kosong, muat template resmi Wakasek secara otomatis
         if ($academicYear) {
             $itemCount = \App\Models\SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->count();
-            if ($itemCount === 0) {
+            $hasCustomCodes = \App\Models\TeacherSubject::query()->whereNotNull('teaching_code_normalized')->exists();
+            if ($itemCount === 0 && ! $hasCustomCodes) {
                 $this->scheduleService->importFromWakasekCsv($academicYear);
                 $this->scheduleService->syncToTeachingClasses($academicYear);
             }
@@ -51,14 +51,10 @@ class MasterScheduleController extends Controller
         // Ambil matriks seluruh sekolah
         $matrixData = $this->scheduleService->getMasterMatrix($academicYear, $activeDay);
 
-        // Ambil daftar 21 wali kelas resmi yang diurutkan rapi per rombel
-        $homeroomList = $this->scheduleService->getHomeroomList($academicYear);
-
-        // Ambil daftar guru piket & wali kelas
-        $allTeachers = SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $academicYear->id)
-            ->orderBy('code')
-            ->get();
+        // Ambil daftar Wali Kelas, Kode Guru, dan Guru Piket langsung dari Master Data Tunggal
+        $homeroomList = $academicYear ? $this->scheduleService->getHomeroomList($academicYear) : collect();
+        $allTeachers = $academicYear ? $this->scheduleService->getMasterTeacherDirectory($academicYear) : collect();
+        $piketGrouped = $this->scheduleService->getPiketGroupedByDay();
 
         $today = Carbon::now();
         $todayDayOfWeek = (int) $today->dayOfWeek; // 1 = Senin..6 = Sabtu
@@ -73,6 +69,7 @@ class MasterScheduleController extends Controller
             'mySchedule' => $mySchedule,
             'matrixData' => $matrixData,
             'allTeachers' => $allTeachers,
+            'piketGrouped' => $piketGrouped,
             'homeroomList' => $homeroomList,
             'todayDayOfWeek' => $todayDayOfWeek,
             'school' => $school,

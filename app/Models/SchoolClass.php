@@ -12,6 +12,7 @@ class SchoolClass extends Model
         'academic_year_id',
         'grade_level',
         'name',
+        'homeroom_teacher_id',
         'homeroom_teacher_name',
         'homeroom_teacher_nip',
         'homeroom_teacher_signature',
@@ -20,6 +21,11 @@ class SchoolClass extends Model
     public function academicYear(): BelongsTo
     {
         return $this->belongsTo(AcademicYear::class);
+    }
+
+    public function homeroomTeacher(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'homeroom_teacher_id');
     }
 
     public function students(): HasMany
@@ -40,6 +46,23 @@ class SchoolClass extends Model
     public function teachingModules(): HasMany
     {
         return $this->hasMany(TeachingModule::class, 'school_class_id');
+    }
+
+    /**
+     * Terapkan wali kelas dari Master Guru dan sinkronkan otomatis ke seluruh Buku Kelas pengampu
+     */
+    public function applyHomeroomTeacher(?User $teacher): self
+    {
+        $this->forceFill([
+            'homeroom_teacher_id' => $teacher?->id,
+            'homeroom_teacher_name' => $teacher?->name ?: '-',
+            'homeroom_teacher_nip' => $teacher?->nip,
+            'homeroom_teacher_signature' => $teacher?->signature_data,
+        ])->save();
+
+        $this->syncToTeachingClasses();
+
+        return $this;
     }
 
     /**

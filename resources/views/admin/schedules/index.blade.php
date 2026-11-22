@@ -641,7 +641,7 @@
                             <select name="teacher_code" x-model="selectedTeacherCode" @change="onTeacherSelect($event.target.value)"
                                     class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold focus:ring-emerald-500 focus:border-emerald-500">
                                 <option value="">-- Kosongkan Sel Jadwal --</option>
-                                <optgroup label="Kode Guru Resmi (36 Guru)">
+                                <optgroup label="Kode Mengajar Resmi (Master Guru — {{ $teachers->count() }} Penugasan)">
                                     <template x-for="t in teachersList" :key="t.code">
                                         <option :value="t.code" :selected="String(t.code) === String(selectedTeacherCode)"
                                                 x-text="'Kode ' + t.code + ' — ' + t.name + ' (' + (t.subject || '-') + ')'"></option>
@@ -658,15 +658,15 @@
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-slate-700 mb-1">Nama Guru (Otomatis)</label>
-                            <input type="text" name="teacher_name" x-model="selectedTeacherName"
-                                   class="w-full rounded-xl bg-slate-50 border border-slate-300 px-3 py-2 text-xs font-semibold">
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Nama Guru (Otomatis dari Master Guru)</label>
+                            <input type="text" name="teacher_name" x-model="selectedTeacherName" readonly
+                                   class="w-full rounded-xl bg-slate-100 text-slate-600 border border-slate-300 px-3 py-2 text-xs font-semibold">
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-slate-700 mb-1">Mata Pelajaran (Otomatis)</label>
-                            <input type="text" name="subject_name" x-model="selectedSubjectName"
-                                   class="w-full rounded-xl bg-slate-50 border border-slate-300 px-3 py-2 text-xs font-semibold">
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Mata Pelajaran (Otomatis dari Master Guru)</label>
+                            <input type="text" name="subject_name" x-model="selectedSubjectName" readonly
+                                   class="w-full rounded-xl bg-slate-100 text-slate-600 border border-slate-300 px-3 py-2 text-xs font-semibold">
                         </div>
 
                         <div class="pt-3 flex items-center justify-between border-t border-slate-100">
@@ -807,20 +807,25 @@
         </div>
     </div>
 
-    {{-- LEGENDA KODE GURU & WALI KELAS --}}
+    {{-- LEGENDA KODE GURU, WALI KELAS & GURU PIKET (TERPUSAT DARI MASTER GURU) --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4" x-data="{ openLegend: false }">
         <div class="flex items-center justify-between cursor-pointer" @click="openLegend = !openLegend">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <h3 class="text-sm font-extrabold text-slate-900">Legenda 36 Kode Guru, Wali Kelas & Guru Piket</h3>
-                <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-xs font-bold">{{ $teachers->count() }} Guru</span>
+                <h3 class="text-sm font-extrabold text-slate-900">Legenda Kode Guru, Wali Kelas &amp; Guru Piket (Sinkron Master Guru)</h3>
+                <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-xs font-bold">{{ $teachers->count() }} Kode</span>
             </div>
-            <button type="button" class="text-xs font-bold text-emerald-700 hover:underline">
-                <span x-text="openLegend ? 'Sembunyikan' : 'Buka Legenda Lengkap &darr;'"></span>
-            </button>
+            <div class="flex items-center gap-3">
+                <a href="{{ route('admin.teachers.index') }}" @click.stop class="text-xs font-bold text-indigo-700 hover:underline">
+                    Kelola di Master Guru &rarr;
+                </a>
+                <button type="button" class="text-xs font-bold text-emerald-700 hover:underline">
+                    <span x-text="openLegend ? 'Sembunyikan' : 'Buka Legenda Lengkap &darr;'"></span>
+                </button>
+            </div>
         </div>
 
-        <div x-show="openLegend" x-collapse class="pt-3 border-t border-slate-100">
+        <div x-show="openLegend" x-collapse class="pt-3 border-t border-slate-100 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
                 @foreach($teachers as $t)
                     <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
@@ -833,11 +838,18 @@
                                 <div class="text-[11px] text-slate-500 truncate">{{ $t->subject ?: '-' }}</div>
                             </div>
                         </div>
-                        @if($t->homeroom_class)
-                            <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold shrink-0">
-                                Wali {{ $t->homeroom_class }}
-                            </span>
-                        @endif
+                        <div class="flex flex-col items-end gap-1 shrink-0">
+                            @if($t->homeroom_class)
+                                <span class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-bold">
+                                    Wali {{ $t->homeroom_class }}
+                                </span>
+                            @endif
+                            @if(!empty($t->piket_day))
+                                <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                    Piket {{ $t->piket_day }}
+                                </span>
+                            @endif
+                        </div>
                     </div>
                 @endforeach
             </div>

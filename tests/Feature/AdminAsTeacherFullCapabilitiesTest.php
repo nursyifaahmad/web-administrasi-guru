@@ -324,15 +324,7 @@ class AdminAsTeacherFullCapabilitiesTest extends TestCase
 
     public function test_admin_teacher_receives_master_schedule_allocations(): void
     {
-        // Setup slot jadwal resmi Wakasek untuk Kode 12 (MUHAMMAD IRFAN, S.Pd)
-        \App\Models\SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $this->academicYear->id,
-            'code' => '12',
-            'name' => 'MUHAMMAD IRFAN, S.Pd',
-            'subject' => 'B. INGGRIS',
-            'user_id' => null, // Belum tertaut langsung
-        ]);
-
+        // Setup slot jadwal resmi Wakasek untuk Kode 12 (MUHAMMAD IRFAN, S.Pd) sebelum user_id tertaut
         \App\Models\SchoolScheduleItem::query()->create([
             'academic_year_id' => $this->academicYear->id,
             'teacher_code' => '12',
@@ -369,23 +361,20 @@ class AdminAsTeacherFullCapabilitiesTest extends TestCase
         $this->assertContains('9E', $classCodes);
         $this->assertContains('9F', $classCodes);
 
-        // Pastikan relasi otomatis ditautkan ke user_id Muhammad Irfan
-        $scheduleTeacher = \App\Models\SchoolScheduleTeacher::query()
-            ->where('academic_year_id', $this->academicYear->id)
-            ->where('code', '12')
-            ->first();
-        $this->assertEquals($this->adminTeacher->id, $scheduleTeacher->user_id);
+        // Pastikan item jadwal otomatis tertaut ke user_id Muhammad Irfan
+        $this->assertDatabaseHas('school_schedule_items', [
+            'academic_year_id' => $this->academicYear->id,
+            'teacher_code' => '12',
+            'user_id' => $this->adminTeacher->id,
+        ]);
     }
 
     public function test_admin_teacher_sees_schedule_allocations_in_classes_index_page(): void
     {
-        // Setup slot jadwal resmi untuk Muhammad Irfan
-        \App\Models\SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $this->academicYear->id,
-            'code' => '12',
-            'name' => 'MUHAMMAD IRFAN, S.Pd',
-            'subject' => 'B. INGGRIS',
+        \App\Models\TeacherSubject::query()->create([
             'user_id' => $this->adminTeacher->id,
+            'subject_id' => $this->subjectEnglish->id,
+            'teaching_code' => '12',
         ]);
 
         \App\Models\SchoolScheduleItem::query()->create([
@@ -415,13 +404,6 @@ class AdminAsTeacherFullCapabilitiesTest extends TestCase
 
     public function test_name_matching_supports_single_m_spelling_variation_for_admin(): void
     {
-        \App\Models\SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $this->academicYear->id,
-            'code' => '12',
-            'name' => 'MUHAMMAD IRFAN, S.Pd',
-            'subject' => 'B. INGGRIS',
-            'user_id' => null,
-        ]);
         \App\Models\SchoolScheduleItem::query()->create([
             'academic_year_id' => $this->academicYear->id,
             'teacher_code' => '12',
@@ -473,12 +455,10 @@ class AdminAsTeacherFullCapabilitiesTest extends TestCase
 
     public function test_admin_teacher_can_sync_and_create_all_classes_from_schedule(): void
     {
-        \App\Models\SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $this->academicYear->id,
-            'code' => '12',
-            'name' => 'MUHAMMAD IRFAN, S.Pd',
-            'subject' => 'B. INGGRIS',
+        \App\Models\TeacherSubject::query()->create([
             'user_id' => $this->adminTeacher->id,
+            'subject_id' => $this->subjectEnglish->id,
+            'teaching_code' => '12',
         ]);
 
         \App\Models\SchoolScheduleItem::query()->create([

@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\SchoolScheduleItem;
-use App\Models\SchoolScheduleTeacher;
 use App\Models\Subject;
+use App\Models\TeacherSubject;
 use App\Models\TeachingClass;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -106,24 +106,7 @@ class TeacherAccountIntegrationTest extends TestCase
     {
         [$admin, $year, $subPai, $subDaerah, $class7A, $class8B] = $this->createEnvironment();
 
-        // 1. Siapkan master guru jadwal awal (sebelumnya ada atau belum)
-        SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '14A',
-            'name' => 'ISMAIL, S.Pd. I',
-            'subject' => 'Pendidikan Agama Islam',
-            'homeroom_class' => '7G',
-            'piket_day' => 'Selasa',
-        ]);
-
-        SchoolScheduleTeacher::query()->create([
-            'academic_year_id' => $year->id,
-            'code' => '14B',
-            'name' => 'ISMAIL, S.Pd. I',
-            'subject' => 'Bahasa Daerah',
-        ]);
-
-        // 2. Siapkan slot jadwal KBM di Master Jadwal:
+        // 1. Siapkan slot jadwal KBM di Master Jadwal (user_id masih null sebelum akun guru dibuat):
         // 14A mengajar di VII-A (PAI)
         SchoolScheduleItem::query()->create([
             'academic_year_id' => $year->id,
@@ -154,7 +137,7 @@ class TeacherAccountIntegrationTest extends TestCase
             'subject_id' => $subDaerah->id,
         ]);
 
-        // 3. Admin membuat akun guru Pak Ismail melalui form Master Guru dengan teacher_subjects
+        // 2. Admin membuat akun guru Pak Ismail melalui form Master Guru sekaligus Kode Mengajar, Piket, dan Wali Kelas VII-A
         $response = $this->actingAs($admin)->post(route('admin.teachers.store'), [
             'name' => 'ISMAIL, S.Pd. I',
             'email' => 'ismail@smpn2lemahabang.sch.id',
@@ -162,6 +145,8 @@ class TeacherAccountIntegrationTest extends TestCase
             'role' => 'guru',
             'phone' => '081234567890',
             'password' => 'guru123',
+            'homeroom_school_class_id' => $class7A->id,
+            'piket_days' => ['SELASA'],
             'teacher_subjects' => [
                 ['subject_id' => $subPai->id, 'teaching_code' => '14A'],
                 ['subject_id' => $subDaerah->id, 'teaching_code' => '14B'],
@@ -171,24 +156,29 @@ class TeacherAccountIntegrationTest extends TestCase
         $response->assertRedirect();
         $response->assertSessionHas('success');
 
-        // 4. Verifikasi akun User terbuat
+        // 3. Verifikasi akun User, kode mengajar, & piket terbentuk di Master Guru tunggal
         $ismailUser = User::query()->where('email', 'ismail@smpn2lemahabang.sch.id')->firstOrFail();
         $this->assertSame('ISMAIL, S.Pd. I', $ismailUser->name);
         $this->assertSame('guru', $ismailUser->role);
+        $this->assertSame(['SELASA'], $ismailUser->piket_days_list);
 
-        // 5. Verifikasi SchoolScheduleTeacher otomatis terhubung ke akun Pak Ismail
-        $this->assertDatabaseHas('school_schedule_teachers', [
-            'academic_year_id' => $year->id,
-            'code' => '14A',
+        $this->assertDatabaseHas('teacher_subjects', [
             'user_id' => $ismailUser->id,
+            'subject_id' => $subPai->id,
+            'teaching_code_normalized' => '14A',
         ]);
-        $this->assertDatabaseHas('school_schedule_teachers', [
-            'academic_year_id' => $year->id,
-            'code' => '14B',
+        $this->assertDatabaseHas('teacher_subjects', [
             'user_id' => $ismailUser->id,
+            'subject_id' => $subDaerah->id,
+            'teaching_code_normalized' => '14B',
         ]);
 
-        // 6. Verifikasi SchoolScheduleItem otomatis terhubung ke user_id
+        // 4. Verifikasi Wali Kelas VII-A terhubung ke Pak Ismail
+        $class7A->refresh();
+        $this->assertSame($ismailUser->id, $class7A->homeroom_teacher_id);
+        $this->assertSame('ISMAIL, S.Pd. I', $class7A->homeroom_teacher_name);
+
+        // 5. Verifikasi SchoolScheduleItem otomatis terhubung ke user_id
         $this->assertDatabaseHas('school_schedule_items', [
             'teacher_code' => '14A',
             'user_id' => $ismailUser->id,
@@ -198,14 +188,14 @@ class TeacherAccountIntegrationTest extends TestCase
             'user_id' => $ismailUser->id,
         ]);
 
-        // 7. Verifikasi Buku Kelas Administrasi (TeachingClass) otomatis terbentuk:
-        // Pak Ismail harus memiliki DUA buku kelas terpisah: VII-A (PAI) dan VIII-B (Bahasa Daerah)
+        // 6. Verifikasi Buku Kelas Administrasi (TeachingClass) otomatis terbentuk dengan identitas Wali Kelas tersinkron
         $classes = TeachingClass::query()->where('teacher_id', $ismailUser->id)->get();
         $this->assertCount(2, $classes);
 
         $paiClass = $classes->firstWhere('subject_id', $subPai->id);
         $this->assertNotNull($paiClass);
         $this->assertSame('VII-A', $paiClass->class_name);
+        $this->assertSame('ISMAIL, S.Pd. I', $paiClass->homeroom_teacher_name);
         $this->assertTrue($paiClass->only_teaching_days);
 
         $daerahClass = $classes->firstWhere('subject_id', $subDaerah->id);

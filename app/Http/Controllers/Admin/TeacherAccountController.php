@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicYear;
+use App\Models\SchoolClass;
 use App\Models\SchoolScheduleItem;
-use App\Models\SchoolScheduleTeacher;
 use App\Models\Subject;
 use App\Models\TeacherSubject;
 use App\Models\User;
@@ -12,7 +13,9 @@ use App\Services\SchoolScheduleService;
 use App\Support\SignatureImageHelper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class TeacherAccountController extends Controller
@@ -25,19 +28,26 @@ class TeacherAccountController extends Controller
         $dir = strtolower($request->string('dir')->trim()->toString()) === 'desc' ? 'desc' : 'asc';
 
         $query = User::query()
-            ->with(['teacherSubjects.subject'])
+            ->with([
+                'teacherSubjects.subject',
+                'homeroomSchoolClasses' => fn ($q) => $q->where('academic_year_id', $academicYear->id),
+            ])
             ->withCount([
                 'teachingClasses as total_classes_count',
                 'teachingClasses as semester_classes_count' => fn ($q) => $q->where('academic_year_id', $academicYear->id),
             ]);
 
         if ($search !== '') {
-            $query->where(function ($q) use ($search) {
+            $query->where(function ($q) use ($search, $academicYear) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
                     ->orWhere('nip', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%")
                     ->orWhere('default_subject', 'like', "%{$search}%")
+                    ->orWhere('piket_days', 'like', "%{$search}%")
+                    ->orWhereHas('homeroomSchoolClasses', fn ($hcQ) => $hcQ
+                        ->where('academic_year_id', $academicYear->id)
+                        ->where('name', 'like', "%{$search}%"))
                     ->orWhereHas('teacherSubjects', function ($tsQ) use ($search) {
                         $tsQ->where('teaching_code', 'like', "%{$search}%")
                             ->orWhereHas('subject', fn ($sQ) => $sQ->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%"));
@@ -55,8 +65,8 @@ class TeacherAccountController extends Controller
                 break;
             case 'nip':
                 $users = $users->sort(function ($a, $b) use ($dir) {
-                    $nA = trim((string)$a->nip);
-                    $nB = trim((string)$b->nip);
+                    $nA = trim((string) $a->nip);
+                    $nB = trim((string) $b->nip);
                     if ($nA === '' && $nB === '') return 0;
                     if ($nA === '') return 1;
                     if ($nB === '') return -1;
@@ -65,8 +75,8 @@ class TeacherAccountController extends Controller
                 break;
             case 'phone':
                 $users = $users->sort(function ($a, $b) use ($dir) {
-                    $pA = trim((string)$a->phone);
-                    $pB = trim((string)$b->phone);
+                    $pA = trim((string) $a->phone);
+                    $pB = trim((string) $b->phone);
                     if ($pA === '' && $pB === '') return 0;
                     if ($pA === '') return 1;
                     if ($pB === '') return -1;
@@ -95,11 +105,35 @@ class TeacherAccountController extends Controller
                     return $dir === 'desc' ? strnatcasecmp($tB, $tA) : strnatcasecmp($tA, $tB);
                 })->values();
                 break;
+            case 'homeroom':
+            case 'wali_kelas':
+                $users = $users->sort(function ($a, $b) use ($dir, $academicYear) {
+                    $wA = $a->homeroomClassForYear($academicYear->id)?->name ?: '';
+                    $wB = $b->homeroomClassForYear($academicYear->id)?->name ?: '';
+                    if ($wA === '' && $wB === '') return 0;
+                    if ($wA === '') return 1;
+                    if ($wB === '') return -1;
+                    return $dir === 'desc' ? strnatcasecmp($wB, $wA) : strnatcasecmp($wA, $wB);
+                })->values();
+                break;
+            case 'piket':
+                $orderMap = array_flip(User::PIKET_DAYS);
+                $users = $users->sort(function ($a, $b) use ($dir, $orderMap) {
+                    $dA = $a->piket_days_list[0] ?? null;
+                    $dB = $b->piket_days_list[0] ?? null;
+                    if ($dA === null && $dB === null) return 0;
+                    if ($dA === null) return 1;
+                    if ($dB === null) return -1;
+                    $oA = $orderMap[$dA] ?? 99;
+                    $oB = $orderMap[$dB] ?? 99;
+                    return $dir === 'desc' ? ($oB <=> $oA) : ($oA <=> $oB);
+                })->values();
+                break;
             case 'ttd':
             case 'signature':
                 $users = $users->sort(function ($a, $b) use ($dir) {
-                    $hasA = !empty($a->signature_data) ? 1 : 0;
-                    $hasB = !empty($b->signature_data) ? 1 : 0;
+                    $hasA = ! empty($a->signature_data) ? 1 : 0;
+                    $hasB = ! empty($b->signature_data) ? 1 : 0;
                     if ($hasA !== $hasB) {
                         return $dir === 'desc' ? ($hasA - $hasB) : ($hasB - $hasA);
                     }
@@ -137,17 +171,45 @@ class TeacherAccountController extends Controller
                 break;
         }
 
+        $schoolClasses = SchoolClass::query()
+            ->with('homeroomTeacher')
+            ->where('academic_year_id', $academicYear->id)
+            ->orderBy('grade_level')
+            ->orderBy('name')
+            ->get();
+
+        $usedCodesMap = TeacherSubject::query()
+            ->with('user')
+            ->whereNotNull('teaching_code_normalized')
+            ->get()
+            ->mapWithKeys(fn (TeacherSubject $ts) => [
+                $ts->teaching_code_normalized => [
+                    'user_id' => $ts->user_id,
+                    'user_name' => $ts->user?->name ?? '-',
+                ],
+            ])
+            ->all();
+
+        $scheduleService = app(SchoolScheduleService::class);
+
         return view('admin.teachers', [
+            'academicYear' => $academicYear,
             'users' => $users,
             'search' => $search,
             'sort' => $sort,
             'dir' => $dir,
             'subjects' => Subject::query()->where('is_active', true)->orderBy('name')->get(),
+            'schoolClasses' => $schoolClasses,
+            'piketDays' => User::PIKET_DAYS,
+            'piketGrouped' => $scheduleService->getPiketGroupedByDay(),
+            'usedCodesMap' => $usedCodesMap,
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $academicYear = $this->resolveAcademicYear($request);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
@@ -162,7 +224,16 @@ class TeacherAccountController extends Controller
             'teacher_subjects' => ['nullable', 'array'],
             'teacher_subjects.*.subject_id' => ['required_with:teacher_subjects', 'exists:subjects,id'],
             'teacher_subjects.*.teaching_code' => ['nullable', 'string', 'max:30'],
+            'homeroom_school_class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
+            'piket_days' => ['nullable', 'array'],
+            'piket_days.*' => ['nullable', 'string', 'max:20'],
         ]);
+
+        $subjectRows = $this->validateTeachingCodeConflicts($validated['teacher_subjects'] ?? []);
+        $homeroomClassId = ! empty($validated['homeroom_school_class_id']) ? (int) $validated['homeroom_school_class_id'] : null;
+        $this->validateHomeroomConflict($homeroomClassId, $academicYear->id);
+
+        $piketDays = User::normalizePiketDays($request->input('piket_days', []));
 
         $sigData = null;
         if ($request->hasFile('signature_file')) {
@@ -176,51 +247,50 @@ class TeacherAccountController extends Controller
             $sigData = $normalized['data_uri'] ?? $validated['signature_data'];
         }
 
-        $user = User::query()->create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'nip' => $validated['nip'] ?? null,
-            'role' => $validated['role'],
-            'phone' => $validated['phone'] ?? null,
-            'default_subject' => $validated['default_subject'] ?? null,
-            'signature_data' => $sigData,
-            'password' => $validated['password'],
-            'is_active' => true,
-        ]);
+        $user = DB::transaction(function () use ($validated, $sigData, $piketDays, $subjectRows, $homeroomClassId, $academicYear) {
+            $user = User::query()->create([
+                'name' => trim($validated['name']),
+                'email' => trim($validated['email']),
+                'nip' => $validated['nip'] ?? null,
+                'role' => $validated['role'],
+                'phone' => $validated['phone'] ?? null,
+                'default_subject' => $validated['default_subject'] ?? null,
+                'piket_days' => ! empty($piketDays) ? $piketDays : null,
+                'signature_data' => $sigData,
+                'password' => $validated['password'],
+                'is_active' => true,
+            ]);
 
-        // Simpan penugasan mapel & kode mengajar
-        $assignedSubjectNames = [];
-        $extractedCodes = [];
-        if (! empty($validated['teacher_subjects']) && is_array($validated['teacher_subjects'])) {
-            foreach ($validated['teacher_subjects'] as $row) {
-                if (! empty($row['subject_id'])) {
-                    $tCode = ! empty($row['teaching_code']) ? trim($row['teaching_code']) : null;
-                    $ts = TeacherSubject::query()->updateOrCreate(
-                        [
-                            'user_id' => $user->id,
-                            'subject_id' => $row['subject_id'],
-                        ],
-                        [
-                            'teaching_code' => $tCode,
-                        ]
-                    );
-                    if ($ts->subject) {
-                        $assignedSubjectNames[] = $ts->subject->name;
-                    }
-                    if ($tCode) {
-                        $extractedCodes[] = $tCode;
-                    }
+            $assignedSubjectNames = [];
+            foreach ($subjectRows as $row) {
+                $ts = TeacherSubject::query()->updateOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'subject_id' => $row['subject_id'],
+                    ],
+                    [
+                        'teaching_code' => $row['teaching_code'],
+                    ]
+                );
+                if ($ts->subject) {
+                    $assignedSubjectNames[] = $ts->subject->name;
                 }
             }
-        } elseif (! empty($validated['default_subject'])) {
-            $assignedSubjectNames[] = $validated['default_subject'];
-        }
 
-        if (! empty($assignedSubjectNames)) {
-            $user->update(['default_subject' => implode(', ', array_unique($assignedSubjectNames))]);
-        }
+            if (! empty($assignedSubjectNames)) {
+                $user->update(['default_subject' => implode(', ', array_unique($assignedSubjectNames))]);
+            }
 
-        $academicYear = $this->resolveAcademicYear($request);
+            if ($homeroomClassId) {
+                $sc = SchoolClass::query()
+                    ->where('academic_year_id', $academicYear->id)
+                    ->findOrFail($homeroomClassId);
+                $sc->applyHomeroomTeacher($user);
+            }
+
+            return $user;
+        });
+
         $scheduleService = app(SchoolScheduleService::class);
         $scheduleService->syncScheduleTeachersFromMaster($academicYear);
         $scheduleService->syncToTeachingClasses($academicYear);
@@ -230,6 +300,8 @@ class TeacherAccountController extends Controller
 
     public function update(Request $request, User $teacher): RedirectResponse
     {
+        $academicYear = $this->resolveAcademicYear($request);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($teacher->id)],
@@ -245,16 +317,33 @@ class TeacherAccountController extends Controller
             'teacher_subjects' => ['nullable', 'array'],
             'teacher_subjects.*.subject_id' => ['required_with:teacher_subjects', 'exists:subjects,id'],
             'teacher_subjects.*.teaching_code' => ['nullable', 'string', 'max:30'],
+            'homeroom_school_class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
+            'piket_days' => ['nullable', 'array'],
+            'piket_days.*' => ['nullable', 'string', 'max:20'],
         ]);
 
+        $hasSubjectsInput = $request->has('teacher_subjects');
+        $subjectRows = $hasSubjectsInput ? $this->validateTeachingCodeConflicts($validated['teacher_subjects'] ?? [], $teacher->id) : [];
+
+        $hasHomeroomInput = $request->exists('homeroom_school_class_id');
+        $homeroomClassId = ! empty($validated['homeroom_school_class_id']) ? (int) $validated['homeroom_school_class_id'] : null;
+        if ($hasHomeroomInput) {
+            $this->validateHomeroomConflict($homeroomClassId, $academicYear->id, $teacher->id);
+        }
+
         $payload = [
-            'name' => $validated['name'],
-            'email' => $validated['email'],
+            'name' => trim($validated['name']),
+            'email' => trim($validated['email']),
             'nip' => $validated['nip'] ?? null,
             'role' => $validated['role'],
             'phone' => $validated['phone'] ?? null,
             'default_subject' => $validated['default_subject'] ?? null,
         ];
+
+        if ($request->boolean('has_piket_input') || $request->has('piket_days')) {
+            $normDays = User::normalizePiketDays($request->input('piket_days', []));
+            $payload['piket_days'] = ! empty($normDays) ? $normDays : null;
+        }
 
         if ($request->boolean('remove_signature')) {
             $payload['signature_data'] = null;
@@ -277,32 +366,58 @@ class TeacherAccountController extends Controller
             $payload['password'] = $validated['password'];
         }
 
-        // Sinkronkan penugasan mapel & kode mengajar jika dikirim
-        if ($request->has('teacher_subjects')) {
-            TeacherSubject::where('user_id', $teacher->id)->delete();
-            $assignedSubjectNames = [];
-            if (! empty($validated['teacher_subjects']) && is_array($validated['teacher_subjects'])) {
-                foreach ($validated['teacher_subjects'] as $row) {
-                    if (! empty($row['subject_id'])) {
-                        $ts = TeacherSubject::query()->create([
-                            'user_id' => $teacher->id,
-                            'subject_id' => $row['subject_id'],
-                            'teaching_code' => ! empty($row['teaching_code']) ? trim($row['teaching_code']) : null,
-                        ]);
-                        if ($ts->subject) {
-                            $assignedSubjectNames[] = $ts->subject->name;
-                        }
+        DB::transaction(function () use (
+            $teacher,
+            $academicYear,
+            $hasSubjectsInput,
+            $subjectRows,
+            $hasHomeroomInput,
+            $homeroomClassId,
+            &$payload
+        ) {
+            if ($hasSubjectsInput) {
+                TeacherSubject::where('user_id', $teacher->id)->delete();
+                $assignedSubjectNames = [];
+                foreach ($subjectRows as $row) {
+                    $ts = TeacherSubject::query()->create([
+                        'user_id' => $teacher->id,
+                        'subject_id' => $row['subject_id'],
+                        'teaching_code' => $row['teaching_code'],
+                    ]);
+                    if ($ts->subject) {
+                        $assignedSubjectNames[] = $ts->subject->name;
                     }
                 }
+                if (! empty($assignedSubjectNames)) {
+                    $payload['default_subject'] = implode(', ', array_unique($assignedSubjectNames));
+                }
             }
-            if (! empty($assignedSubjectNames)) {
-                $payload['default_subject'] = implode(', ', array_unique($assignedSubjectNames));
+
+            $teacher->update($payload);
+            $teacher->refresh();
+
+            if ($hasHomeroomInput) {
+                SchoolClass::query()
+                    ->where('academic_year_id', $academicYear->id)
+                    ->where('homeroom_teacher_id', $teacher->id)
+                    ->when($homeroomClassId, fn ($q) => $q->where('id', '!=', $homeroomClassId))
+                    ->get()
+                    ->each(fn (SchoolClass $oldClass) => $oldClass->applyHomeroomTeacher(null));
+
+                if ($homeroomClassId) {
+                    $newClass = SchoolClass::query()
+                        ->where('academic_year_id', $academicYear->id)
+                        ->findOrFail($homeroomClassId);
+                    $newClass->applyHomeroomTeacher($teacher);
+                }
             }
-        }
 
-        $teacher->update($payload);
+            // Sinkronkan identitas terbaru (nama, NIP, TTD) ke rombel wali kelas yang sedang diampu
+            $teacher->homeroomSchoolClasses()
+                ->get()
+                ->each(fn (SchoolClass $sc) => $sc->applyHomeroomTeacher($teacher));
+        });
 
-        $academicYear = $this->resolveAcademicYear($request);
         $scheduleService = app(SchoolScheduleService::class);
         $scheduleService->syncScheduleTeachersFromMaster($academicYear);
         $scheduleService->syncToTeachingClasses($academicYear);
@@ -314,6 +429,8 @@ class TeacherAccountController extends Controller
     {
         if ($request->boolean('remove_signature')) {
             $teacher->update(['signature_data' => null]);
+            $teacher->homeroomSchoolClasses()->get()->each(fn (SchoolClass $sc) => $sc->applyHomeroomTeacher($teacher));
+
             return back()->with('success', "Tanda tangan digital {$teacher->name} berhasil dihapus.");
         }
 
@@ -335,6 +452,8 @@ class TeacherAccountController extends Controller
 
         if ($sigData) {
             $teacher->update(['signature_data' => $sigData]);
+            $teacher->homeroomSchoolClasses()->get()->each(fn (SchoolClass $sc) => $sc->applyHomeroomTeacher($teacher));
+
             return back()->with('success', "Tanda tangan digital {$teacher->name} berhasil diperbarui.");
         }
 
@@ -360,8 +479,91 @@ class TeacherAccountController extends Controller
         }
 
         $name = $teacher->name;
-        $teacher->delete();
+
+        DB::transaction(function () use ($teacher) {
+            $teacher->homeroomSchoolClasses()->get()->each(fn (SchoolClass $sc) => $sc->applyHomeroomTeacher(null));
+            $teacher->delete();
+        });
 
         return back()->with('success', "Akun {$name} berhasil dihapus.");
+    }
+
+    /**
+     * Validasi anti-bentrok kode mengajar antar mapel maupun antar guru.
+     *
+     * @return list<array{subject_id: int, teaching_code: ?string}>
+     */
+    protected function validateTeachingCodeConflicts(array $rows, ?int $ignoreUserId = null): array
+    {
+        $cleanRows = [];
+        $seenInRequest = [];
+        $codesToCheck = [];
+
+        foreach ($rows as $row) {
+            if (empty($row['subject_id'])) {
+                continue;
+            }
+            $normCode = TeacherSubject::normalizeCode($row['teaching_code'] ?? null);
+            if ($normCode !== null) {
+                if (isset($seenInRequest[$normCode])) {
+                    throw ValidationException::withMessages([
+                        'teacher_subjects' => "Bentrok Kode Mengajar '{$normCode}': kode yang sama dimasukkan lebih dari satu kali pada formulir ini.",
+                    ]);
+                }
+                $seenInRequest[$normCode] = true;
+                $codesToCheck[] = $normCode;
+            }
+
+            $cleanRows[] = [
+                'subject_id' => (int) $row['subject_id'],
+                'teaching_code' => $normCode,
+            ];
+        }
+
+        if (! empty($codesToCheck)) {
+            $conflict = TeacherSubject::query()
+                ->with(['user', 'subject'])
+                ->whereIn('teaching_code_normalized', $codesToCheck)
+                ->when($ignoreUserId, fn ($q) => $q->where('user_id', '!=', $ignoreUserId))
+                ->first();
+
+            if ($conflict) {
+                $ownerName = $conflict->user?->name ?? 'Guru lain';
+                $subjName = $conflict->subject?->name ?? '-';
+                throw ValidationException::withMessages([
+                    'teacher_subjects' => "Bentrok Kode Mengajar '{$conflict->teaching_code_normalized}': sudah digunakan oleh {$ownerName} ({$subjName}). Satu kode mengajar hanya boleh dimiliki satu guru.",
+                ]);
+            }
+        }
+
+        return $cleanRows;
+    }
+
+    /**
+     * Validasi anti-bentrok penugasan Wali Kelas pada tahun ajaran aktif.
+     */
+    protected function validateHomeroomConflict(?int $schoolClassId, int $academicYearId, ?int $teacherId = null): void
+    {
+        if (! $schoolClassId) {
+            return;
+        }
+
+        $sc = SchoolClass::query()
+            ->with('homeroomTeacher')
+            ->where('academic_year_id', $academicYearId)
+            ->find($schoolClassId);
+
+        if (! $sc) {
+            throw ValidationException::withMessages([
+                'homeroom_school_class_id' => 'Rombel kelas yang dipilih tidak termasuk dalam tahun ajaran aktif.',
+            ]);
+        }
+
+        if ($sc->homeroom_teacher_id !== null && (int) $sc->homeroom_teacher_id !== (int) $teacherId) {
+            $owner = $sc->homeroomTeacher?->name ?: ($sc->homeroom_teacher_name ?: 'Guru lain');
+            throw ValidationException::withMessages([
+                'homeroom_school_class_id' => "Bentrok Wali Kelas: Rombel {$sc->name} sudah diampu oleh {$owner}. Lepas tugas wali kelas pada guru tersebut terlebih dahulu.",
+            ]);
+        }
     }
 }
