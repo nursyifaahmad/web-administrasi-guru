@@ -687,4 +687,375 @@ class SchoolScheduleMasterTest extends TestCase
         $this->assertTrue($slot1['classes']['7A']->is_conflict);
         $this->assertTrue($slot1['classes']['7B']->is_conflict);
     }
+
+    public function test_export_poster_renders_two_shift_side_by_side_and_downloads_pdf(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $year->id,
+            'code' => '1',
+            'name' => 'Budi Santoso, S.Pd',
+            'subject' => 'MATEMATIKA',
+            'piket_day' => 'SENIN',
+            'homeroom_class' => '7A',
+        ]);
+        SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $year->id,
+            'code' => '2',
+            'name' => 'Siti Aminah, M.Pd',
+            'subject' => 'IPA',
+            'homeroom_class' => '8A',
+        ]);
+
+        // Shift 1 (Pagi): VII & IX
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 0,
+            'time_range' => '07.00 - 08.00',
+            'class_name' => '7A',
+            'teacher_code' => 'UPACARA BENDERA',
+        ]);
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '08.00 - 08.40',
+            'class_name' => '7A',
+            'teacher_code' => '1',
+            'teacher_name' => 'Budi Santoso, S.Pd',
+            'subject_name' => 'MATEMATIKA',
+        ]);
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '08.00 - 08.40',
+            'class_name' => '9A',
+            'teacher_code' => '1',
+            'teacher_name' => 'Budi Santoso, S.Pd',
+            'subject_name' => 'MATEMATIKA',
+        ]);
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 2,
+            'time_range' => '10.20 - 10.45',
+            'class_name' => '7A',
+            'teacher_code' => 'ISTIRAHAT',
+        ]);
+
+        // Shift 2 (Siang): VIII
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'siang',
+            'period_order' => 1,
+            'time_range' => '12.30 - 13.05',
+            'class_name' => '8A',
+            'teacher_code' => '2',
+            'teacher_name' => 'Siti Aminah, M.Pd',
+            'subject_name' => 'IPA',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.schedules.master.export'));
+        $response->assertOk();
+        $response->assertSee('Mode 2 Shift (Side-by-Side)');
+        $response->assertSee('SHIFT 1 (PAGI)');
+        $response->assertSee('SHIFT 2 (SIANG)');
+        $response->assertSee('KELAS VII');
+        $response->assertSee('KELAS VIII');
+        $response->assertSee('KELAS IX');
+        $response->assertSee('NAMA GURU PIKET');
+        $response->assertSee('WALI KELAS');
+        $response->assertSee('ISTIRAHAT');
+        $response->assertSee('bg-yellow');
+        $response->assertSee('bg-conflict');
+
+        $pdfResponse = $this->actingAs($admin)->get(route('admin.schedules.master.export', [
+            'paper_size' => 'F4',
+            'orientation' => 'landscape',
+            'download' => 1,
+        ]));
+        $pdfResponse->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $pdfResponse->headers->get('content-type'));
+        $this->assertStringStartsWith('%PDF-', $pdfResponse->getContent());
+    }
+
+    public function test_export_poster_renders_single_shift_when_only_pagi_exists(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $year->id,
+            'code' => '5',
+            'name' => 'Tohir, S.Ag',
+            'subject' => 'PAI',
+        ]);
+
+        foreach (['7A', '8A', '9A'] as $idx => $cls) {
+            SchoolScheduleItem::query()->create([
+                'academic_year_id' => $year->id,
+                'day_of_week' => 1,
+                'shift' => 'pagi',
+                'period_order' => 1,
+                'time_range' => '08.20 - 09.00',
+                'class_name' => $cls,
+                'teacher_code' => (string) ($idx + 5),
+                'teacher_name' => 'Guru ' . $cls,
+            ]);
+        }
+
+        $response = $this->actingAs($admin)->get(route('admin.schedules.master.export'));
+        $response->assertOk();
+        $response->assertSee('Mode 1 Shift (Semua Rombel)');
+        $response->assertDontSee('SHIFT 2 (SIANG)');
+        $response->assertSee('KELAS VII');
+        $response->assertSee('KELAS VIII');
+        $response->assertSee('KELAS IX');
+
+        $pdfResponse = $this->actingAs($admin)->get(route('admin.schedules.master.export', [
+            'paper_size' => 'F4',
+            'orientation' => 'portrait',
+            'download' => 1,
+        ]));
+        $pdfResponse->assertOk();
+        $this->assertStringStartsWith('%PDF-', $pdfResponse->getContent());
+    }
+
+    public function test_admin_can_export_master_schedule_excel_and_download_template_for_one_and_two_shifts(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $year->id,
+            'code' => '1',
+            'name' => 'Budi Santoso, S.Pd',
+            'subject' => 'MATEMATIKA',
+            'piket_day' => 'SENIN',
+            'homeroom_class' => '7A',
+        ]);
+
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '08.20 - 09.00',
+            'class_name' => '7A',
+            'teacher_code' => '1',
+        ]);
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'siang',
+            'period_order' => 1,
+            'time_range' => '12.30 - 13.05',
+            'class_name' => '8A',
+            'teacher_code' => '1',
+        ]);
+
+        // 2-Shift Excel export
+        $twoShiftResp = $this->actingAs($admin)->get(route('admin.schedules.master.export-excel'));
+        $twoShiftResp->assertOk();
+        $twoTmp = tempnam(sys_get_temp_dir(), 'xls2_') . '.xlsx';
+        file_put_contents($twoTmp, $twoShiftResp->streamedContent());
+
+        try {
+            $spreadsheet2 = \PhpOffice\PhpSpreadsheet\IOFactory::load($twoTmp);
+            $sheet2 = $spreadsheet2->getActiveSheet();
+            $this->assertSame('Jadwal Pelajaran', $sheet2->getTitle());
+            $this->assertSame(
+                \PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE,
+                $sheet2->getPageSetup()->getOrientation()
+            );
+            $flat2 = implode('|', array_map(fn ($r) => implode('|', array_map('strval', $r)), $sheet2->toArray()));
+            $this->assertStringContainsString('SHIFT 1 (PAGI)', $flat2);
+            $this->assertStringContainsString('SHIFT 2 (SIANG)', $flat2);
+            $this->assertStringContainsString('KELAS VII', $flat2);
+            $this->assertStringContainsString('KELAS VIII', $flat2);
+            $this->assertStringContainsString('NAMA GURU PIKET', $flat2);
+            $this->assertStringContainsString('WALI KELAS', $flat2);
+        } finally {
+            @unlink($twoTmp);
+        }
+
+        // Blank Template download
+        $tplResp = $this->actingAs($admin)->get(route('admin.schedules.master.template'));
+        $tplResp->assertOk();
+        $tplTmp = tempnam(sys_get_temp_dir(), 'xlstpl_') . '.xlsx';
+        file_put_contents($tplTmp, $tplResp->streamedContent());
+
+        try {
+            $tplSheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tplTmp)->getActiveSheet();
+            $flatTpl = implode('|', array_map(fn ($r) => implode('|', array_map('strval', $r)), $tplSheet->toArray()));
+            $this->assertStringContainsString('HARI', $flatTpl);
+            $this->assertStringContainsString('WAKTU', $flatTpl);
+            $this->assertStringContainsString('WALI KELAS', $flatTpl);
+        } finally {
+            @unlink($tplTmp);
+        }
+
+        // Hapus siang agar menjadi 1-Shift lalu uji export-excel mode 1-Shift
+        SchoolScheduleItem::query()->where('academic_year_id', $year->id)->where('shift', 'siang')->delete();
+        $oneShiftResp = $this->actingAs($admin)->get(route('admin.schedules.master.export-excel'));
+        $oneShiftResp->assertOk();
+        $oneTmp = tempnam(sys_get_temp_dir(), 'xls1_') . '.xlsx';
+        file_put_contents($oneTmp, $oneShiftResp->streamedContent());
+
+        try {
+            $sheet1 = \PhpOffice\PhpSpreadsheet\IOFactory::load($oneTmp)->getActiveSheet();
+            $this->assertSame(
+                \PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_PORTRAIT,
+                $sheet1->getPageSetup()->getOrientation()
+            );
+            $flat1 = implode('|', array_map(fn ($r) => implode('|', array_map('strval', $r)), $sheet1->toArray()));
+            $this->assertStringContainsString('KELAS VII', $flat1);
+            $this->assertStringNotContainsString('SHIFT 2 (SIANG)', $flat1);
+        } finally {
+            @unlink($oneTmp);
+        }
+    }
+
+    public function test_admin_can_round_trip_import_edited_exported_excel_and_sync_teaching_classes(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        Subject::query()->create([
+            'name' => 'Penjasorkes',
+            'code' => 'PJOK',
+            'default_kktp' => 75,
+            'is_active' => true,
+        ]);
+
+        SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $year->id,
+            'code' => '1',
+            'name' => 'Budi Santoso, S.Pd',
+            'subject' => 'MATEMATIKA',
+            'piket_day' => 'SENIN',
+            'homeroom_class' => '7A',
+        ]);
+        SchoolScheduleTeacher::query()->create([
+            'academic_year_id' => $year->id,
+            'code' => '2',
+            'name' => $guru->name,
+            'subject' => 'Penjasorkes',
+            'user_id' => $guru->id,
+        ]);
+
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '08.20 - 09.00',
+            'class_name' => '7A',
+            'teacher_code' => '1',
+        ]);
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'siang',
+            'period_order' => 1,
+            'time_range' => '12.30 - 13.05',
+            'class_name' => '8A',
+            'teacher_code' => '1',
+        ]);
+
+        // Export -> Edit nilai cell 7A (ganti '1' ke '2') -> Save -> Import ulang dengan sync_to_classes=1
+        $exportResp = $this->actingAs($admin)->get(route('admin.schedules.master.export-excel'));
+        $exportResp->assertOk();
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'roundtrip_') . '.xlsx';
+        file_put_contents($tmpFile, $exportResp->streamedContent());
+
+        try {
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpFile);
+            $sheet = $spreadsheet->getActiveSheet();
+
+            // Baris 9 (Shift 1 JP 1 kelas 7A kolom D): ubah kode guru dari '1' menjadi '2'
+            $this->assertSame('1', (string) $sheet->getCell('D9')->getValue());
+            $sheet->setCellValueExplicit('D9', '2', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $writer->save($tmpFile);
+
+            $uploaded = \Illuminate\Http\UploadedFile::fake()->createWithContent(
+                'Master_Jadwal_Edit.xlsx',
+                (string) file_get_contents($tmpFile)
+            );
+
+            $importResp = $this->actingAs($admin)->post(route('admin.schedules.master.import'), [
+                'academic_year_id' => $year->id,
+                'file' => $uploaded,
+                'sync_to_classes' => '1',
+            ]);
+
+            $importResp->assertRedirect(route('admin.schedules.master.index', ['academic_year_id' => $year->id]));
+            $importResp->assertSessionHas('success');
+
+            $updated7A = SchoolScheduleItem::query()
+                ->where('academic_year_id', $year->id)
+                ->where('day_of_week', 1)
+                ->where('shift', 'pagi')
+                ->where('class_name', '7A')
+                ->first();
+            $this->assertNotNull($updated7A);
+            $this->assertSame('2', $updated7A->teacher_code);
+            $this->assertSame($guru->name, $updated7A->teacher_name);
+
+            $this->assertDatabaseHas('school_schedule_items', [
+                'academic_year_id' => $year->id,
+                'day_of_week' => 1,
+                'shift' => 'siang',
+                'class_name' => '8A',
+                'teacher_code' => '1',
+            ]);
+
+            $this->assertDatabaseHas('teaching_classes', [
+                'academic_year_id' => $year->id,
+                'teacher_id' => $guru->id,
+                'class_name' => 'VII-A',
+            ]);
+        } finally {
+            @unlink($tmpFile);
+        }
+    }
+
+    public function test_import_master_schedule_rejects_invalid_excel_and_denies_guru(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $spreadsheet->getActiveSheet()->setCellValue('A1', 'Kolom Ngasal')->setCellValue('B1', 'Tanpa Header Jadwal');
+        $badTmp = tempnam(sys_get_temp_dir(), 'badxls_') . '.xlsx';
+
+        try {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save($badTmp);
+            $badUpload = \Illuminate\Http\UploadedFile::fake()->createWithContent(
+                'invalid.xlsx',
+                (string) file_get_contents($badTmp)
+            );
+
+            $adminResp = $this->actingAs($admin)->post(route('admin.schedules.master.import'), [
+                'file' => $badUpload,
+            ]);
+            $adminResp->assertRedirect();
+            $adminResp->assertSessionHas('error');
+
+            $this->actingAs($guru)->get(route('admin.schedules.master.export-excel'))->assertForbidden();
+            $this->actingAs($guru)->get(route('admin.schedules.master.template'))->assertForbidden();
+            $this->actingAs($guru)->post(route('admin.schedules.master.import'), [
+                'file' => \Illuminate\Http\UploadedFile::fake()->create('test.xlsx', 10),
+            ])->assertForbidden();
+        } finally {
+            @unlink($badTmp);
+        }
+    }
 }

@@ -10,11 +10,16 @@ use App\Models\SchoolScheduleTeacher;
 use App\Models\SchoolSetting;
 use App\Models\Subject;
 use App\Models\User;
+use App\Services\ExcelExportImportService;
 use App\Services\SchoolScheduleService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SchoolScheduleController extends Controller
 {
@@ -472,20 +477,129 @@ class SchoolScheduleController extends Controller
     /**
      * Ekspor & Cetak Jadwal Master Resmi
      */
-    public function export(Request $request): View
+    /**
+     * Selesaikan Tahun Pelajaran aktif berdasarkan query parameter, session, atau default aktif.
+     */
+    protected function resolveActiveAcademicYear(Request $request): AcademicYear
     {
-        $selectedYearId = $request->session()->get('active_academic_year_id');
+        $selectedYearId = $request->input('academic_year_id') ?: $request->session()->get('active_academic_year_id');
         $academicYear = $selectedYearId
             ? AcademicYear::query()->find($selectedYearId)
             : AcademicYear::active();
 
-        $matrixData = $this->scheduleService->getMasterMatrix($academicYear);
+        abort_if(! $academicYear, 404, 'Tahun pelajaran aktif tidak ditemukan.');
+
+        return $academicYear;
+    }
+
+    public function export(Request $request): Response|View
+    {
+        $academicYear = $this->resolveActiveAcademicYear($request);
+        $exportData = $this->scheduleService->getMasterExportData($academicYear);
         $school = SchoolSetting::current();
 
-        return view('admin.schedules.export', [
+        $isTwoShift = (bool) ($exportData['is_two_shift'] ?? false);
+        $paperSize = strtoupper((string) $request->query('paper_size', 'F4'));
+        if (! in_array($paperSize, ['F4', 'A4', 'A3'], true)) {
+            $paperSize = 'F4';
+        }
+
+        $defaultOrientation = $isTwoShift ? 'landscape' : 'portrait';
+        $orientation = strtolower((string) $request->query('orientation', $defaultOrientation));
+        if (! in_array($orientation, ['portrait', 'landscape'], true)) {
+            $orientation = $defaultOrientation;
+        }
+
+        $viewData = [
             'academicYear' => $academicYear,
-            'matrixData' => $matrixData,
+            'exportData' => $exportData,
             'school' => $school,
+            'paperSize' => $paperSize,
+            'orientation' => $orientation,
+            'isPdf' => false,
+        ];
+
+        if ($request->boolean('download')) {
+            $pdfPaper = match ($paperSize) {
+                'F4' => [0.0, 0.0, 612.0, 936.0],
+                'A3' => 'a3',
+                default => 'a4',
+            };
+
+            $viewData['isPdf'] = true;
+            $pdf = Pdf::loadView('admin.schedules.export', $viewData)
+                ->setPaper($pdfPaper, $orientation)
+                ->setOption('isHtml5ParserEnabled', true)
+                ->setOption('isRemoteEnabled', false)
+                ->setOption('dpi', 96);
+
+            $filename = 'Master_Jadwal_Pelajaran_' . Str::slug($academicYear->name . '_' . ($academicYear->semester ?: 'semester'), '_') . '.pdf';
+
+            return $pdf->download($filename);
+        }
+
+        return view('admin.schedules.export', $viewData);
+    }
+
+    public function exportExcel(Request $request, ExcelExportImportService $excelService): StreamedResponse
+    {
+        $academicYear = $this->resolveActiveAcademicYear($request);
+
+        return $excelService->exportMasterScheduleExcel($academicYear, $this->scheduleService, false);
+    }
+
+    public function downloadTemplate(Request $request, ExcelExportImportService $excelService): StreamedResponse
+    {
+        $academicYear = $this->resolveActiveAcademicYear($request);
+
+        return $excelService->exportMasterScheduleExcel($academicYear, $this->scheduleService, true);
+    }
+
+    public function importExcel(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'],
+            'sync_to_classes' => ['nullable', 'boolean'],
         ]);
+
+        $academicYear = $this->resolveActiveAcademicYear($request);
+        $uploadedFile = $request->file('file');
+        $ext = strtolower((string) $uploadedFile->getClientOriginalExtension());
+        $tempPath = sys_get_temp_dir() . '/master_schedule_import_' . uniqid() . '.' . ($ext ?: 'xlsx');
+
+        try {
+            if (! @copy($uploadedFile->getRealPath(), $tempPath)) {
+                $tempPath = $uploadedFile->getRealPath();
+                $shouldDeleteTemp = false;
+            } else {
+                $shouldDeleteTemp = true;
+            }
+
+            $summary = $this->scheduleService->importMasterScheduleFromFile(
+                $academicYear,
+                $tempPath,
+                $request->boolean('sync_to_classes')
+            );
+
+            $msg = "Impor Master Jadwal berhasil! {$summary['items_count']} sel slot ({$summary['shifts_detected']} shift) & {$summary['teachers_count']} data guru disimpan.";
+            if ($summary['conflicts_count'] > 0) {
+                $msg .= " Terdeteksi {$summary['conflicts_count']} bentrok jam mengajar.";
+            }
+            if ($request->boolean('sync_to_classes')) {
+                $msg .= " Buku Kelas disinkronkan ({$summary['synced_classes']} kelas diperbarui, {$summary['created_classes']} kelas baru).";
+            }
+
+            return redirect()
+                ->route('admin.schedules.master.index', ['academic_year_id' => $academicYear->id])
+                ->with('success', $msg);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('admin.schedules.master.index', ['academic_year_id' => $academicYear->id])
+                ->with('error', 'Gagal mengimpor file Master Jadwal: ' . $e->getMessage());
+        } finally {
+            if (! empty($shouldDeleteTemp) && file_exists($tempPath)) {
+                @unlink($tempPath);
+            }
+        }
     }
 }

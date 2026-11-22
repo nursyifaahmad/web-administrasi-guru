@@ -122,6 +122,9 @@ Route::middleware(['auth', 'workspace'])->group(function () {
         Route::post('/jadwal-master/sync-classes', [SchoolScheduleController::class, 'syncClasses'])->name('schedules.master.sync-classes');
         Route::delete('/jadwal-master/clear', [SchoolScheduleController::class, 'clearSchedule'])->name('schedules.master.clear');
         Route::get('/jadwal-master/export', [SchoolScheduleController::class, 'export'])->name('schedules.master.export');
+        Route::get('/jadwal-master/export-excel', [SchoolScheduleController::class, 'exportExcel'])->name('schedules.master.export-excel');
+        Route::get('/jadwal-master/template', [SchoolScheduleController::class, 'downloadTemplate'])->name('schedules.master.template');
+        Route::post('/jadwal-master/import', [SchoolScheduleController::class, 'importExcel'])->name('schedules.master.import');
 
         // Supervisi & Verifikasi Modul Ajar (Admin / Wakasek)
         Route::patch('/modul-ajar/{module}/approve', [TeachingModuleController::class, 'approve'])->name('teaching-modules.approve');

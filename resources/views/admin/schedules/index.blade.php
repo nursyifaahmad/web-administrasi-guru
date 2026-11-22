@@ -10,6 +10,7 @@
         wizardModal: false,
         editModal: false,
         swapModal: false,
+        importScheduleModal: false,
         selectedItem: null,
         selectedTeacherCode: '',
         selectedTeacherName: '',
@@ -113,11 +114,25 @@
             </form>
 
             {{-- Cetak / Ekspor --}}
-            <a href="{{ route('admin.schedules.master.export') }}" target="_blank"
+            <a href="{{ route('admin.schedules.master.export', ['academic_year_id' => $academicYear?->id]) }}" target="_blank"
                class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition border border-slate-300">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
                 <span>Cetak / Cetak PDF</span>
             </a>
+
+            {{-- Export Excel Poster --}}
+            <a href="{{ route('admin.schedules.master.export-excel', ['academic_year_id' => $academicYear?->id]) }}"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span>Export Excel</span>
+            </a>
+
+            {{-- Import Excel / CSV --}}
+            <button type="button" @click="importScheduleModal = true"
+               class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                <span>Import Excel</span>
+            </button>
         </div>
     </div>
 
@@ -826,6 +841,74 @@
                     </div>
                 @endforeach
             </div>
+        </div>
+    </div>
+
+    {{-- Modal Import Master Jadwal (Excel / CSV) --}}
+    <div x-show="importScheduleModal" x-cloak
+         @keydown.escape.window="importScheduleModal = false"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+        <div @click.outside="importScheduleModal = false"
+             class="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+                <div>
+                    <h3 class="text-base font-extrabold text-slate-800">Import Master Jadwal (Excel / CSV)</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Mendukung format 1 Shift maupun 2 Shift berdampingan.</p>
+                </div>
+                <button type="button" @click="importScheduleModal = false" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/70 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <form method="POST" action="{{ route('admin.schedules.master.import') }}" enctype="multipart/form-data" class="p-5 space-y-4">
+                @csrf
+                <input type="hidden" name="academic_year_id" value="{{ $academicYear?->id }}">
+
+                <div class="rounded-xl bg-indigo-50/80 border border-indigo-200 p-3.5 text-xs text-indigo-900 space-y-2">
+                    <p class="font-semibold">Panduan Singkat:</p>
+                    <ul class="list-disc pl-4 space-y-1 text-indigo-800">
+                        <li>Gunakan file hasil <strong>Export Excel</strong> yang sudah diedit, <strong>Template Kosong (.xlsx)</strong>, atau file <strong>CSV</strong> format Wakasek.</li>
+                        <li>Jika sheet memiliki 2 blok tabel (kolom <code>HARI</code> &amp; <code>WAKTU</code> berdampingan), sistem otomatis mengenali <strong>Shift 1 (Pagi)</strong> &amp; <strong>Shift 2 (Siang)</strong>.</li>
+                    </ul>
+                    <div class="pt-1">
+                        <a href="{{ route('admin.schedules.master.template', ['academic_year_id' => $academicYear?->id]) }}"
+                           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-300 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            <span>Download Template Excel (.xlsx)</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Pilih File Jadwal (.xlsx, .xls, .csv)</label>
+                    <input type="file" name="file" accept=".xlsx,.xls,.csv" required
+                           class="block w-full text-xs text-slate-700 file:mr-3 file:py-2 file:px-3.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 border border-slate-300 rounded-xl p-1.5 cursor-pointer">
+                </div>
+
+                <label class="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+                    <input type="checkbox" name="sync_to_classes" value="1"
+                           class="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                    <span class="text-xs text-slate-700 leading-relaxed">
+                        <strong class="block text-slate-800">Sekaligus sinkronkan jadwal &amp; hari mengajar ke Buku Kelas Guru</strong>
+                        Membuat/memperbarui buku kelas guru sesuai pembagian kelas dan hari pada file impor.
+                    </span>
+                </label>
+
+                <div class="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                    <strong>Perhatian:</strong> Impor akan mengganti seluruh isi slot Master Jadwal pada tahun pelajaran aktif (<strong>{{ $academicYear?->full_label ?? '-' }}</strong>) dan menjalankan deteksi bentrok otomatis.
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" @click="importScheduleModal = false"
+                            class="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition">
+                        Batal
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-xs font-bold text-white shadow-sm transition">
+                        Mulai Import Jadwal
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 

@@ -2,162 +2,532 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Jadwal Pelajaran Resmi SMPN 2 Lemahabang — {{ $academicYear->full_label }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cetak Master Jadwal Pelajaran - {{ $academicYear->name }}</title>
+    @php
+        $isTwoShift = (bool) ($exportData['is_two_shift'] ?? false);
+        $isPdf = (bool) ($isPdf ?? false);
+        $paperSize = $paperSize ?? 'F4';
+        $orientation = $orientation ?? ($isTwoShift ? 'landscape' : 'portrait');
+        $cssPageSize = match ($paperSize) {
+            'F4' => $orientation === 'landscape' ? '330mm 215mm' : '215mm 330mm',
+            'A3' => 'A3 ' . $orientation,
+            default => 'A4 ' . $orientation,
+        };
+        $baseFontPt = $isTwoShift ? ($isPdf ? '5.4pt' : '5.8pt') : ($isPdf ? '6.4pt' : '6.8pt');
+        $legendFontPt = $isTwoShift ? ($isPdf ? '5.1pt' : '5.5pt') : ($isPdf ? '6.1pt' : '6.4pt');
+        $leftLogo = $school->resolvedLogoBox('left')['data_uri'] ?? null;
+        $rightLogo = $school->resolvedLogoBox('right')['data_uri'] ?? null;
+    @endphp
     <style>
-        body { font-family: 'Times New Roman', serif; font-size: 8pt; margin: 10mm; color: #000; }
-        .kop-table { width: 100%; border-bottom: 3px double #000; padding-bottom: 6px; margin-bottom: 12px; }
-        .kop-table td { text-align: center; }
-        .kop-gov { font-size: 10pt; font-weight: bold; }
-        .kop-dept { font-size: 9pt; font-weight: bold; }
-        .kop-school { font-size: 14pt; font-weight: bold; letter-spacing: 0.5px; }
-        .kop-addr { font-size: 8pt; }
-        .doc-title { text-align: center; font-size: 11pt; font-weight: bold; margin-bottom: 4px; text-transform: uppercase; }
-        .doc-sub { text-align: center; font-size: 9pt; font-weight: bold; margin-bottom: 12px; }
-        table.matrix { width: 100%; border-collapse: collapse; text-align: center; margin-bottom: 12px; font-size: 7.5pt; }
-        table.matrix th, table.matrix td { border: 1px solid #444; padding: 3px 2px; }
-        table.matrix th { background-color: #f0f0f0; }
-        .activity-row { background-color: #fff8e1; font-weight: bold; }
-        .conflict-cell { background-color: #ffcdd2; font-weight: bold; }
-        .sig-table { width: 100%; margin-top: 18px; border: none; }
-        .sig-table td { border: none; text-align: center; font-size: 8.5pt; }
+        @page {
+            size: {{ $cssPageSize }};
+            margin: {{ $isPdf ? '5mm' : '6mm' }};
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif;
+            color: #000000;
+            background: {{ $isPdf ? '#ffffff' : '#e2e8f0' }};
+            margin: 0;
+            padding: {{ $isPdf ? '0' : '16px 12px' }};
+            font-size: {{ $baseFontPt }};
+            line-height: 1.15;
+        }
+
+        .no-print {
+            max-width: 1280px;
+            margin: 0 auto 14px auto;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 10px 14px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+        }
+
+        .toolbar-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge-mode {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 11px;
+            background: {{ $isTwoShift ? '#e0f2fe' : '#dcfce7' }};
+            color: {{ $isTwoShift ? '#0369a1' : '#15803d' }};
+            border: 1px solid {{ $isTwoShift ? '#7dd3fc' : '#86efac' }};
+        }
+
+        .badge-warn {
+            display: inline-block;
+            padding: 4px 9px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 11px;
+            background: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #fca5a5;
+        }
+
+        .toolbar-select {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 5px 8px;
+            font-size: 11.5px;
+            font-weight: 600;
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 12px;
+            border-radius: 7px;
+            font-weight: 700;
+            font-size: 11.5px;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-print { background: #1e293b; color: #ffffff; }
+        .btn-pdf { background: #dc2626; color: #ffffff; }
+        .btn-excel { background: #059669; color: #ffffff; }
+        .btn-back { background: #ffffff; color: #334155; border: 1px solid #cbd5e1; }
+
+        .sheet-page {
+            background: #ffffff;
+            margin: 0 auto;
+            width: {{ $isPdf ? '100%' : ($orientation === 'landscape' ? '318mm' : '203mm') }};
+            min-height: {{ $isPdf ? 'auto' : '100mm' }};
+            padding: {{ $isPdf ? '0' : '6mm' }};
+            {{ $isPdf ? '' : 'box-shadow: 0 4px 18px rgba(15, 23, 42, 0.14); border-radius: 4px;' }}
+        }
+
+        .kop-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5px;
+        }
+
+        .kop-table td {
+            vertical-align: middle;
+        }
+
+        .kop-logo-cell {
+            width: 58px;
+            text-align: center;
+        }
+
+        .kop-logo-cell img {
+            max-width: 50px;
+            max-height: 46px;
+            object-fit: contain;
+        }
+
+        .kop-center {
+            text-align: center;
+            line-height: 1.25;
+        }
+
+        .kop-title {
+            font-size: {{ $isTwoShift ? '10pt' : '11.5pt' }};
+            font-weight: 800;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+        }
+
+        .kop-sub {
+            font-size: {{ $isTwoShift ? '8.5pt' : '9.5pt' }};
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .kop-school {
+            font-size: {{ $isTwoShift ? '7pt' : '8pt' }};
+            font-weight: 700;
+            margin-top: 1px;
+            color: #1e293b;
+        }
+
+        .poster-columns {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .poster-columns > tbody > tr > td {
+            vertical-align: top;
+            padding: 0;
+        }
+
+        .col-gap {
+            width: {{ $isTwoShift ? '5px' : '7px' }};
+        }
+
+        .col-sidebar {
+            width: {{ $isTwoShift ? '24%' : '29%' }};
+        }
+
+        .col-shift-half {
+            width: auto;
+        }
+
+        .col-shift-full {
+            width: 70%;
+        }
+
+        .shift-banner {
+            text-align: center;
+            font-weight: 800;
+            font-size: {{ $isTwoShift ? '6.2pt' : '7pt' }};
+            padding: 2px 4px;
+            border: 1.4px solid #000000;
+            border-bottom: none;
+            text-transform: uppercase;
+        }
+
+        .shift-banner-pagi {
+            background: #e2e8f0;
+        }
+
+        .shift-banner-siang {
+            background: #e0f2fe;
+        }
+
+        table.sched-grid {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1.4px solid #000000;
+            font-size: {{ $baseFontPt }};
+        }
+
+        table.sched-grid th,
+        table.sched-grid td {
+            border: 0.6px solid #000000;
+            text-align: center;
+            vertical-align: middle;
+            padding: {{ $isTwoShift ? '1px 1px' : '1.4px 1.5px' }};
+        }
+
+        table.sched-grid thead th {
+            background: #d9d9d9;
+            font-weight: 800;
+        }
+
+        .col-hari { width: {{ $isTwoShift ? '14px' : '18px' }}; }
+        .col-jp { width: {{ $isTwoShift ? '15px' : '19px' }}; }
+        .col-waktu { width: {{ $isTwoShift ? '43px' : '54px' }}; }
+        .col-sec { font-weight: 700; background: #e5e5e5 !important; }
+
+        .cell-hari {
+            background: #f3f4f6;
+            font-weight: 800;
+            font-size: {{ $isTwoShift ? '5pt' : '6pt' }};
+            line-height: 1.02;
+            padding: 1px 0 !important;
+        }
+
+        .hari-vertical {
+            display: inline-block;
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            white-space: nowrap;
+            letter-spacing: 0.4px;
+        }
+
+        .cell-jp {
+            font-weight: 700;
+        }
+
+        .cell-waktu {
+            font-size: {{ $isTwoShift ? '4.8pt' : '5.8pt' }};
+            white-space: nowrap;
+        }
+
+        .cell-code {
+            font-weight: 700;
+        }
+
+        .cell-activity {
+            font-weight: 800;
+            font-style: italic;
+            font-size: {{ $isTwoShift ? '4.6pt' : '5.6pt' }};
+            letter-spacing: -0.1px;
+        }
+
+        .bg-yellow {
+            background: #ffff00 !important;
+            color: #000000 !important;
+        }
+
+        .bg-conflict {
+            background: #ef4444 !important;
+            color: #ffffff !important;
+        }
+
+        tr.day-end-row td {
+            border-bottom: 1.4px solid #000000 !important;
+        }
+
+        table.legend-grid {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1.2px solid #000000;
+            font-size: {{ $legendFontPt }};
+            margin-bottom: 4px;
+        }
+
+        table.legend-grid th,
+        table.legend-grid td {
+            border: 0.6px solid #000000;
+            padding: {{ $isTwoShift ? '1px 2px' : '1.4px 3px' }};
+            vertical-align: middle;
+        }
+
+        table.legend-grid thead th {
+            background: #d9d9d9;
+            font-weight: 800;
+            text-align: center;
+        }
+
+        .td-center { text-align: center; }
+        .td-left { text-align: left; }
+
+        .signature-box {
+            margin-top: 5px;
+            font-size: {{ $legendFontPt }};
+            line-height: 1.3;
+            padding-left: 4px;
+        }
+
         @media print {
-            @page { size: landscape; margin: 8mm; }
-            .no-print { display: none; }
+            body {
+                background: #ffffff;
+                padding: 0;
+                margin: 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .sheet-page {
+                width: 100%;
+                padding: 0;
+                margin: 0;
+                box-shadow: none;
+                border-radius: 0;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="no-print" style="margin-bottom: 15px; text-align: right;">
-        <button onclick="window.print()" style="padding: 6px 14px; background: #059669; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">
-            🖨️ Cetak Dokumen / Simpan PDF
-        </button>
-    </div>
-
-    {{-- Kop Sekolah --}}
-    <table class="kop-table">
-        <tr>
-            <td style="width: 80px;">
-                @php $appLogo = $school?->resolvedAppLogo(); @endphp
-                @if(!empty($appLogo['data_uri']))
-                    <img src="{{ $appLogo['data_uri'] }}" style="width: 70px; height: auto;" alt="Logo">
+    @if(! $isPdf)
+        <div class="no-print">
+            <div class="toolbar-group">
+                <a href="{{ route('admin.schedules.master.index', ['academic_year_id' => $academicYear->id]) }}" class="btn-action btn-back">
+                    ← Kembali
+                </a>
+                <span class="badge-mode">
+                    {{ $isTwoShift ? 'Mode 2 Shift (Side-by-Side)' : 'Mode 1 Shift (Semua Rombel)' }}
+                </span>
+                <span style="font-size: 11px; color: #475569; font-weight: 600;">
+                    {{ $exportData['total_items'] ?? 0 }} Slot
+                </span>
+                @if(($exportData['total_conflicts'] ?? 0) > 0)
+                    <span class="badge-warn">{{ $exportData['total_conflicts'] }} Bentrok (Merah)</span>
                 @endif
-            </td>
-            <td>
-                <div class="kop-gov">{{ $school->gov_header }}</div>
-                <div class="kop-dept">{{ $school->department_header }}</div>
-                <div class="kop-school">{{ $school->school_name }}</div>
-                <div class="kop-addr">{{ $school->address }} &bull; Telp: {{ $school->phone ?: '-' }} &bull; Website: {{ $school->website ?: '-' }}</div>
-            </td>
-            <td style="width: 80px;"></td>
-        </tr>
-    </table>
+            </div>
 
-    <div class="doc-title">Jadwal Pelajaran Sekolah (21 Rombel &bull; 2 Shift)</div>
-    <div class="doc-sub">Tahun Ajaran {{ $academicYear->full_label }} &bull; SMP Negeri 2 Lemahabang</div>
+            <div class="toolbar-group">
+                <form method="GET" action="{{ route('admin.schedules.master.export') }}" class="toolbar-group">
+                    <input type="hidden" name="academic_year_id" value="{{ $academicYear->id }}">
+                    <label style="font-size: 11px; color: #475569; font-weight: 600;">Kertas:
+                        <select name="paper_size" onchange="this.form.submit()" class="toolbar-select">
+                            <option value="F4" {{ $paperSize === 'F4' ? 'selected' : '' }}>F4 (215×330mm)</option>
+                            <option value="A4" {{ $paperSize === 'A4' ? 'selected' : '' }}>A4</option>
+                            <option value="A3" {{ $paperSize === 'A3' ? 'selected' : '' }}>A3</option>
+                        </select>
+                    </label>
+                    <label style="font-size: 11px; color: #475569; font-weight: 600;">Orientasi:
+                        <select name="orientation" onchange="this.form.submit()" class="toolbar-select">
+                            <option value="portrait" {{ $orientation === 'portrait' ? 'selected' : '' }}>Portrait</option>
+                            <option value="landscape" {{ $orientation === 'landscape' ? 'selected' : '' }}>Landscape</option>
+                        </select>
+                    </label>
+                </form>
 
-    {{-- Render Jadwal per Hari --}}
-    @foreach($matrixData['matrix_by_day'] as $day)
-        <div style="font-weight: bold; font-size: 9pt; margin-top: 10px; margin-bottom: 4px; text-transform: uppercase; background: #e0f2fe; padding: 2px 6px;">
-            HARI {{ $day['day_name'] }}
+                <button type="button" onclick="window.print()" class="btn-action btn-print">
+                    Print / Save PDF Browser
+                </button>
+                <a href="{{ route('admin.schedules.master.export', ['academic_year_id' => $academicYear->id, 'paper_size' => $paperSize, 'orientation' => $orientation, 'download' => 1]) }}"
+                   class="btn-action btn-pdf">
+                    Download PDF (.pdf)
+                </a>
+                <a href="{{ route('admin.schedules.master.export-excel', ['academic_year_id' => $academicYear->id]) }}"
+                   class="btn-action btn-excel">
+                    Export Excel (.xlsx)
+                </a>
+            </div>
         </div>
+    @endif
 
-        {{-- Shift Pagi --}}
-        <div style="font-weight: bold; font-size: 8pt; margin-top: 4px; margin-bottom: 2px;">
-            Shift Pagi (Kelas VII & IX) — 07.00 s/d 11.55 WIB
-        </div>
-        <table class="matrix">
-            <thead>
-                <tr>
-                    <th style="width: 30px;">Jam</th>
-                    <th style="width: 80px;">Waktu</th>
-                    @foreach(['7A','7B','7C','7D','7E','7F','7G','9A','9B','9C','9D','9E','9F','9G'] as $c)
-                        <th>{{ $c }}</th>
-                    @endforeach
-                </tr>
-            </thead>
-            <tbody>
-                @foreach($day['pagi_slots'] as $slot)
-                    @if($slot['is_activity'])
-                        <tr class="activity-row">
-                            <td>{{ $slot['period_order'] ?: '-' }}</td>
-                            <td>{{ $slot['time_range'] }}</td>
-                            <td colspan="14">{{ $slot['activity_name'] }}</td>
-                        </tr>
-                    @else
-                        <tr>
-                            <td>{{ $slot['period_order'] }}</td>
-                            <td>{{ $slot['time_range'] }}</td>
-                            @foreach(['7A','7B','7C','7D','7E','7F','7G','9A','9B','9C','9D','9E','9F','9G'] as $c)
-                                @php $item = $slot['classes'][$c] ?? null; @endphp
-                                <td class="{{ $item?->is_conflict ? 'conflict-cell' : '' }}">
-                                    {{ $item?->teacher_code ?: '-' }}
-                                </td>
-                            @endforeach
-                        </tr>
+    <div class="sheet-page">
+        {{-- Compact Kop Poster --}}
+        <table class="kop-table">
+            <tr>
+                <td class="kop-logo-cell">
+                    @if($leftLogo)
+                        <img src="{{ $leftLogo }}" alt="Logo Kiri">
                     @endif
-                @endforeach
-            </tbody>
+                </td>
+                <td class="kop-center">
+                    <div class="kop-title">JADWAL PELAJARAN</div>
+                    <div class="kop-sub">SEMESTER {{ strtoupper((string) ($academicYear->semester ?: 'GANJIL')) }}</div>
+                    <div class="kop-sub">TAHUN PELAJARAN {{ $academicYear->name }}</div>
+                    <div class="kop-school">
+                        {{ strtoupper((string) ($school->school_name ?: 'SMP NEGERI 2 LEMAHABANG')) }} — Jadwal Pelajaran Sekolah
+                    </div>
+                </td>
+                <td class="kop-logo-cell">
+                    @if($rightLogo)
+                        <img src="{{ $rightLogo }}" alt="Logo Kanan">
+                    @endif
+                </td>
+            </tr>
         </table>
 
-        {{-- Shift Siang --}}
-        @if(count($day['siang_slots']) > 0)
-            <div style="font-weight: bold; font-size: 8pt; margin-top: 4px; margin-bottom: 2px;">
-                Shift Siang (Kelas VIII) — 12.00 s/d 16.25 WIB
-            </div>
-            <table class="matrix">
-                <thead>
-                    <tr>
-                        <th style="width: 30px;">Jam</th>
-                        <th style="width: 80px;">Waktu</th>
-                        @foreach(['8A','8B','8C','8D','8E','8F','8G'] as $c)
-                            <th>{{ $c }}</th>
-                        @endforeach
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($day['siang_slots'] as $slot)
-                        @if($slot['is_activity'])
-                            <tr class="activity-row">
-                                <td>{{ $slot['period_order'] ?: '-' }}</td>
-                                <td>{{ $slot['time_range'] }}</td>
-                                <td colspan="7">{{ $slot['activity_name'] }}</td>
-                            </tr>
-                        @else
-                            <tr>
-                                <td>{{ $slot['period_order'] }}</td>
-                                <td>{{ $slot['time_range'] }}</td>
-                                @foreach(['8A','8B','8C','8D','8E','8F','8G'] as $c)
-                                    @php $item = $slot['classes'][$c] ?? null; @endphp
-                                    <td class="{{ $item?->is_conflict ? 'conflict-cell' : '' }}">
-                                        {{ $item?->teacher_code ?: '-' }}
-                                    </td>
-                                @endforeach
-                            </tr>
-                        @endif
-                    @endforeach
-                </tbody>
-            </table>
-        @endif
-    @endforeach
+        {{-- Matriks Jadwal (1 Shift atau 2 Shift Berdampingan) + Panel Legenda Kanan --}}
+        <table class="poster-columns">
+            <tbody>
+                <tr>
+                    <td class="{{ $isTwoShift ? 'col-shift-half' : 'col-shift-full' }}">
+                        @include('admin.schedules.partials.export-shift-table', [
+                            'shift' => $exportData['shift1'],
+                            'shiftTitle' => $isTwoShift ? 'SHIFT 1 (PAGI)' : null,
+                            'isPdf' => $isPdf,
+                        ])
+                    </td>
 
-    {{-- Titimangsa & Tanda Tangan --}}
-    <table class="sig-table">
-        <tr>
-            <td style="width: 50%;">
-                Mengetahui,<br>
-                Kepala Sekolah
-                <div style="height: 50px;"></div>
-                <strong>{{ $school->headmaster_name }}</strong><br>
-                NIP. {{ $school->headmaster_nip }}
-            </td>
-            <td style="width: 50%;">
-                {{ $school->default_city ?: 'Lemahabang' }}, {{ \App\Support\IndonesianDate::formatLong(now()) }}<br>
-                Wakasek Kurikulum
-                <div style="height: 50px;"></div>
-                <strong>Drs. Hendra Wijaya, M.M.Pd.</strong><br>
-                NIP. 19800315 200604 1 004
-            </td>
-        </tr>
-    </table>
+                    @if($isTwoShift)
+                        <td class="col-gap"></td>
+                        <td class="col-shift-half">
+                            @include('admin.schedules.partials.export-shift-table', [
+                                'shift' => $exportData['shift2'],
+                                'shiftTitle' => 'SHIFT 2 (SIANG)',
+                                'isPdf' => $isPdf,
+                            ])
+                        </td>
+                    @endif
+
+                    <td class="col-gap"></td>
+                    <td class="col-sidebar">
+                        {{-- Tabel 1: Daftar Kode Guru --}}
+                        <table class="legend-grid">
+                            <thead>
+                                <tr>
+                                    <th style="width: 14%;">Kode</th>
+                                    <th style="width: 50%;">Nama Guru</th>
+                                    <th style="width: 36%;">Mata Pelajaran</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($exportData['teachers'] as $teacher)
+                                    <tr>
+                                        <td class="td-center"><strong>{{ $teacher->code }}</strong></td>
+                                        <td class="td-left">{{ $teacher->name }}</td>
+                                        <td class="td-left">{{ $teacher->subject }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="3" class="td-center" style="color: #64748b;">Belum ada data guru</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+
+                        {{-- Tabel 2: Daftar Guru Piket --}}
+                        <table class="legend-grid">
+                            <thead>
+                                <tr>
+                                    <th style="width: 14%;">No</th>
+                                    <th style="width: 56%;">NAMA GURU PIKET</th>
+                                    <th style="width: 30%;">HARI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($exportData['piket_list'] as $idx => $piket)
+                                    <tr>
+                                        <td class="td-center">{{ $idx + 1 }}</td>
+                                        <td class="td-left">{{ $piket->name }}</td>
+                                        <td class="td-center"><strong>{{ strtoupper((string) $piket->piket_day) }}</strong></td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="3" class="td-center" style="color: #64748b;">Belum ada guru piket</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+
+                        {{-- Tabel 3: Daftar Wali Kelas --}}
+                        <table class="legend-grid">
+                            <thead>
+                                <tr>
+                                    <th style="width: 14%;">No</th>
+                                    <th style="width: 56%;">NAMA GURU</th>
+                                    <th style="width: 30%;">WALI KELAS</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($exportData['homeroom_list'] as $idx => $hr)
+                                    <tr>
+                                        <td class="td-center">{{ $idx + 1 }}</td>
+                                        <td class="td-left">{{ ($hr['teacher_name'] ?? '') === 'Belum Ditentukan' ? '-' : $hr['teacher_name'] }}</td>
+                                        <td class="td-center"><strong>{{ $hr['class_code'] ?? '' }}</strong></td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="3" class="td-center" style="color: #64748b;">Belum ada wali kelas</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+
+                        {{-- Blok Tanda Tangan Kepala Sekolah --}}
+                        <div class="signature-box">
+                            <div>{{ $school->district ?: 'Lemahabang' }}, {{ now()->translatedFormat('F Y') }}</div>
+                            <div>Kepala {{ $school->school_name ?: 'SMP Negeri 2 Lemahabang' }}</div>
+                            <div style="height: {{ $isTwoShift ? '18px' : '24px' }};"></div>
+                            <div style="font-weight: 800; text-decoration: underline;">
+                                {{ $school->principal_name ?: '........................................' }}
+                            </div>
+                            @if(!empty($school->principal_nip))
+                                <div>NIP. {{ $school->principal_nip }}</div>
+                            @endif
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 </body>
 </html>

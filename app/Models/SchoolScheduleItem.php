@@ -76,18 +76,37 @@ class SchoolScheduleItem extends Model
             return false;
         }
 
-        $upper = strtoupper(trim($this->teacher_code));
+        return static::isCommonActivityLabel($this->teacher_code);
+    }
 
-        return in_array($upper, [
-            'UPACARA BENDERA',
+    /**
+     * Tentukan apakah teks slot merupakan kegiatan bersama (bukan kode guru).
+     */
+    public static function isCommonActivityLabel(string $label): bool
+    {
+        $upper = strtoupper(trim($label));
+        if ($upper === '') {
+            return false;
+        }
+
+        foreach ([
             'UPACARA',
-            'SHOLAT DHUHA',
+            'SHOLAT',
             'DHUHA',
             'ISTIRAHAT',
-            'KEGIATAN KEAGAMAAN',
-            'SABTU BERSIH / OR',
+            'KEAGAMAAN',
             'SABTU BERSIH',
+            'SABSIH',
+            'PAGI CERIA',
+            'PEMBIASAAN',
             'LITERASI',
-        ], true);
+            'EKSTRAKURIKULER',
+        ] as $keyword) {
+            if (str_contains($upper, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

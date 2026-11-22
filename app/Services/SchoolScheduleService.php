@@ -13,6 +13,9 @@ use App\Support\IndonesianDate;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class SchoolScheduleService
 {
@@ -2336,5 +2339,992 @@ CSV;
             'options' => [],
             'source' => null,
         ];
+    }
+
+    /**
+     * Urutkan koleksi guru jadwal secara natural berdasarkan kode (1, 2, ... 14a, 14b, ... 34).
+     */
+    public function sortScheduleTeachersByCode(Collection $teachers): Collection
+    {
+        return $teachers->sort(function (SchoolScheduleTeacher $a, SchoolScheduleTeacher $b) {
+            return strnatcasecmp(trim((string) $a->code), trim((string) $b->code));
+        })->values();
+    }
+
+    /**
+     * Susun paket data lengkap untuk Cetak Poster, Download PDF, maupun Export Excel
+     * yang otomatis mendukung mode 1 Shift maupun 2 Shift berdampingan.
+     */
+    public function getMasterExportData(AcademicYear $academicYear, ?array $conflicts = null, bool $forTemplate = false): array
+    {
+        $matrixData = $this->getMasterMatrix($academicYear, null, $conflicts);
+        $matrixByDay = $matrixData['matrix_by_day'] ?? [];
+
+        $shift1 = $this->buildShiftExportData($matrixByDay, 'pagi');
+        $shift2 = $this->buildShiftExportData($matrixByDay, 'siang');
+
+        if ($forTemplate && count($shift1['flat_classes']) === 0) {
+            $shift1 = $this->buildDefaultTemplateShiftData($academicYear);
+        }
+
+        $shift2SlotTotal = collect($shift2['days'])->sum(fn (array $d) => count($d['slots']));
+        $isTwoShift = count($shift2['flat_classes']) > 0 && $shift2SlotTotal > 0;
+
+        $allTeachers = $this->sortScheduleTeachersByCode(
+            SchoolScheduleTeacher::query()
+                ->where('academic_year_id', $academicYear->id)
+                ->get()
+        );
+
+        $piketOrder = [
+            'SENIN' => 1,
+            'SELASA' => 2,
+            'RABU' => 3,
+            'KAMIS' => 4,
+            "JUM'AT" => 5,
+            'JUMAT' => 5,
+            'SABTU' => 6,
+        ];
+
+        $piketList = $allTeachers
+            ->filter(fn (SchoolScheduleTeacher $t) => trim((string) $t->piket_day) !== '')
+            ->sortBy(function (SchoolScheduleTeacher $t) use ($piketOrder) {
+                $upper = strtoupper(trim((string) $t->piket_day));
+                return sprintf('%02d_%s', $piketOrder[$upper] ?? 99, $t->name);
+            })
+            ->values();
+
+        $homeroomList = $this->getHomeroomList($academicYear);
+
+        return [
+            'is_two_shift' => $isTwoShift,
+            'shift1' => $shift1,
+            'shift2' => $shift2,
+            'teachers' => $allTeachers,
+            'piket_list' => $piketList,
+            'homeroom_list' => $homeroomList,
+            'total_items' => $matrixData['total_items'] ?? 0,
+            'total_conflicts' => $matrixData['total_conflicts'] ?? 0,
+        ];
+    }
+
+    protected function buildShiftExportData(array $matrixByDay, string $shiftKey): array
+    {
+        $groupInfo = $this->discoverShiftClassGroups($matrixByDay, $shiftKey);
+        $groups = $groupInfo['groups'];
+        $flatClasses = $groupInfo['flat_classes'];
+
+        $days = [];
+        foreach (self::DAYS_MAP as $dNum => $dName) {
+            $rawSlots = $matrixByDay[$dNum][$shiftKey . '_slots'] ?? collect();
+            $dayUpper = match ((int) $dNum) {
+                5 => "JUM'AT",
+                default => strtoupper($dName),
+            };
+
+            $formattedSlots = [];
+            foreach ($rawSlots as $slot) {
+                $timeRange = trim((string) ($slot['time_range'] ?? ''));
+                $classesMap = $slot['classes'] ?? collect();
+                $isActivity = (bool) ($slot['is_activity'] ?? false);
+
+                if ($timeRange === '' && ! $isActivity && $classesMap->isEmpty()) {
+                    continue;
+                }
+
+                $activityName = trim((string) ($slot['activity_name'] ?? ''));
+                $periodOrder = (int) ($slot['period_order'] ?? 0);
+                $jpLabel = $this->resolveExportJpLabel($periodOrder, $isActivity, $activityName);
+
+                $cells = [];
+                foreach ($flatClasses as $clsCode) {
+                    $cells[$clsCode] = $classesMap->get($clsCode);
+                }
+
+                // Cek per kelompok tingkat apakah memiliki aktivitas bersama (mendukung kasus seperti Sabtu jam ke-4 per tingkat)
+                $groupCells = [];
+                foreach ($groups as $gIdx => $grp) {
+                    $groupActName = null;
+                    $allActivityOrEmpty = true;
+                    foreach ($grp['classes'] as $cMeta) {
+                        $item = $cells[$cMeta['code']] ?? null;
+                        if ($item && $item->isCommonActivity()) {
+                            $groupActName = trim((string) $item->teacher_code);
+                        } elseif ($item && trim((string) $item->teacher_code) !== '') {
+                            $allActivityOrEmpty = false;
+                        }
+                    }
+
+                    $groupCells[$gIdx] = [
+                        'is_activity' => $groupActName !== null && $allActivityOrEmpty,
+                        'activity_name' => $groupActName ?: $activityName,
+                        'is_highlighted' => $groupActName !== null && $this->isHighlightedActivity($groupActName),
+                    ];
+                }
+
+                $formattedSlots[] = [
+                    'period_order' => $periodOrder,
+                    'jp_label' => $jpLabel,
+                    'time_range' => $timeRange,
+                    'is_activity' => $isActivity,
+                    'activity_name' => $activityName,
+                    'is_highlighted' => $isActivity && $this->isHighlightedActivity($activityName),
+                    'cells' => $cells,
+                    'group_cells' => $groupCells,
+                ];
+            }
+
+            if (count($formattedSlots) > 0) {
+                $days[] = [
+                    'day_num' => $dNum,
+                    'day_name' => $dayUpper,
+                    'slots' => $formattedSlots,
+                ];
+            }
+        }
+
+        return [
+            'shift_key' => $shiftKey,
+            'groups' => $groups,
+            'flat_classes' => $flatClasses,
+            'total_class_cols' => count($flatClasses),
+            'days' => $days,
+        ];
+    }
+
+    /**
+     * @return array{groups: list<array{grade_key: string, grade_label: string, classes: list<array{code: string, section: string}>}>, flat_classes: list<string>}
+     */
+    protected function discoverShiftClassGroups(array $matrixByDay, string $shiftKey): array
+    {
+        $codes = [];
+        foreach ($matrixByDay as $day) {
+            $slots = $day[$shiftKey . '_slots'] ?? collect();
+            foreach ($slots as $slot) {
+                $classesMap = $slot['classes'] ?? collect();
+                foreach ($classesMap->keys() as $cCode) {
+                    $clean = self::normalizeClassName((string) $cCode);
+                    if ($clean !== '') {
+                        $codes[$clean] = $clean;
+                    }
+                }
+            }
+        }
+
+        return $this->groupNormalizedClasses(array_values($codes));
+    }
+
+    /**
+     * @param  list<string>  $classCodes
+     * @return array{groups: list<array{grade_key: string, grade_label: string, classes: list<array{code: string, section: string}>}>, flat_classes: list<string>}
+     */
+    protected function groupNormalizedClasses(array $classCodes): array
+    {
+        $unique = array_values(array_unique(array_filter(array_map(
+            fn ($c) => self::normalizeClassName((string) $c),
+            $classCodes
+        ))));
+
+        usort($unique, fn (string $a, string $b) => strnatcasecmp($a, $b));
+
+        $grouped = [];
+        foreach ($unique as $code) {
+            if (preg_match('/^(\d+)(.+)$/', $code, $m)) {
+                $gradeKey = $m[1];
+                $section = strtoupper($m[2]);
+            } else {
+                $gradeKey = $code;
+                $section = $code;
+            }
+
+            if (! isset($grouped[$gradeKey])) {
+                $grouped[$gradeKey] = [
+                    'grade_key' => $gradeKey,
+                    'grade_label' => $this->formatGradeRomanLabel($gradeKey),
+                    'classes' => [],
+                ];
+            }
+
+            $grouped[$gradeKey]['classes'][] = [
+                'code' => $code,
+                'section' => $section,
+            ];
+        }
+
+        $groups = array_values($grouped);
+        $flat = [];
+        foreach ($groups as $grp) {
+            foreach ($grp['classes'] as $cls) {
+                $flat[] = $cls['code'];
+            }
+        }
+
+        return [
+            'groups' => $groups,
+            'flat_classes' => $flat,
+        ];
+    }
+
+    protected function formatGradeRomanLabel(string $gradeKey): string
+    {
+        return match (trim($gradeKey)) {
+            '7' => 'KELAS VII',
+            '8' => 'KELAS VIII',
+            '9' => 'KELAS IX',
+            '10' => 'KELAS X',
+            '11' => 'KELAS XI',
+            '12' => 'KELAS XII',
+            default => 'KELAS ' . strtoupper(trim($gradeKey)),
+        };
+    }
+
+    protected function resolveExportJpLabel(int $periodOrder, bool $isActivity, string $activityName): string
+    {
+        if (! $isActivity) {
+            return $periodOrder > 0 ? (string) $periodOrder : '';
+        }
+
+        $upper = strtoupper($activityName);
+        if (str_contains($upper, 'ISTIRAHAT') || str_contains($upper, 'PEMBIASAAN')) {
+            return '';
+        }
+
+        return $periodOrder >= 0 ? (string) $periodOrder : '';
+    }
+
+    protected function isHighlightedActivity(string $activityName): bool
+    {
+        $upper = strtoupper(trim($activityName));
+
+        return str_contains($upper, 'DHUHA')
+            || str_contains($upper, 'ISTIRAHAT')
+            || str_contains($upper, 'KEAGAMAAN')
+            || str_contains($upper, 'PAGI CERIA')
+            || str_contains($upper, 'SABSIH');
+    }
+
+    protected function buildDefaultTemplateShiftData(AcademicYear $academicYear): array
+    {
+        $schoolClassCodes = SchoolClass::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->orderBy('grade_level')
+            ->orderBy('name')
+            ->pluck('name')
+            ->map(fn ($name) => self::normalizeClassName((string) $name))
+            ->filter()
+            ->values()
+            ->all();
+
+        if (empty($schoolClassCodes)) {
+            $schoolClassCodes = [
+                '7A', '7B', '7C', '7D', '7E', '7F', '7G',
+                '8A', '8B', '8C', '8D', '8E', '8F', '8G',
+                '9A', '9B', '9C', '9D', '9E', '9F', '9G',
+            ];
+        }
+
+        $groupInfo = $this->groupNormalizedClasses($schoolClassCodes);
+        $timeGrid = $this->calculateTimeGrid($this->getDefaultTimeGridConfig());
+        $days = [];
+
+        foreach ($timeGrid as $dNum => $dData) {
+            $dayUpper = $dNum === 5 ? "JUM'AT" : strtoupper(self::DAYS_MAP[$dNum] ?? ('HARI ' . $dNum));
+            $slots = [];
+            foreach ($dData['slots'] ?? [] as $slot) {
+                $isAct = (bool) ($slot['is_activity'] ?? false);
+                $actName = trim((string) ($slot['activity'] ?? ''));
+                $period = (int) ($slot['period_order'] ?? 0);
+
+                $groupCells = [];
+                foreach ($groupInfo['groups'] as $gIdx => $grp) {
+                    $groupCells[$gIdx] = [
+                        'is_activity' => $isAct,
+                        'activity_name' => $actName,
+                        'is_highlighted' => $isAct && $this->isHighlightedActivity($actName),
+                    ];
+                }
+
+                $slots[] = [
+                    'period_order' => $period,
+                    'jp_label' => $this->resolveExportJpLabel($period, $isAct, $actName),
+                    'time_range' => (string) ($slot['time_range'] ?? ''),
+                    'is_activity' => $isAct,
+                    'activity_name' => $actName,
+                    'is_highlighted' => $isAct && $this->isHighlightedActivity($actName),
+                    'cells' => [],
+                    'group_cells' => $groupCells,
+                ];
+            }
+
+            $days[] = [
+                'day_num' => $dNum,
+                'day_name' => $dayUpper,
+                'slots' => $slots,
+            ];
+        }
+
+        return [
+            'shift_key' => 'pagi',
+            'groups' => $groupInfo['groups'],
+            'flat_classes' => $groupInfo['flat_classes'],
+            'total_class_cols' => count($groupInfo['flat_classes']),
+            'days' => $days,
+        ];
+    }
+
+    /**
+     * Impor Master Jadwal Pelajaran dari file Excel (.xlsx / .xls) atau CSV
+     * dengan dukungan otomatis layout 1 Shift maupun 2 Shift berdampingan.
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function importMasterScheduleFromFile(
+        AcademicYear $academicYear,
+        string $filePath,
+        bool $syncToClasses = false
+    ): array {
+        $spreadsheet = IOFactory::load($filePath);
+        $sheet = $spreadsheet->getActiveSheet();
+        $grid = $this->buildExpandedSheetGrid($sheet);
+
+        if (empty($grid)) {
+            throw new \InvalidArgumentException('File Excel/CSV kosong atau tidak dapat dibaca.');
+        }
+
+        $shiftAnchors = $this->findScheduleShiftAnchors($grid);
+        if (empty($shiftAnchors)) {
+            throw new \InvalidArgumentException('Format file tidak dikenali: kolom header HARI dan WAKTU tidak ditemukan.');
+        }
+
+        $legendAnchors = $this->findLegendTableAnchors($grid);
+
+        $shiftBlocks = [];
+        foreach ($shiftAnchors as $idx => $anchor) {
+            $nextAnchorCol = $shiftAnchors[$idx + 1]['hari_col'] ?? null;
+            $minLegendCol = null;
+            foreach ($legendAnchors as $la) {
+                $laCol = (int) $la['first_col'];
+                if ($laCol > $anchor['waktu_col'] && ($minLegendCol === null || $laCol < $minLegendCol)) {
+                    $minLegendCol = $laCol;
+                }
+            }
+
+            $stopCol = PHP_INT_MAX;
+            if ($nextAnchorCol !== null) {
+                $stopCol = min($stopCol, (int) $nextAnchorCol);
+            }
+            if ($minLegendCol !== null) {
+                $stopCol = min($stopCol, $minLegendCol);
+            }
+
+            $classColMeta = $this->detectShiftClassColumns($grid, $anchor, $stopCol);
+            if (! empty($classColMeta['columns'])) {
+                $shiftBlocks[] = [
+                    'shift' => $idx === 0 ? 'pagi' : 'siang',
+                    'anchor' => $anchor,
+                    'class_columns' => $classColMeta['columns'],
+                    'data_start_row' => $classColMeta['data_start_row'],
+                ];
+            }
+        }
+
+        if (empty($shiftBlocks)) {
+            throw new \InvalidArgumentException('Kolom rombel kelas tidak terdeteksi di sebelah kanan kolom WAKTU.');
+        }
+
+        $parsedTeachers = $this->parseTeacherLegend($grid, $legendAnchors['teachers'] ?? null);
+        $parsedPiket = $this->parsePiketLegend($grid, $legendAnchors['piket'] ?? null);
+        $parsedHomerooms = $this->parseHomeroomLegend($grid, $legendAnchors['homeroom'] ?? null);
+
+        $parsedItems = [];
+        foreach ($shiftBlocks as $block) {
+            $blockItems = $this->parseShiftGridItems(
+                $grid,
+                $block['shift'],
+                $block['anchor'],
+                $block['class_columns'],
+                $block['data_start_row']
+            );
+            foreach ($blockItems as $item) {
+                $parsedItems[] = $item;
+            }
+        }
+
+        if (empty($parsedItems)) {
+            throw new \InvalidArgumentException('Tidak ditemukan satu pun slot jadwal pada tabel untuk diimpor.');
+        }
+
+        $users = User::query()->where('is_active', true)->get();
+
+        DB::transaction(function () use (
+            $academicYear,
+            $parsedTeachers,
+            $parsedPiket,
+            $parsedHomerooms,
+            $parsedItems,
+            $users
+        ) {
+            if (! empty($parsedTeachers)) {
+                $importedCodes = array_keys($parsedTeachers);
+                SchoolScheduleTeacher::query()
+                    ->where('academic_year_id', $academicYear->id)
+                    ->whereNotIn('code', $importedCodes)
+                    ->delete();
+
+                foreach ($parsedTeachers as $code => $tData) {
+                    $matchedUser = $users->first(fn (User $u) => self::isNameMatch($tData['name'], $u->name));
+
+                    $assignedWk = null;
+                    foreach ($parsedHomerooms as $clsCode => $wName) {
+                        if (self::isNameMatch($tData['name'], $wName)) {
+                            $assignedWk = $clsCode;
+                            break;
+                        }
+                    }
+
+                    $assignedPiket = null;
+                    foreach ($parsedPiket as $dayLabel => $pName) {
+                        if (self::isNameMatch($tData['name'], $pName)) {
+                            $assignedPiket = $dayLabel;
+                            break;
+                        }
+                    }
+
+                    SchoolScheduleTeacher::query()->updateOrCreate(
+                        [
+                            'academic_year_id' => $academicYear->id,
+                            'code' => $code,
+                        ],
+                        [
+                            'name' => $tData['name'],
+                            'subject' => $tData['subject'],
+                            'user_id' => $matchedUser?->id,
+                            'homeroom_class' => $assignedWk,
+                            'piket_day' => $assignedPiket,
+                        ]
+                    );
+                }
+            } elseif (! empty($parsedPiket) || ! empty($parsedHomerooms)) {
+                $existingTeachers = SchoolScheduleTeacher::query()
+                    ->where('academic_year_id', $academicYear->id)
+                    ->get();
+
+                foreach ($existingTeachers as $st) {
+                    $updates = [];
+                    foreach ($parsedHomerooms as $clsCode => $wName) {
+                        if (self::isNameMatch($st->name, $wName)) {
+                            $updates['homeroom_class'] = $clsCode;
+                            break;
+                        }
+                    }
+                    foreach ($parsedPiket as $dayLabel => $pName) {
+                        if (self::isNameMatch($st->name, $pName)) {
+                            $updates['piket_day'] = $dayLabel;
+                            break;
+                        }
+                    }
+                    if (! empty($updates)) {
+                        $st->update($updates);
+                    }
+                }
+            }
+
+            $allClassCodes = collect($parsedItems)->pluck('class_name')->unique()->filter()->values();
+            $schoolClassesMap = [];
+            foreach ($allClassCodes as $cCode) {
+                if (preg_match('/^(\d+)([A-Z0-9]+)$/', $cCode, $m)) {
+                    $grade = match ($m[1]) {
+                        '7' => 'VII',
+                        '8' => 'VIII',
+                        '9' => 'IX',
+                        default => $m[1],
+                    };
+                    $formatted = $grade . '-' . $m[2];
+                } else {
+                    $grade = 'VII';
+                    $formatted = $cCode;
+                }
+
+                $sc = SchoolClass::query()
+                    ->where('academic_year_id', $academicYear->id)
+                    ->get()
+                    ->first(fn (SchoolClass $c) => self::normalizeClassName($c->name) === $cCode);
+
+                if (! $sc) {
+                    $wkName = $parsedHomerooms[$cCode] ?? ('Wali Kelas ' . $formatted);
+                    $sc = SchoolClass::query()->firstOrCreate(
+                        [
+                            'academic_year_id' => $academicYear->id,
+                            'name' => $formatted,
+                        ],
+                        [
+                            'grade_level' => $grade,
+                            'homeroom_teacher_name' => $wkName,
+                        ]
+                    );
+                }
+
+                $schoolClassesMap[$cCode] = $sc;
+            }
+
+            $scheduleTeachers = SchoolScheduleTeacher::query()
+                ->where('academic_year_id', $academicYear->id)
+                ->get()
+                ->keyBy('code');
+
+            SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->delete();
+
+            foreach ($parsedItems as $row) {
+                $tCode = $row['teacher_code'];
+                $tRecord = $tCode !== null ? $scheduleTeachers->get($tCode) : null;
+                $sc = $schoolClassesMap[$row['class_name']] ?? null;
+
+                SchoolScheduleItem::query()->create([
+                    'academic_year_id' => $academicYear->id,
+                    'day_of_week' => $row['day_of_week'],
+                    'shift' => $row['shift'],
+                    'period_order' => $row['period_order'],
+                    'time_range' => $row['time_range'],
+                    'class_name' => $row['class_name'],
+                    'school_class_id' => $sc?->id,
+                    'teacher_code' => $tCode,
+                    'teacher_name' => $tRecord?->name ?? ($row['is_activity'] ? $tCode : null),
+                    'subject_name' => $tRecord?->subject,
+                    'user_id' => $tRecord?->user_id,
+                ]);
+            }
+        });
+
+        $conflicts = $this->detectConflicts($academicYear);
+        $syncStats = null;
+        if ($syncToClasses) {
+            $syncStats = $this->syncToTeachingClasses($academicYear);
+        }
+
+        return [
+            'teachers_count' => SchoolScheduleTeacher::query()->where('academic_year_id', $academicYear->id)->count(),
+            'items_count' => SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->count(),
+            'conflicts_count' => count($conflicts),
+            'shifts_detected' => count($shiftBlocks),
+            'synced_classes' => $syncStats['synced_classes'] ?? 0,
+            'created_classes' => $syncStats['created_classes'] ?? 0,
+        ];
+    }
+
+    /**
+     * Baca nilai sel Excel/CSV sekaligus menyalin nilai sel merged ke seluruh sel cakupannya di memori.
+     *
+     * @return list<list<string>>
+     */
+    protected function buildExpandedSheetGrid(Worksheet $sheet): array
+    {
+        $raw = $sheet->toArray(null, true, true, false);
+        if (empty($raw)) {
+            return [];
+        }
+
+        $grid = [];
+        foreach ($raw as $rIdx => $row) {
+            $line = [];
+            foreach ($row as $cIdx => $val) {
+                $line[(int) $cIdx] = trim((string) ($val ?? ''));
+            }
+            $grid[(int) $rIdx] = $line;
+        }
+
+        foreach ($sheet->getMergeCells() as $mergeRange) {
+            if (! str_contains($mergeRange, ':')) {
+                continue;
+            }
+            [$startRef, $endRef] = explode(':', $mergeRange, 2);
+            [$startColStr, $startRowNum] = Coordinate::coordinateFromString($startRef);
+            [$endColStr, $endRowNum] = Coordinate::coordinateFromString($endRef);
+
+            $c1 = Coordinate::columnIndexFromString($startColStr) - 1;
+            $c2 = Coordinate::columnIndexFromString($endColStr) - 1;
+            $r1 = ((int) $startRowNum) - 1;
+            $r2 = ((int) $endRowNum) - 1;
+
+            $anchorVal = trim((string) ($grid[$r1][$c1] ?? ''));
+            if ($anchorVal === '') {
+                continue;
+            }
+
+            // Abaikan merge judul kop di baris paling atas bila tidak relevan untuk tabel
+            for ($r = $r1; $r <= $r2; $r++) {
+                for ($c = $c1; $c <= $c2; $c++) {
+                    if (isset($grid[$r]) && (! isset($grid[$r][$c]) || $grid[$r][$c] === '')) {
+                        $grid[$r][$c] = $anchorVal;
+                    }
+                }
+            }
+        }
+
+        return $grid;
+    }
+
+    /**
+     * Temukan posisi kolom HARI, JP KE, dan WAKTU untuk Shift 1 (dan Shift 2 bila ada).
+     *
+     * @return list<array{row: int, hari_col: int, jp_col: int, waktu_col: int}>
+     */
+    protected function findScheduleShiftAnchors(array $grid): array
+    {
+        $maxScanRow = min(25, count($grid) - 1);
+        for ($r = 0; $r <= $maxScanRow; $r++) {
+            $row = $grid[$r] ?? [];
+            $anchors = [];
+            $colCount = empty($row) ? 0 : (max(array_keys($row)) + 1);
+
+            for ($c = 0; $c < $colCount; $c++) {
+                $val = strtoupper(trim((string) ($row[$c] ?? '')));
+                if ($val !== 'HARI') {
+                    continue;
+                }
+
+                $jpCol = null;
+                $waktuCol = null;
+                for ($offset = 1; $offset <= 3; $offset++) {
+                    $nextVal = strtoupper((string) preg_replace('/\s+/', ' ', trim((string) ($row[$c + $offset] ?? ''))));
+                    if (in_array($nextVal, ['JP KE', 'JM KE', 'JM', 'JAM', 'JAM KE'], true) && $jpCol === null) {
+                        $jpCol = $c + $offset;
+                    } elseif ($nextVal === 'WAKTU') {
+                        $waktuCol = $c + $offset;
+                        break;
+                    }
+                }
+
+                if ($waktuCol !== null) {
+                    $anchors[] = [
+                        'row' => $r,
+                        'hari_col' => $c,
+                        'jp_col' => $jpCol ?? ($c + 1),
+                        'waktu_col' => $waktuCol,
+                    ];
+                }
+            }
+
+            if (! empty($anchors)) {
+                return $anchors;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Deteksi pasangan indeks kolom -> kode rombel ('7A', '8C', dst.) untuk satu blok shift.
+     *
+     * @return array{columns: array<int, string>, data_start_row: int}
+     */
+    protected function detectShiftClassColumns(array $grid, array $anchor, int $stopCol): array
+    {
+        $hdrRow = $anchor['row'];
+        $subRow = $hdrRow + 1;
+        $row1 = $grid[$hdrRow] ?? [];
+        $row2 = $grid[$subRow] ?? [];
+
+        $hasSubRow = false;
+        $maxRow1 = empty($row1) ? $anchor['waktu_col'] : max(array_keys($row1));
+        $maxRow2 = empty($row2) ? $anchor['waktu_col'] : max(array_keys($row2));
+        $scanLimit = min($stopCol - 1, max($maxRow1, $maxRow2));
+
+        for ($c = $anchor['waktu_col'] + 1; $c <= $scanLimit; $c++) {
+            $subVal = trim((string) ($row2[$c] ?? ''));
+            if ($subVal !== '' && preg_match('/^(?:[A-Z]|[7-9][A-G]|(?:VII|VIII|IX)[-\s]?[A-G])$/i', $subVal)) {
+                $hasSubRow = true;
+                break;
+            }
+        }
+
+        $columns = [];
+        for ($c = $anchor['waktu_col'] + 1; $c <= $scanLimit; $c++) {
+            $topVal = trim((string) ($row1[$c] ?? ''));
+            $botVal = $hasSubRow ? trim((string) ($row2[$c] ?? '')) : '';
+
+            if ($topVal === '' && $botVal === '') {
+                if (! empty($columns)) {
+                    break;
+                }
+                continue;
+            }
+
+            $resolved = $this->combineGradeAndSectionToClassCode($topVal, $botVal);
+            if ($resolved !== null) {
+                $columns[$c] = $resolved;
+            }
+        }
+
+        return [
+            'columns' => $columns,
+            'data_start_row' => $hasSubRow ? ($subRow + 1) : ($hdrRow + 1),
+        ];
+    }
+
+    protected function combineGradeAndSectionToClassCode(string $topVal, string $botVal): ?string
+    {
+        if ($botVal !== '' && preg_match('/^(?:VII|VIII|IX|7|8|9)\s*[-]?\s*[A-Z]$/i', $botVal)) {
+            $norm = self::normalizeClassName($botVal);
+            return $norm !== '' ? $norm : null;
+        }
+
+        if ($botVal === '' && $topVal !== '' && preg_match('/^(?:VII|VIII|IX|7|8|9)\s*[-]?\s*[A-Z]$/i', $topVal)) {
+            $norm = self::normalizeClassName($topVal);
+            return $norm !== '' ? $norm : null;
+        }
+
+        $topClean = strtoupper(trim($topVal));
+        $gradeNum = null;
+        if (str_contains($topClean, 'VIII') || preg_match('/\b8\b/', $topClean)) {
+            $gradeNum = '8';
+        } elseif (str_contains($topClean, 'VII') || preg_match('/\b7\b/', $topClean)) {
+            $gradeNum = '7';
+        } elseif (str_contains($topClean, 'IX') || preg_match('/\b9\b/', $topClean)) {
+            $gradeNum = '9';
+        } elseif (preg_match('/(\d+)/', $topClean, $m)) {
+            $gradeNum = $m[1];
+        }
+
+        if ($gradeNum !== null && $botVal !== '') {
+            return $gradeNum . strtoupper(trim($botVal));
+        }
+
+        $fallback = self::normalizeClassName($topVal . $botVal);
+        return $fallback !== '' ? $fallback : null;
+    }
+
+    /**
+     * Temukan posisi 3 tabel legenda samping kanan: Kode Guru, Guru Piket, dan Wali Kelas.
+     *
+     * @return array<string, array{row: int, first_col: int, second_col: int, third_col: int}>
+     */
+    protected function findLegendTableAnchors(array $grid): array
+    {
+        $anchors = [];
+
+        foreach ($grid as $rIdx => $row) {
+            if (empty($row)) {
+                continue;
+            }
+            $maxC = max(array_keys($row));
+            for ($c = 0; $c <= $maxC - 2; $c++) {
+                $h1 = strtoupper(trim((string) ($row[$c] ?? '')));
+                $h2 = strtoupper(trim((string) ($row[$c + 1] ?? '')));
+                $h3 = strtoupper(trim((string) ($row[$c + 2] ?? '')));
+
+                if (! isset($anchors['teachers']) && $h1 === 'KODE' && str_contains($h2, 'NAMA GURU')) {
+                    $anchors['teachers'] = [
+                        'row' => (int) $rIdx,
+                        'first_col' => $c,
+                        'second_col' => $c + 1,
+                        'third_col' => $c + 2,
+                    ];
+                } elseif (! isset($anchors['piket']) && str_contains($h2, 'GURU PIKET') && $h3 === 'HARI') {
+                    $anchors['piket'] = [
+                        'row' => (int) $rIdx,
+                        'first_col' => $c,
+                        'second_col' => $c + 1,
+                        'third_col' => $c + 2,
+                    ];
+                } elseif (! isset($anchors['homeroom']) && str_contains($h2, 'NAMA GURU') && (str_contains($h3, 'WALI KELAS') || str_contains($h3, 'WAL KELAS'))) {
+                    $anchors['homeroom'] = [
+                        'row' => (int) $rIdx,
+                        'first_col' => $c,
+                        'second_col' => $c + 1,
+                        'third_col' => $c + 2,
+                    ];
+                }
+            }
+        }
+
+        return $anchors;
+    }
+
+    /**
+     * @return array<string, array{code: string, name: string, subject: string}>
+     */
+    protected function parseTeacherLegend(array $grid, ?array $anchor): array
+    {
+        if (! $anchor) {
+            return [];
+        }
+
+        $result = [];
+        $totalRows = count($grid);
+        for ($r = $anchor['row'] + 1; $r < $totalRows; $r++) {
+            $row = $grid[$r] ?? [];
+            $code = trim((string) ($row[$anchor['first_col']] ?? ''));
+            $name = trim((string) ($row[$anchor['second_col']] ?? ''));
+            $subj = trim((string) ($row[$anchor['third_col']] ?? ''));
+
+            if (str_contains(strtoupper($name), 'NAMA GURU PIKET') || strtoupper($subj) === 'HARI') {
+                break;
+            }
+            if ($code === '' || $name === '') {
+                if (! empty($result) && strtoupper($name) === '' && $subj === '') {
+                    continue;
+                }
+                continue;
+            }
+
+            $result[$code] = [
+                'code' => $code,
+                'name' => $name,
+                'subject' => $subj,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function parsePiketLegend(array $grid, ?array $anchor): array
+    {
+        if (! $anchor) {
+            return [];
+        }
+
+        $validDays = ['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'JUMAT', 'SABTU'];
+        $result = [];
+        $totalRows = count($grid);
+
+        for ($r = $anchor['row'] + 1; $r < $totalRows; $r++) {
+            $row = $grid[$r] ?? [];
+            $name = trim((string) ($row[$anchor['second_col']] ?? ''));
+            $day = strtoupper(trim((string) ($row[$anchor['third_col']] ?? '')));
+
+            if (str_contains(strtoupper($day), 'WALI KELAS') || str_contains(strtoupper($day), 'WAL KELAS')) {
+                break;
+            }
+            if ($name === '' || $day === '') {
+                continue;
+            }
+            if (! in_array($day, $validDays, true)) {
+                if (! empty($result)) {
+                    break;
+                }
+                continue;
+            }
+
+            $result[$day] = $name;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function parseHomeroomLegend(array $grid, ?array $anchor): array
+    {
+        if (! $anchor) {
+            return [];
+        }
+
+        $result = [];
+        $totalRows = count($grid);
+
+        for ($r = $anchor['row'] + 1; $r < $totalRows; $r++) {
+            $row = $grid[$r] ?? [];
+            $name = trim((string) ($row[$anchor['second_col']] ?? ''));
+            $clsRaw = trim((string) ($row[$anchor['third_col']] ?? ''));
+
+            if ($name === '' && $clsRaw === '') {
+                if (! empty($result)) {
+                    break;
+                }
+                continue;
+            }
+
+            $normCls = self::normalizeClassName($clsRaw);
+            if ($name !== '' && $normCls !== '') {
+                $result[$normCls] = $name;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function parseShiftGridItems(
+        array $grid,
+        string $shiftKey,
+        array $anchor,
+        array $classColumns,
+        int $dataStartRow
+    ): array {
+        $items = [];
+        $currentDay = 'SENIN';
+        $totalRows = count($grid);
+
+        for ($r = $dataStartRow; $r < $totalRows; $r++) {
+            $row = $grid[$r] ?? [];
+            $rawDay = trim((string) ($row[$anchor['hari_col']] ?? ''));
+            $rawJp = trim((string) ($row[$anchor['jp_col']] ?? ''));
+            $rawWaktu = trim((string) ($row[$anchor['waktu_col']] ?? ''));
+
+            if ($rawDay !== '') {
+                $upperDay = strtoupper($rawDay);
+                if (in_array(str_replace("'", '', $upperDay), ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'], true)) {
+                    $currentDay = $rawDay;
+                }
+            }
+
+            if ($rawWaktu === '') {
+                continue;
+            }
+
+            $dayNum = $this->parseDayOfWeek($currentDay);
+            $periodOrder = is_numeric($rawJp) ? (int) $rawJp : 0;
+
+            $rowValues = [];
+            $hasAnyActivity = false;
+            $hasAnyCellValue = false;
+
+            foreach ($classColumns as $colIdx => $clsCode) {
+                $val = trim((string) ($row[$colIdx] ?? ''));
+                $rowValues[$clsCode] = $val;
+                if ($val !== '' && $val !== '-') {
+                    $hasAnyCellValue = true;
+                    $tmpItem = new SchoolScheduleItem(['teacher_code' => $val]);
+                    if ($tmpItem->isCommonActivity()) {
+                        $hasAnyActivity = true;
+                    }
+                }
+            }
+
+            if (! $hasAnyCellValue) {
+                continue;
+            }
+
+            foreach ($rowValues as $clsCode => $val) {
+                if ($hasAnyActivity && ($val === '' || $val === '-')) {
+                    continue;
+                }
+
+                $teacherCode = ($val === '' || $val === '-') ? null : $val;
+                if (! $hasAnyActivity && $teacherCode === null && $periodOrder <= 0) {
+                    continue;
+                }
+
+                $tmp = new SchoolScheduleItem(['teacher_code' => $teacherCode]);
+
+                $items[] = [
+                    'day_of_week' => $dayNum,
+                    'shift' => $shiftKey,
+                    'period_order' => $periodOrder,
+                    'time_range' => $rawWaktu,
+                    'class_name' => $clsCode,
+                    'teacher_code' => $teacherCode,
+                    'is_activity' => $tmp->isCommonActivity(),
+                ];
+            }
+        }
+
+        return $items;
     }
 }

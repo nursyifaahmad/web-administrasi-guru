@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AcademicYear;
 use App\Models\Attendance;
 use App\Models\ClassStudent;
 use App\Models\DailyJournal;
@@ -1409,4 +1410,485 @@ class ExcelExportImportService
         return $updated;
     }
 
+    /**
+     * Ekspor Master Jadwal Pelajaran Sekolah menjadi 1 sheet poster (.xlsx)
+     * lengkap dengan dukungan 1 Shift maupun 2 Shift berdampingan serta panel legenda kanan.
+     */
+    public function exportMasterScheduleExcel(
+        AcademicYear $academicYear,
+        ?\App\Services\SchoolScheduleService $scheduleService = null,
+        bool $blankTemplate = false
+    ): StreamedResponse {
+        $scheduleService ??= app(\App\Services\SchoolScheduleService::class);
+        $exportData = $scheduleService->getMasterExportData($academicYear, null, $blankTemplate);
+        $school = \App\Models\SchoolSetting::current();
+
+        $shift1 = $exportData['shift1'];
+        $shift2 = $exportData['shift2'];
+        $isTwoShift = (bool) ($exportData['is_two_shift'] ?? false);
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Jadwal Pelajaran');
+        $sheet->setShowGridlines(true);
+
+        $shift1Width = 3 + max(1, count($shift1['flat_classes'] ?? []));
+        $shift2Width = $isTwoShift ? (3 + max(1, count($shift2['flat_classes'] ?? []))) : 0;
+
+        $shift1StartCol = 1;
+        $colCursor = $shift1StartCol + $shift1Width;
+
+        $shift2StartCol = null;
+        if ($isTwoShift) {
+            $spacer1Col = $colCursor;
+            $sheet->getColumnDimension($this->col($spacer1Col))->setWidth(2.0);
+            $shift2StartCol = $spacer1Col + 1;
+            $colCursor = $shift2StartCol + $shift2Width;
+        }
+
+        $spacerLegendCol = $colCursor;
+        $sheet->getColumnDimension($this->col($spacerLegendCol))->setWidth(2.2);
+        $legendStartCol = $spacerLegendCol + 1;
+        $totalCols = $legendStartCol + 2;
+
+        // Lebar kolom untuk setiap blok shift dan panel legenda kanan
+        $this->applyMasterScheduleShiftColumnWidths($sheet, $shift1StartCol, max(1, count($shift1['flat_classes'] ?? [])));
+        if ($isTwoShift && $shift2StartCol !== null) {
+            $this->applyMasterScheduleShiftColumnWidths($sheet, $shift2StartCol, max(1, count($shift2['flat_classes'] ?? [])));
+        }
+        $sheet->getColumnDimension($this->col($legendStartCol))->setWidth(5.8);
+        $sheet->getColumnDimension($this->col($legendStartCol + 1))->setWidth(24.5);
+        $sheet->getColumnDimension($this->col($legendStartCol + 2))->setWidth(18.0);
+
+        // Kop Header Poster (Baris 1-4)
+        $titleStartCol = min(3, $totalCols);
+        $titleEndCol = max($titleStartCol, $totalCols - 2);
+        $kopLines = [
+            1 => ['text' => 'JADWAL PELAJARAN', 'size' => 12, 'bold' => true, 'italic' => false, 'height' => 17],
+            2 => ['text' => 'SEMESTER ' . strtoupper((string) ($academicYear->semester ?: 'GANJIL')), 'size' => 10.5, 'bold' => true, 'italic' => false, 'height' => 15],
+            3 => ['text' => 'TAHUN PELAJARAN ' . ((string) ($academicYear->name ?: '-')), 'size' => 10.5, 'bold' => true, 'italic' => false, 'height' => 15],
+            4 => ['text' => strtoupper((string) ($school->school_name ?: 'SMP NEGERI 2 LEMAHABANG')) . ' - Jadwal Pelajaran Sekolah', 'size' => 9, 'bold' => true, 'italic' => true, 'height' => 14],
+        ];
+        foreach ($kopLines as $rNum => $cfg) {
+            $sheet->getRowDimension($rNum)->setRowHeight($cfg['height']);
+            if ($titleEndCol > $titleStartCol) {
+                $sheet->mergeCells($this->range($titleStartCol, $rNum, $titleEndCol, $rNum));
+            }
+            $coord = $this->cell($titleStartCol, $rNum);
+            $sheet->setCellValue($coord, $cfg['text']);
+            $sheet->getStyle($coord)->applyFromArray([
+                'font' => ['name' => 'Arial', 'size' => $cfg['size'], 'bold' => $cfg['bold'], 'italic' => $cfg['italic']],
+                'alignment' => [
+                    'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                    'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                ],
+            ]);
+        }
+
+        // Logo Kiri & Logo Kanan
+        $leftLogoPath = $this->createTempImageFromBase64($school->resolvedLogoBox('left')['data_uri'] ?? null);
+        if ($leftLogoPath) {
+            $drawingLeft = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+            $drawingLeft->setPath($leftLogoPath);
+            $drawingLeft->setCoordinates('A1');
+            $drawingLeft->setHeight(48);
+            $drawingLeft->setOffsetX(4);
+            $drawingLeft->setOffsetY(2);
+            $drawingLeft->setWorksheet($sheet);
+        }
+
+        $rightLogoPath = $this->createTempImageFromBase64($school->resolvedLogoBox('right')['data_uri'] ?? null);
+        if ($rightLogoPath) {
+            $drawingRight = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+            $drawingRight->setPath($rightLogoPath);
+            $drawingRight->setCoordinates($this->cell(max(1, $totalCols - 1), 1));
+            $drawingRight->setHeight(48);
+            $drawingRight->setOffsetX(4);
+            $drawingRight->setOffsetY(2);
+            $drawingRight->setWorksheet($sheet);
+        }
+
+        $sheet->getRowDimension(5)->setRowHeight(6);
+
+        $matrixStartRow = 6;
+        if ($isTwoShift && $shift2StartCol !== null) {
+            $sheet->getRowDimension(6)->setRowHeight(16);
+            $this->writeMasterScheduleBannerCell($sheet, $shift1StartCol, $shift1StartCol + $shift1Width - 1, 6, 'SHIFT 1 (PAGI)', 'E2E8F0');
+            $this->writeMasterScheduleBannerCell($sheet, $shift2StartCol, $shift2StartCol + $shift2Width - 1, 6, 'SHIFT 2 (SIANG)', 'E0F2FE');
+            $this->writeMasterScheduleBannerCell($sheet, $legendStartCol, $legendStartCol + 2, 6, 'KODE GURU, PIKET & WALI KELAS', 'E2E8F0');
+            $matrixStartRow = 7;
+        }
+
+        // Tulis Blok Shift 1 dan (jika 2 Shift) Blok Shift 2 di sebelah kanan Shift 1
+        $lastShift1Row = $this->writeMasterScheduleShiftBlock($sheet, $shift1, $shift1StartCol, $matrixStartRow, $blankTemplate);
+        $lastShift2Row = $matrixStartRow;
+        if ($isTwoShift && $shift2StartCol !== null) {
+            $lastShift2Row = $this->writeMasterScheduleShiftBlock($sheet, $shift2, $shift2StartCol, $matrixStartRow, $blankTemplate);
+        }
+
+        // Tulis Panel Legenda Kanan (Kode Guru, Guru Piket, Wali Kelas, & TTD Kepsek)
+        $lastLegendRow = $this->writeMasterScheduleLegendPanel($sheet, $exportData, $legendStartCol, $matrixStartRow, $blankTemplate, $school);
+
+        $maxContentRow = max($lastShift1Row, $lastShift2Row, $lastLegendRow);
+        $sheet->getPageSetup()
+            ->setOrientation($isTwoShift ? PageSetup::ORIENTATION_LANDSCAPE : PageSetup::ORIENTATION_PORTRAIT)
+            ->setPaperSize(PageSetup::PAPERSIZE_FOLIO)
+            ->setFitToPage(true)
+            ->setFitToWidth(1)
+            ->setFitToHeight(1);
+        $sheet->getPageSetup()->setPrintArea($this->range(1, 1, $totalCols, $maxContentRow));
+        $sheet->getPageMargins()->setTop(0.25)->setBottom(0.25)->setLeft(0.25)->setRight(0.25);
+
+        $prefix = $blankTemplate ? 'Template_Master_Jadwal_' : 'Master_Jadwal_Pelajaran_';
+        $filename = $prefix . \Illuminate\Support\Str::slug($academicYear->name . '_' . ($academicYear->semester ?: 'semester'), '_') . '.xlsx';
+
+        return $this->streamSpreadsheet($spreadsheet, $filename);
+    }
+
+    protected function applyMasterScheduleShiftColumnWidths(Worksheet $sheet, int $startCol, int $classCount): void
+    {
+        $sheet->getColumnDimension($this->col($startCol))->setWidth(3.8);
+        $sheet->getColumnDimension($this->col($startCol + 1))->setWidth(4.0);
+        $sheet->getColumnDimension($this->col($startCol + 2))->setWidth(11.5);
+        for ($i = 0; $i < $classCount; $i++) {
+            $sheet->getColumnDimension($this->col($startCol + 3 + $i))->setWidth(4.4);
+        }
+    }
+
+    protected function writeMasterScheduleBannerCell(Worksheet $sheet, int $startCol, int $endCol, int $row, string $label, string $fillHex): void
+    {
+        if ($endCol > $startCol) {
+            $sheet->mergeCells($this->range($startCol, $row, $endCol, $row));
+        }
+        $sheet->setCellValue($this->cell($startCol, $row), $label);
+        $sheet->getStyle($this->range($startCol, $row, $endCol, $row))->applyFromArray([
+            'font' => ['name' => 'Arial', 'size' => 9, 'bold' => true],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => $fillHex]],
+            'alignment' => [
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+            ],
+            'borders' => [
+                'allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['rgb' => '000000']],
+            ],
+        ]);
+    }
+
+    protected function writeMasterScheduleShiftBlock(
+        Worksheet $sheet,
+        array $shiftData,
+        int $startCol,
+        int $startRow,
+        bool $blankTemplate
+    ): int {
+        $groups = $shiftData['groups'] ?? [];
+        $flatClasses = $shiftData['flat_classes'] ?? [];
+        $totalClassCols = max(1, count($flatClasses));
+        $endCol = $startCol + 2 + $totalClassCols;
+
+        $hdrRow1 = $startRow;
+        $hdrRow2 = $startRow + 1;
+        $sheet->getRowDimension($hdrRow1)->setRowHeight(15);
+        $sheet->getRowDimension($hdrRow2)->setRowHeight(14);
+
+        foreach ([0 => 'HARI', 1 => 'JP KE', 2 => 'WAKTU'] as $offset => $title) {
+            $c = $startCol + $offset;
+            $sheet->mergeCells($this->range($c, $hdrRow1, $c, $hdrRow2));
+            $sheet->setCellValue($this->cell($c, $hdrRow1), $title);
+        }
+
+        if (empty($groups)) {
+            $sheet->setCellValue($this->cell($startCol + 3, $hdrRow1), 'KELAS');
+            $sheet->setCellValue($this->cell($startCol + 3, $hdrRow2), '-');
+        } else {
+            $colCursor = $startCol + 3;
+            foreach ($groups as $grp) {
+                $clsList = $grp['classes'] ?? [];
+                $span = count($clsList);
+                if ($span === 0) {
+                    continue;
+                }
+                if ($span > 1) {
+                    $sheet->mergeCells($this->range($colCursor, $hdrRow1, $colCursor + $span - 1, $hdrRow1));
+                }
+                $sheet->setCellValue($this->cell($colCursor, $hdrRow1), $grp['grade_label'] ?? 'KELAS');
+                foreach ($clsList as $clsMeta) {
+                    $sheet->setCellValue($this->cell($colCursor, $hdrRow2), $clsMeta['section'] ?? $clsMeta['code']);
+                    $colCursor++;
+                }
+            }
+        }
+
+        $sheet->getStyle($this->range($startCol, $hdrRow1, $endCol, $hdrRow2))->applyFromArray([
+            'font' => ['name' => 'Arial', 'size' => 8, 'bold' => true],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D9D9D9']],
+            'alignment' => [
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                'wrapText' => true,
+            ],
+            'borders' => [
+                'allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['rgb' => '000000']],
+                'outline' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_MEDIUM, 'color' => ['rgb' => '000000']],
+            ],
+        ]);
+
+        $currRow = $hdrRow2 + 1;
+        $days = $shiftData['days'] ?? [];
+
+        foreach ($days as $day) {
+            $slots = $day['slots'] ?? [];
+            if (empty($slots)) {
+                continue;
+            }
+            $dayStartRow = $currRow;
+
+            foreach ($slots as $slot) {
+                if ((int) $sheet->getRowDimension($currRow)->getRowHeight() <= 0) {
+                    $sheet->getRowDimension($currRow)->setRowHeight(13.5);
+                }
+
+                $sheet->setCellValueExplicit(
+                    $this->cell($startCol + 1, $currRow),
+                    (string) ($slot['jp_label'] ?? ''),
+                    \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+                );
+                $sheet->setCellValue($this->cell($startCol + 2, $currRow), (string) ($slot['time_range'] ?? ''));
+
+                if (! empty($groups)) {
+                    $colCursor = $startCol + 3;
+                    foreach ($groups as $gIdx => $grp) {
+                        $clsList = $grp['classes'] ?? [];
+                        $span = count($clsList);
+                        if ($span === 0) {
+                            continue;
+                        }
+                        $grpCell = $slot['group_cells'][$gIdx] ?? null;
+
+                        if ($grpCell && ! empty($grpCell['is_activity'])) {
+                            if ($span > 1) {
+                                $sheet->mergeCells($this->range($colCursor, $currRow, $colCursor + $span - 1, $currRow));
+                            }
+                            $actName = (string) ($grpCell['activity_name'] ?? '');
+                            $sheet->setCellValue($this->cell($colCursor, $currRow), $actName);
+                            $actStyle = [
+                                'font' => ['name' => 'Arial', 'size' => 7.5, 'bold' => true, 'italic' => true],
+                                'alignment' => [
+                                    'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                                    'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                                ],
+                            ];
+                            if (! empty($grpCell['is_highlighted'])) {
+                                $actStyle['fill'] = ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFFF00']];
+                            }
+                            $sheet->getStyle($this->range($colCursor, $currRow, $colCursor + $span - 1, $currRow))->applyFromArray($actStyle);
+                            $colCursor += $span;
+                        } else {
+                            foreach ($clsList as $clsMeta) {
+                                $item = $slot['cells'][$clsMeta['code']] ?? null;
+                                $val = $blankTemplate ? '' : (string) ($item?->teacher_code ?? '');
+                                $coord = $this->cell($colCursor, $currRow);
+                                if ($val !== '') {
+                                    $sheet->setCellValueExplicit($coord, $val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                                }
+                                if (! $blankTemplate && $item && $item->is_conflict) {
+                                    $sheet->getStyle($coord)->applyFromArray([
+                                        'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'EF4444']],
+                                        'font' => ['name' => 'Arial', 'size' => 8, 'bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                                    ]);
+                                } elseif (! $blankTemplate && $item && $item->isCommonActivity()) {
+                                    $sheet->getStyle($coord)->applyFromArray([
+                                        'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFFF00']],
+                                        'font' => ['name' => 'Arial', 'size' => 7.5, 'bold' => true, 'italic' => true],
+                                    ]);
+                                }
+                                $colCursor++;
+                            }
+                        }
+                    }
+                }
+
+                $currRow++;
+            }
+
+            $dayEndRow = $currRow - 1;
+            if ($dayEndRow >= $dayStartRow) {
+                if ($dayEndRow > $dayStartRow) {
+                    $sheet->mergeCells($this->range($startCol, $dayStartRow, $startCol, $dayEndRow));
+                }
+                $sheet->setCellValue($this->cell($startCol, $dayStartRow), (string) ($day['day_name'] ?? ''));
+
+                // Styling blok hari (teks HARI vertikal 90 derajat, border tipis & penutup hari tebal)
+                $sheet->getStyle($this->range($startCol + 1, $dayStartRow, $endCol, $dayEndRow))->applyFromArray([
+                    'font' => ['name' => 'Arial', 'size' => 8],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                        'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                    ],
+                    'borders' => [
+                        'allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['rgb' => '000000']],
+                    ],
+                ]);
+                $sheet->getStyle($this->range($startCol, $dayStartRow, $startCol, $dayEndRow))->applyFromArray([
+                    'font' => ['name' => 'Arial', 'size' => 8.5, 'bold' => true],
+                    'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'F3F4F6']],
+                    'alignment' => [
+                        'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                        'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                        'textRotation' => 90,
+                    ],
+                    'borders' => [
+                        'allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['rgb' => '000000']],
+                    ],
+                ]);
+                $sheet->getStyle($this->range($startCol, $dayEndRow, $endCol, $dayEndRow))->getBorders()->getBottom()
+                    ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_MEDIUM);
+            }
+        }
+
+        if ($currRow === $hdrRow2 + 1) {
+            return $hdrRow2;
+        }
+
+        $sheet->getStyle($this->range($startCol, $hdrRow1, $endCol, $currRow - 1))->getBorders()->getOutline()
+            ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_MEDIUM);
+
+        return $currRow - 1;
+    }
+
+    protected function writeMasterScheduleLegendPanel(
+        Worksheet $sheet,
+        array $exportData,
+        int $startCol,
+        int $startRow,
+        bool $blankTemplate,
+        \App\Models\SchoolSetting $school
+    ): int {
+        $endCol = $startCol + 2;
+        $currRow = $startRow;
+
+        // 1. Tabel Kode Guru
+        $currRow = $this->writeMasterScheduleLegendHeader($sheet, $startCol, $currRow, ['Kode', 'Nama Guru', 'Mata Pelajaran']);
+        $teachers = $exportData['teachers'] ?? collect();
+        if ($teachers->isEmpty() && $blankTemplate) {
+            for ($i = 1; $i <= 12; $i++) {
+                $currRow = $this->writeMasterScheduleLegendRow($sheet, $startCol, $currRow, [(string) $i, '', ''], [true, false, false]);
+            }
+        } else {
+            foreach ($teachers as $t) {
+                $currRow = $this->writeMasterScheduleLegendRow(
+                    $sheet,
+                    $startCol,
+                    $currRow,
+                    [(string) $t->code, (string) $t->name, (string) $t->subject],
+                    [true, false, false]
+                );
+            }
+        }
+
+        $currRow++; // Pemisah antar tabel legenda
+
+        // 2. Tabel Guru Piket
+        $currRow = $this->writeMasterScheduleLegendHeader($sheet, $startCol, $currRow, ['No', 'NAMA GURU PIKET', 'HARI']);
+        $piketList = $exportData['piket_list'] ?? collect();
+        if ($piketList->isEmpty() && $blankTemplate) {
+            foreach (['SENIN', 'SELASA', 'RABU', 'KAMIS', "JUM'AT", 'SABTU'] as $idx => $dLabel) {
+                $currRow = $this->writeMasterScheduleLegendRow($sheet, $startCol, $currRow, [(string) ($idx + 1), '', $dLabel], [true, false, true]);
+            }
+        } else {
+            foreach ($piketList->values() as $idx => $t) {
+                $currRow = $this->writeMasterScheduleLegendRow(
+                    $sheet,
+                    $startCol,
+                    $currRow,
+                    [(string) ($idx + 1), (string) $t->name, strtoupper((string) $t->piket_day)],
+                    [true, false, true]
+                );
+            }
+        }
+
+        $currRow++; // Pemisah antar tabel legenda
+
+        // 3. Tabel Wali Kelas
+        $currRow = $this->writeMasterScheduleLegendHeader($sheet, $startCol, $currRow, ['No', 'NAMA GURU', 'WALI KELAS']);
+        $homeroomList = $exportData['homeroom_list'] ?? collect();
+        foreach ($homeroomList->values() as $idx => $row) {
+            $tName = (string) ($row['teacher_name'] ?? '');
+            if ($blankTemplate || $tName === 'Belum Ditentukan') {
+                $tName = '';
+            }
+            $currRow = $this->writeMasterScheduleLegendRow(
+                $sheet,
+                $startCol,
+                $currRow,
+                [(string) ($idx + 1), $tName, (string) ($row['class_code'] ?? '')],
+                [true, false, true]
+            );
+        }
+
+        // 4. Blok Tanda Tangan Kepala Sekolah
+        $currRow++;
+        $sigCityDate = trim((string) ($school->district ?: 'Lemahabang'));
+        $sigRows = [
+            $sigCityDate . ', ' . now()->translatedFormat('F Y'),
+            'Kepala ' . ($school->school_name ?: 'SMP Negeri 2 Lemahabang'),
+            '',
+            '',
+            trim((string) ($school->principal_name ?: '........................................')),
+            $school->principal_nip ? ('NIP. ' . $school->principal_nip) : '',
+        ];
+        foreach ($sigRows as $idx => $line) {
+            $sheet->mergeCells($this->range($startCol + 1, $currRow, $endCol, $currRow));
+            $sheet->setCellValue($this->cell($startCol + 1, $currRow), $line);
+            $sheet->getStyle($this->cell($startCol + 1, $currRow))->applyFromArray([
+                'font' => ['name' => 'Arial', 'size' => 8, 'bold' => $idx === 4, 'underline' => $idx === 4],
+                'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT],
+            ]);
+            $currRow++;
+        }
+
+        return $currRow - 1;
+    }
+
+    protected function writeMasterScheduleLegendHeader(Worksheet $sheet, int $startCol, int $row, array $labels): int
+    {
+        foreach ($labels as $offset => $text) {
+            $sheet->setCellValue($this->cell($startCol + $offset, $row), $text);
+        }
+        $sheet->getStyle($this->range($startCol, $row, $startCol + 2, $row))->applyFromArray([
+            'font' => ['name' => 'Arial', 'size' => 8, 'bold' => true],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D9D9D9']],
+            'alignment' => [
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+            ],
+            'borders' => [
+                'allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['rgb' => '000000']],
+            ],
+        ]);
+
+        return $row + 1;
+    }
+
+    protected function writeMasterScheduleLegendRow(Worksheet $sheet, int $startCol, int $row, array $values, array $centerFlags): int
+    {
+        foreach ($values as $offset => $val) {
+            $coord = $this->cell($startCol + $offset, $row);
+            $sheet->setCellValueExplicit($coord, (string) $val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->getStyle($coord)->applyFromArray([
+                'font' => ['name' => 'Arial', 'size' => 7.5],
+                'alignment' => [
+                    'horizontal' => ($centerFlags[$offset] ?? false)
+                        ? \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER
+                        : \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
+                    'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                ],
+                'borders' => [
+                    'allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['rgb' => '000000']],
+                ],
+            ]);
+        }
+
+        return $row + 1;
+    }
 }
