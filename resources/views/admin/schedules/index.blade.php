@@ -601,22 +601,22 @@
                 if (!cell) return '';
 
                 if (this.activeSourceId === id) {
-                    return 'bg-indigo-600 text-white font-black ring-4 ring-amber-400 shadow-lg scale-[1.04] z-10 cursor-pointer';
+                    return 'bg-indigo-600 text-white font-black ring-2 ring-amber-400 shadow-md scale-[1.04] z-10 cursor-pointer';
                 }
 
                 if (this.dragState.active && this.dragState.overTargetId === id) {
                     const clean = Boolean(this.targetCleanMap[id]);
                     return clean
-                        ? 'bg-emerald-500 text-white font-black ring-4 ring-emerald-300 shadow-lg scale-105 z-10 cursor-copy'
-                        : 'bg-amber-500 text-white font-black ring-4 ring-amber-300 shadow-lg scale-105 z-10 cursor-copy';
+                        ? 'bg-emerald-500 text-white font-black ring-2 ring-emerald-300 shadow-md scale-105 z-10 cursor-copy'
+                        : 'bg-amber-500 text-white font-black ring-2 ring-amber-300 shadow-md scale-105 z-10 cursor-copy';
                 }
 
                 if (this.activeSourceId) {
                     if (this.isSameClassValidTarget(id)) {
                         const clean = Boolean(this.targetCleanMap[id]);
                         return clean
-                            ? 'bg-emerald-50 text-emerald-900 font-black border-2 border-dashed border-emerald-500 hover:bg-emerald-100 hover:scale-[1.03] cursor-pointer'
-                            : 'bg-amber-50 text-amber-900 font-black border-2 border-dashed border-amber-400 hover:bg-amber-100 hover:scale-[1.03] cursor-pointer';
+                            ? 'bg-emerald-100 text-emerald-950 font-black border border-dashed border-emerald-500 hover:bg-emerald-200 cursor-pointer'
+                            : 'bg-amber-100 text-amber-950 font-black border border-dashed border-amber-500 hover:bg-amber-200 cursor-pointer';
                     }
                     if (cell.is_conflict) {
                         return 'bg-rose-200/70 text-rose-900 opacity-40 cursor-not-allowed';
@@ -624,37 +624,16 @@
                     return 'opacity-35 text-slate-500 cursor-not-allowed';
                 }
 
-                const pulse = (this.pulseCellId === id) ? ' ring-4 ring-indigo-500 shadow-md ' : '';
+                const pulse = (this.pulseCellId === id) ? ' ring-2 ring-indigo-500 shadow-md ' : '';
                 const tHighlight = (this.highlightedTeacherCode && !cell.is_activity && this.normCode(cell.teacher_code) === this.highlightedTeacherCode)
                     ? ' ring-2 ring-sky-500 bg-sky-100 text-sky-950 font-black '
                     : '';
 
                 if (cell.is_conflict) {
-                    return 'bg-rose-600 text-white font-black ring-2 ring-rose-400 animate-pulse cursor-grab active:cursor-grabbing hover:bg-rose-700' + pulse;
+                    return 'bg-rose-600 text-white font-black ring-1 ring-rose-400 animate-pulse cursor-grab active:cursor-grabbing hover:bg-rose-700' + pulse;
                 }
 
                 return (tHighlight || defaultHoverCls) + ' cursor-grab active:cursor-grabbing' + pulse;
-            },
-
-            cellBadgeText(id) {
-                const cell = this.cellsMap[id];
-                if (!cell) return '';
-                if (this.activeSourceId === id) return 'DIPILIH';
-                if (this.dragState.active && this.dragState.overTargetId === id) return 'LEPAS ✓';
-                if (this.activeSourceId && this.isSameClassValidTarget(id)) {
-                    return this.targetCleanMap[id] ? '✓ AMAN' : '! BENTROK';
-                }
-                if (cell.is_conflict) return 'BENTROK';
-                return '';
-            },
-
-            cellBadgeClass(id) {
-                if (this.activeSourceId === id) return 'bg-amber-300 text-slate-950';
-                if (this.dragState.active && this.dragState.overTargetId === id) return 'bg-white/95 text-slate-900';
-                if (this.activeSourceId && this.isSameClassValidTarget(id)) {
-                    return this.targetCleanMap[id] ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white';
-                }
-                return 'bg-rose-900/40 text-white';
             },
 
             cellTooltip(id) {
@@ -895,7 +874,7 @@
                         </span>
                     </h3>
                     <p class="text-xs text-rose-700 mt-0.5 leading-relaxed">
-                        Langsung <strong>klik sel BENTROK berwarna merah</strong> lalu tap sel tujuan di kelas yang sama (<strong>Select &amp; Tap</strong>), atau <strong>tekan &amp; tahan lalu geser</strong> ke sel tujuan (<strong>Drag &amp; Drop</strong>) pada seluruh hari Senin–Sabtu.
+                        Langsung <strong>klik sel berwarna merah (bentrok)</strong> lalu tap sel tujuan di kelas yang sama (<strong>Select &amp; Tap</strong>), atau <strong>tekan &amp; tahan lalu geser</strong> ke sel tujuan (<strong>Drag &amp; Drop</strong>) pada seluruh hari Senin–Sabtu.
                     </p>
                 </div>
             </div>
@@ -1038,11 +1017,19 @@
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-            <span>
-                <strong class="text-slate-700">Cara Cepat Atasi Bentrok:</strong>
-                (1) <strong>Select &amp; Tap:</strong> klik sel merah <span class="px-1 py-0.2 rounded bg-rose-600 text-white font-bold text-[10px]">BENTROK</span> lalu klik tujuan di kolom kelas sama, atau
-                (2) <strong>Drag &amp; Drop:</strong> tekan &amp; tahan lalu geser &amp; lepaskan di sel tujuan.
-            </span>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>
+                    <strong class="text-slate-700">Cara Cepat:</strong>
+                    (1) <strong>Select &amp; Tap:</strong> klik kotak merah &rarr; klik tujuan sekelas, atau
+                    (2) <strong>Drag &amp; Drop:</strong> tekan &amp; tahan lalu geser &amp; lepaskan.
+                </span>
+                <span class="inline-flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-rose-600 inline-block"></span>Bentrok</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-indigo-600 ring-1 ring-amber-400 inline-block"></span>Terpilih</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-emerald-100 border border-emerald-500 inline-block"></span>Tujuan Aman</span>
+                    <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-amber-100 border border-amber-500 inline-block"></span>Tujuan Bentrok</span>
+                </span>
+            </div>
             <span class="font-semibold text-slate-600" x-show="isSwapping" x-cloak>Menyimpan penukaran...</span>
         </div>
     </div>
@@ -1108,15 +1095,15 @@
                     <table class="w-full text-xs text-center border-collapse">
                         <thead class="sticky top-0 z-20 shadow-2xs">
                             <tr class="bg-slate-100 border-b-2 border-slate-300 text-slate-700 font-extrabold">
-                                <th class="p-2 border-r border-slate-200 bg-slate-100 w-[72px] min-w-[72px] sticky left-0 z-30">Hari</th>
-                                <th class="p-2 border-r border-slate-200 bg-slate-100 w-[44px] min-w-[44px] sticky left-[72px] z-30">Jam</th>
-                                <th class="p-2 border-r border-slate-200 bg-slate-100 w-[96px] min-w-[96px] whitespace-nowrap sticky left-[116px] z-30">Waktu</th>
+                                <th class="p-1 border-r border-slate-200 bg-slate-100 text-[10px] w-[54px] min-w-[54px] sticky left-0 z-30">Hari</th>
+                                <th class="p-1 border-r border-slate-200 bg-slate-100 text-[10px] w-[32px] min-w-[32px] sticky left-[54px] z-30">Jam</th>
+                                <th class="px-1 py-1 border-r border-slate-200 bg-slate-100 text-[10px] w-[78px] min-w-[78px] whitespace-nowrap sticky left-[86px] z-30">Waktu</th>
                                 @foreach($secClasses as $c)
                                     @php
                                         $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
                                         $gTh = $gradeHeaderThemes[$gKey]['th'] ?? 'bg-slate-50 text-slate-900';
                                     @endphp
-                                    <th class="p-2 border-r border-slate-200 {{ $gTh }} min-w-[56px]"
+                                    <th class="px-0.5 py-1.5 border-r border-slate-200 {{ $gTh }} text-[11px] min-w-[34px]"
                                         :class="activeSourceCell && activeSourceCell.class_name === '{{ $c }}' ? 'ring-2 ring-inset ring-indigo-500 font-black' : ''">
                                         {{ $c }}
                                     </th>
@@ -1140,17 +1127,17 @@
                                                 <tr class="bg-amber-50/80 font-bold text-amber-900">
                                                     @if($slotIdx === 0)
                                                         <td rowspan="{{ $daySlotCount }}"
-                                                            class="p-2 border-r border-slate-200 bg-slate-50 font-black text-[11px] text-slate-800 align-middle sticky left-0 z-10 w-[72px] min-w-[72px]">
+                                                            class="p-1 border-r border-slate-200 bg-slate-50 font-black text-[10px] text-slate-800 align-middle sticky left-0 z-10 w-[54px] min-w-[54px]">
                                                             {{ $dayLabelUpper }}
                                                         </td>
                                                     @endif
-                                                    <td class="p-1.5 border-r border-slate-200 bg-amber-50 text-slate-500 font-semibold sticky left-[72px] z-10 w-[44px] min-w-[44px]">
+                                                    <td class="p-1 border-r border-slate-200 bg-amber-50 text-slate-500 font-semibold text-[10px] sticky left-[54px] z-10 w-[32px] min-w-[32px]">
                                                         {{ $slot['period_order'] ?: '-' }}
                                                     </td>
-                                                    <td class="p-1.5 border-r border-slate-200 bg-amber-50 whitespace-nowrap text-[11px] sticky left-[116px] z-10 w-[96px] min-w-[96px]">
+                                                    <td class="px-1 py-0.5 border-r border-slate-200 bg-amber-50 whitespace-nowrap text-[10px] sticky left-[86px] z-10 w-[78px] min-w-[78px]">
                                                         {{ $slot['time_range'] }}
                                                     </td>
-                                                    <td colspan="{{ $secColCount }}" class="p-2 text-center uppercase tracking-widest text-amber-800">
+                                                    <td colspan="{{ $secColCount }}" class="p-1 text-center text-[11px] uppercase tracking-wider text-amber-800">
                                                         {{ $slot['activity_name'] }}
                                                     </td>
                                                 </tr>
@@ -1158,14 +1145,14 @@
                                                 <tr class="hover:bg-slate-50/50 transition">
                                                     @if($slotIdx === 0)
                                                         <td rowspan="{{ $daySlotCount }}"
-                                                            class="p-2 border-r border-slate-200 bg-slate-50 font-black text-[11px] text-slate-800 align-middle sticky left-0 z-10 w-[72px] min-w-[72px]">
+                                                            class="p-1 border-r border-slate-200 bg-slate-50 font-black text-[10px] text-slate-800 align-middle sticky left-0 z-10 w-[54px] min-w-[54px]">
                                                             {{ $dayLabelUpper }}
                                                         </td>
                                                     @endif
-                                                    <td class="p-1.5 border-r border-slate-200 font-bold text-slate-600 bg-slate-50 sticky left-[72px] z-10 w-[44px] min-w-[44px]">
+                                                    <td class="p-1 border-r border-slate-200 font-bold text-slate-600 bg-slate-50 text-[10px] sticky left-[54px] z-10 w-[32px] min-w-[32px]">
                                                         {{ $slot['period_order'] }}
                                                     </td>
-                                                    <td class="p-1.5 border-r border-slate-200 font-semibold text-slate-600 bg-white whitespace-nowrap text-[11px] sticky left-[116px] z-10 w-[96px] min-w-[96px]">
+                                                    <td class="px-1 py-0.5 border-r border-slate-200 font-semibold text-slate-600 bg-white whitespace-nowrap text-[10px] sticky left-[86px] z-10 w-[78px] min-w-[78px]">
                                                         {{ $slot['time_range'] }}
                                                     </td>
 
@@ -1176,10 +1163,10 @@
                                                             $gBtn = $gradeHeaderThemes[$gKey]['btn'] ?? 'hover:bg-emerald-50 hover:text-emerald-900';
                                                             $cid = $item?->id ? (int) $item->id : null;
                                                         @endphp
-                                                        <td class="p-1 border-r border-slate-200 transition-colors"
+                                                        <td class="p-0.5 border-r border-slate-200 transition-colors"
                                                             @if($cid)
                                                                 data-schedule-cell-id="{{ $cid }}"
-                                                                :class="cellsMap[{{ $cid }}]?.is_conflict && activeSourceId !== {{ $cid }} ? 'bg-rose-100/90 border-rose-400 font-bold text-rose-900' : ''"
+                                                                :class="cellsMap[{{ $cid }}]?.is_conflict && activeSourceId !== {{ $cid }} ? 'bg-rose-50' : ''"
                                                             @endif>
                                                             @if($cid)
                                                                 <button type="button"
@@ -1188,18 +1175,17 @@
                                                                         @click="onCellClick({{ $cid }})"
                                                                         @pointerdown="onCellPointerDown($event, {{ $cid }})"
                                                                         :title="cellTooltip({{ $cid }})"
+                                                                        :aria-label="cellTooltip({{ $cid }})"
+                                                                        :data-conflict="cellsMap[{{ $cid }}]?.is_conflict ? '1' : '0'"
+                                                                        data-conflict="{{ $item->is_conflict ? '1' : '0' }}"
                                                                         style="touch-action: pan-x pan-y;"
-                                                                        class="w-full py-1.5 px-1 rounded-lg text-center transition select-none flex flex-col items-center justify-center relative"
+                                                                        class="w-full h-6 min-h-[24px] px-0.5 rounded text-center transition select-none flex items-center justify-center relative {{ $item->is_conflict ? 'bg-rose-600 text-white' : '' }}"
                                                                         :class="cellButtonClasses({{ $cid }}, '{{ $gBtn }}')">
-                                                                    <span class="text-xs font-black leading-tight"
+                                                                    <span class="text-[11px] font-black leading-none"
                                                                           x-text="cellsMap[{{ $cid }}]?.teacher_code || '-'">{{ $item->teacher_code ?: '-' }}</span>
-                                                                    <span x-show="cellBadgeText({{ $cid }}) !== ''"
-                                                                          x-text="cellBadgeText({{ $cid }})"
-                                                                          class="text-[8px] font-extrabold uppercase tracking-tighter leading-none mt-0.5 px-1 py-0.5 rounded"
-                                                                          :class="cellBadgeClass({{ $cid }})">{{ $item->is_conflict ? 'BENTROK' : '' }}</span>
                                                                 </button>
                                                             @else
-                                                                <span class="text-slate-300">-</span>
+                                                                <span class="text-slate-300 text-[11px]">-</span>
                                                             @endif
                                                         </td>
                                                     @endforeach

@@ -691,8 +691,12 @@ class SchoolScheduleMasterTest extends TestCase
         $response = $this->actingAs($admin)->get(route('admin.schedules.master.index', ['day' => 2]));
 
         $response->assertOk();
-        // Memastikan label dan styling bentrok langsung tampil di HTML pada kunjungan pertama
-        $response->assertSee('BENTROK');
+        // Memastikan styling sel merah bentrok (tanpa tulisan BENTROK di dalam kotak sel agar ringkas) dan banner konflik tampil pada kunjungan pertama
+        $response->assertSee('data-conflict="1"', false);
+        $response->assertSee('bg-rose-600 text-white', false);
+        $response->assertSee('min-w-[34px]', false);
+        $response->assertDontSee('>BENTROK<', false);
+        $response->assertDontSee('cellBadgeText', false);
         $response->assertSee('Terdeteksi 1 Titik Jadwal Bertabrakan');
 
         // Verifikasi dari service bahwa getMasterMatrix langsung menghasilkan is_conflict = true

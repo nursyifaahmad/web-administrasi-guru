@@ -234,14 +234,14 @@
                     <table class="w-full text-xs text-center border-collapse">
                         <thead>
                             <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-extrabold">
-                                <th class="p-2 border-r border-slate-200 w-12">Jam</th>
-                                <th class="p-2 border-r border-slate-200 w-28 whitespace-nowrap">Waktu</th>
+                                <th class="p-1.5 border-r border-slate-200 w-9 text-[11px]">Jam</th>
+                                <th class="px-1.5 py-1.5 border-r border-slate-200 w-24 whitespace-nowrap text-[11px]">Waktu</th>
                                 @foreach($secClasses as $c)
                                     @php
                                         $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
                                         $gTh = $gradeHeaderThemes[$gKey]['th'] ?? 'bg-slate-50 text-slate-900';
                                     @endphp
-                                    <th class="p-2 border-r border-slate-200 {{ $gTh }} min-w-[48px]">{{ $c }}</th>
+                                    <th class="px-0.5 py-1.5 border-r border-slate-200 {{ $gTh }} text-[11px] min-w-[34px]">{{ $c }}</th>
                                 @endforeach
                             </tr>
                         </thead>
@@ -249,14 +249,14 @@
                             @foreach($sec['slots'] as $slot)
                                 @if($slot['is_activity'])
                                     <tr class="bg-amber-50/70 font-bold text-amber-900">
-                                        <td class="p-2 border-r border-slate-200 text-slate-500 font-semibold">{{ $slot['period_order'] ?: '-' }}</td>
-                                        <td class="p-2 border-r border-slate-200 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-                                        <td colspan="{{ $secColCount }}" class="p-2 text-center uppercase tracking-wider text-amber-900 font-black">{{ $slot['activity_name'] }}</td>
+                                        <td class="p-1 border-r border-slate-200 text-slate-500 font-semibold text-[11px]">{{ $slot['period_order'] ?: '-' }}</td>
+                                        <td class="px-1.5 py-1 border-r border-slate-200 whitespace-nowrap text-[11px]">{{ $slot['time_range'] }}</td>
+                                        <td colspan="{{ $secColCount }}" class="p-1.5 text-center text-[11px] uppercase tracking-wider text-amber-900 font-black">{{ $slot['activity_name'] }}</td>
                                     </tr>
                                 @else
                                     <tr class="hover:bg-slate-50">
-                                        <td class="p-2 border-r border-slate-200 font-bold text-slate-600 bg-slate-50/50">{{ $slot['period_order'] }}</td>
-                                        <td class="p-2 border-r border-slate-200 text-slate-600 whitespace-nowrap">{{ $slot['time_range'] }}</td>
+                                        <td class="p-1 border-r border-slate-200 font-bold text-slate-600 bg-slate-50/50 text-[11px]">{{ $slot['period_order'] }}</td>
+                                        <td class="px-1.5 py-1 border-r border-slate-200 text-slate-600 whitespace-nowrap text-[11px]">{{ $slot['time_range'] }}</td>
                                         @foreach($secClasses as $c)
                                             @php
                                                 $item = $slot['classes'][$c] ?? null;
@@ -264,7 +264,7 @@
                                                 $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
                                                 $theme = $gradeHeaderThemes[$gKey] ?? $gradeHeaderThemes['7'];
                                             @endphp
-                                            <td class="p-1 border-r border-slate-200 {{ $isMySlot ? $theme['myCell'] : '' }}">
+                                            <td class="p-0.5 border-r border-slate-200 {{ $isMySlot ? $theme['myCell'] : '' }}">
                                                 @if($item && $item->teacher_code && $item->teacher_code !== '-')
                                                     @php
                                                         $tMeta = $teacherLookup[$item->teacher_code] ?? null;
@@ -287,15 +287,12 @@
                                                                 homeroom: '{{ addslashes($tHome) }}',
                                                                 piket: '{{ addslashes($tPiket) }}'
                                                             })"
-                                                            title="{{ $tName }} ({{ $tSubj }})"
-                                                            class="w-full py-1.5 px-0.5 rounded-lg text-center transition cursor-pointer flex flex-col items-center justify-center font-extrabold text-xs active:scale-95 {{ $item->is_conflict ? 'bg-rose-600 text-white animate-pulse' : ($isMySlot ? $theme['myBtn'] : 'hover:bg-slate-200 hover:text-slate-900 text-slate-800') }}">
+                                                            title="{{ $item->is_conflict ? ($item->conflict_notes ?: 'BENTROK: ' . $tName) : ($tName . ' (' . $tSubj . ')') }}"
+                                                            class="w-full h-6 min-h-[24px] px-0.5 rounded text-center transition cursor-pointer flex items-center justify-center font-black text-[11px] leading-none active:scale-95 {{ $item->is_conflict ? 'bg-rose-600 text-white ring-1 ring-rose-400 animate-pulse' : ($isMySlot ? $theme['myBtn'] : 'hover:bg-slate-200 hover:text-slate-900 text-slate-800') }}">
                                                         <span>{{ $item->teacher_code }}</span>
-                                                        @if($item->is_conflict)
-                                                            <span class="text-[8px] uppercase tracking-tighter">BENTROK</span>
-                                                        @endif
                                                     </button>
                                                 @else
-                                                    <span class="text-slate-300 font-normal">-</span>
+                                                    <span class="text-slate-300 font-normal text-[11px]">-</span>
                                                 @endif
                                             </td>
                                         @endforeach
