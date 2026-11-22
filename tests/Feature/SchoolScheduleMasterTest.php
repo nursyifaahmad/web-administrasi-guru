@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\SchoolScheduleItem;
+use App\Models\SchoolSetting;
 use App\Models\Subject;
 use App\Models\TeacherSubject;
 use App\Models\TeachingClass;
@@ -1211,6 +1212,132 @@ class SchoolScheduleMasterTest extends TestCase
             ])->assertForbidden();
         } finally {
             @unlink($badTmp);
+        }
+    }
+
+    public function test_export_poster_pdf_and_excel_render_complete_headmaster_and_kop_academic_year_data(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+        $year->update([
+            'year_name' => '2028/2029',
+            'semester' => 'Genap',
+        ]);
+
+        // Buat gambar PNG kecil sebagai TTD digital Kepala Sekolah
+        $sigImg = imagecreatetruecolor(80, 30);
+        $white = imagecolorallocate($sigImg, 255, 255, 255);
+        $black = imagecolorallocate($sigImg, 15, 23, 42);
+        imagefill($sigImg, 0, 0, $white);
+        imageline($sigImg, 5, 20, 75, 8, $black);
+        ob_start();
+        imagepng($sigImg);
+        $pngBytes = ob_get_clean();
+        imagedestroy($sigImg);
+        $sigDataUri = 'data:image/png;base64,' . base64_encode((string) $pngBytes);
+
+        $school = SchoolSetting::current();
+        $school->update([
+            'school_name' => 'SMP NEGERI 99 UJICOBA',
+            'default_city' => 'Karawang Timur',
+            'headmaster_name' => 'Dr. Teti Kusmiyati, M.M.',
+            'headmaster_nip' => '19720514 199802 2 003',
+            'headmaster_signature' => $sigDataUri,
+        ]);
+
+        $mtk = Subject::query()->create(['code' => 'MTK', 'name' => 'MATEMATIKA', 'default_kktp' => 75, 'is_active' => true]);
+        TeacherSubject::query()->create(['user_id' => $guru->id, 'subject_id' => $mtk->id, 'teaching_code' => '1']);
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '08.00 - 08.40',
+            'class_name' => '7A',
+            'teacher_code' => '1',
+            'teacher_name' => $guru->name,
+            'subject_name' => 'MATEMATIKA',
+            'user_id' => $guru->id,
+        ]);
+
+        // 1. HTML Poster Print (default TTD digital ON + tanggal cetak kustom)
+        $htmlResp = $this->actingAs($admin)->get(route('admin.schedules.master.export', [
+            'academic_year_id' => $year->id,
+            'print_date' => '2026-11-23',
+        ]));
+        $htmlResp->assertOk();
+        $htmlResp->assertSee('TAHUN PELAJARAN 2028/2029');
+        $htmlResp->assertSee('SEMESTER GENAP');
+        $htmlResp->assertSee('SMP NEGERI 99 UJICOBA');
+        $htmlResp->assertSee('Karawang Timur, 23 November 2026');
+        $htmlResp->assertSee('Kepala SMP NEGERI 99 UJICOBA');
+        $htmlResp->assertSee('Dr. Teti Kusmiyati, M.M.');
+        $htmlResp->assertSee('NIP. 19720514 199802 2 003');
+        $htmlResp->assertSee('alt="TTD Kepala Sekolah"', false);
+        $htmlResp->assertDontSee('........................................');
+        $htmlResp->assertSee('print_date=2026-11-23', false);
+
+        // 2. HTML Poster Print dengan toggle TTD Digital OFF (ruang kosong TTD basah)
+        $noSigResp = $this->actingAs($admin)->get(route('admin.schedules.master.export', [
+            'academic_year_id' => $year->id,
+            'print_date' => '2026-11-23',
+            'show_digital_signature' => '0',
+        ]));
+        $noSigResp->assertOk();
+        $noSigResp->assertSee('Dr. Teti Kusmiyati, M.M.');
+        $noSigResp->assertSee('NIP. 19720514 199802 2 003');
+        $noSigResp->assertDontSee('alt="TTD Kepala Sekolah"', false);
+
+        // 3. Download PDF menyertakan tahun ajaran di nama file
+        $pdfResp = $this->actingAs($admin)->get(route('admin.schedules.master.export', [
+            'academic_year_id' => $year->id,
+            'print_date' => '2026-11-23',
+            'download' => 1,
+        ]));
+        $pdfResp->assertOk();
+        $this->assertStringStartsWith('%PDF-', $pdfResp->getContent());
+        $this->assertStringContainsString('20282029_genap', (string) $pdfResp->headers->get('content-disposition'));
+
+        // 4. Export Excel dengan TTD ON vs TTD OFF
+        $xlsOnResp = $this->actingAs($admin)->get(route('admin.schedules.master.export-excel', [
+            'academic_year_id' => $year->id,
+            'print_date' => '2026-11-23',
+            'show_digital_signature' => '1',
+        ]));
+        $xlsOnResp->assertOk();
+        $this->assertStringContainsString('20282029_genap', (string) $xlsOnResp->headers->get('content-disposition'));
+
+        $xlsOffResp = $this->actingAs($admin)->get(route('admin.schedules.master.export-excel', [
+            'academic_year_id' => $year->id,
+            'print_date' => '2026-11-23',
+            'show_digital_signature' => '0',
+        ]));
+        $xlsOffResp->assertOk();
+
+        $tmpOn = tempnam(sys_get_temp_dir(), 'hl_on_') . '.xlsx';
+        $tmpOff = tempnam(sys_get_temp_dir(), 'hl_off_') . '.xlsx';
+        file_put_contents($tmpOn, $xlsOnResp->streamedContent());
+        file_put_contents($tmpOff, $xlsOffResp->streamedContent());
+
+        try {
+            $sheetOn = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpOn)->getActiveSheet();
+            $sheetOff = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpOff)->getActiveSheet();
+
+            $flatOn = implode('|', array_map(fn ($r) => implode('|', array_map('strval', $r)), $sheetOn->toArray()));
+            $this->assertStringContainsString('TAHUN PELAJARAN 2028/2029', $flatOn);
+            $this->assertStringContainsString('Karawang Timur, 23 November 2026', $flatOn);
+            $this->assertStringContainsString('Kepala SMP NEGERI 99 UJICOBA', $flatOn);
+            $this->assertStringContainsString('Dr. Teti Kusmiyati, M.M.', $flatOn);
+            $this->assertStringContainsString('NIP. 19720514 199802 2 003', $flatOn);
+            $this->assertStringNotContainsString('........................................', $flatOn);
+
+            $this->assertGreaterThan(
+                count($sheetOff->getDrawingCollection()),
+                count($sheetOn->getDrawingCollection()),
+                'Export Excel dengan show_digital_signature=1 harus memuat drawing TTD Kepala Sekolah.'
+            );
+        } finally {
+            @unlink($tmpOn);
+            @unlink($tmpOff);
         }
     }
 }

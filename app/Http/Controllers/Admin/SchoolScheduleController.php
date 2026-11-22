@@ -11,7 +11,10 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Services\ExcelExportImportService;
 use App\Services\SchoolScheduleService;
+use App\Support\IndonesianDate;
+use App\Support\SignatureImageHelper;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -489,13 +492,19 @@ class SchoolScheduleController extends Controller
         return $academicYear;
     }
 
-    public function export(Request $request): Response|View
+    /**
+     * Normalisasi opsi cetak poster, tanggal titimangsa, serta visibilitas tanda tangan Kepala Sekolah.
+     *
+     * @return array{
+     *     paper_size: string,
+     *     orientation: string,
+     *     print_date: string,
+     *     show_digital_signature: bool,
+     *     titimangsa: string
+     * }
+     */
+    protected function resolvePosterExportOptions(Request $request, SchoolSetting $school, bool $isTwoShift = false): array
     {
-        $academicYear = $this->resolveActiveAcademicYear($request);
-        $exportData = $this->scheduleService->getMasterExportData($academicYear);
-        $school = SchoolSetting::current();
-
-        $isTwoShift = (bool) ($exportData['is_two_shift'] ?? false);
         $paperSize = strtoupper((string) $request->query('paper_size', 'F4'));
         if (! in_array($paperSize, ['F4', 'A4', 'A3'], true)) {
             $paperSize = 'F4';
@@ -507,17 +516,58 @@ class SchoolScheduleController extends Controller
             $orientation = $defaultOrientation;
         }
 
+        $rawPrintDate = trim((string) $request->query('print_date', ''));
+        $printDate = now()->toDateString();
+        if ($rawPrintDate !== '') {
+            try {
+                $printDate = Carbon::parse($rawPrintDate)->toDateString();
+            } catch (\Throwable) {
+                $printDate = now()->toDateString();
+            }
+        }
+
+        $showDigitalSignature = $request->has('show_digital_signature')
+            ? $request->boolean('show_digital_signature')
+            : true;
+
+        $city = trim((string) ($school->default_city ?: 'Lemahabang'));
+
+        return [
+            'paper_size' => $paperSize,
+            'orientation' => $orientation,
+            'print_date' => $printDate,
+            'show_digital_signature' => $showDigitalSignature,
+            'titimangsa' => IndonesianDate::titimangsa($city, $printDate),
+        ];
+    }
+
+    public function export(Request $request): Response|View
+    {
+        $academicYear = $this->resolveActiveAcademicYear($request);
+        $exportData = $this->scheduleService->getMasterExportData($academicYear);
+        $school = SchoolSetting::current();
+
+        $isTwoShift = (bool) ($exportData['is_two_shift'] ?? false);
+        $options = $this->resolvePosterExportOptions($request, $school, $isTwoShift);
+        $headmasterSignatureBox = ($options['show_digital_signature'] && ! empty($school->headmaster_signature))
+            ? SignatureImageHelper::wetSignatureRenderBox($school->headmaster_signature, 28, 56, 150)
+            : null;
+
         $viewData = [
             'academicYear' => $academicYear,
             'exportData' => $exportData,
             'school' => $school,
-            'paperSize' => $paperSize,
-            'orientation' => $orientation,
+            'paperSize' => $options['paper_size'],
+            'orientation' => $options['orientation'],
+            'printDate' => $options['print_date'],
+            'showDigitalSignature' => $options['show_digital_signature'],
+            'titimangsa' => $options['titimangsa'],
+            'headmasterSignatureBox' => $headmasterSignatureBox,
             'isPdf' => false,
         ];
 
         if ($request->boolean('download')) {
-            $pdfPaper = match ($paperSize) {
+            $pdfPaper = match ($options['paper_size']) {
                 'F4' => [0.0, 0.0, 612.0, 936.0],
                 'A3' => 'a3',
                 default => 'a4',
@@ -525,12 +575,12 @@ class SchoolScheduleController extends Controller
 
             $viewData['isPdf'] = true;
             $pdf = Pdf::loadView('admin.schedules.export', $viewData)
-                ->setPaper($pdfPaper, $orientation)
+                ->setPaper($pdfPaper, $options['orientation'])
                 ->setOption('isHtml5ParserEnabled', true)
                 ->setOption('isRemoteEnabled', false)
                 ->setOption('dpi', 96);
 
-            $filename = 'Master_Jadwal_Pelajaran_' . Str::slug($academicYear->name . '_' . ($academicYear->semester ?: 'semester'), '_') . '.pdf';
+            $filename = 'Master_Jadwal_Pelajaran_' . Str::slug(($academicYear->year_name ?: '') . '_' . ($academicYear->semester ?: 'semester'), '_') . '.pdf';
 
             return $pdf->download($filename);
         }
@@ -541,8 +591,13 @@ class SchoolScheduleController extends Controller
     public function exportExcel(Request $request, ExcelExportImportService $excelService): StreamedResponse
     {
         $academicYear = $this->resolveActiveAcademicYear($request);
+        $school = SchoolSetting::current();
+        $options = $this->resolvePosterExportOptions($request, $school);
 
-        return $excelService->exportMasterScheduleExcel($academicYear, $this->scheduleService, false);
+        return $excelService->exportMasterScheduleExcel($academicYear, $this->scheduleService, false, [
+            'print_date' => $options['print_date'],
+            'show_digital_signature' => $options['show_digital_signature'],
+        ]);
     }
 
     public function downloadTemplate(Request $request, ExcelExportImportService $excelService): StreamedResponse

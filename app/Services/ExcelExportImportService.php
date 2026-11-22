@@ -1417,7 +1417,8 @@ class ExcelExportImportService
     public function exportMasterScheduleExcel(
         AcademicYear $academicYear,
         ?\App\Services\SchoolScheduleService $scheduleService = null,
-        bool $blankTemplate = false
+        bool $blankTemplate = false,
+        array $options = []
     ): StreamedResponse {
         $scheduleService ??= app(\App\Services\SchoolScheduleService::class);
         $exportData = $scheduleService->getMasterExportData($academicYear, null, $blankTemplate);
@@ -1466,7 +1467,7 @@ class ExcelExportImportService
         $kopLines = [
             1 => ['text' => 'JADWAL PELAJARAN', 'size' => 12, 'bold' => true, 'italic' => false, 'height' => 17],
             2 => ['text' => 'SEMESTER ' . strtoupper((string) ($academicYear->semester ?: 'GANJIL')), 'size' => 10.5, 'bold' => true, 'italic' => false, 'height' => 15],
-            3 => ['text' => 'TAHUN PELAJARAN ' . ((string) ($academicYear->name ?: '-')), 'size' => 10.5, 'bold' => true, 'italic' => false, 'height' => 15],
+            3 => ['text' => 'TAHUN PELAJARAN ' . ((string) ($academicYear->year_name ?: '-')), 'size' => 10.5, 'bold' => true, 'italic' => false, 'height' => 15],
             4 => ['text' => strtoupper((string) ($school->school_name ?: 'SMP NEGERI 2 LEMAHABANG')) . ' - Jadwal Pelajaran Sekolah', 'size' => 9, 'bold' => true, 'italic' => true, 'height' => 14],
         ];
         foreach ($kopLines as $rNum => $cfg) {
@@ -1527,7 +1528,7 @@ class ExcelExportImportService
         }
 
         // Tulis Panel Legenda Kanan (Kode Guru, Guru Piket, Wali Kelas, & TTD Kepsek)
-        $lastLegendRow = $this->writeMasterScheduleLegendPanel($sheet, $exportData, $legendStartCol, $matrixStartRow, $blankTemplate, $school);
+        $lastLegendRow = $this->writeMasterScheduleLegendPanel($sheet, $exportData, $legendStartCol, $matrixStartRow, $blankTemplate, $school, $options);
 
         $maxContentRow = max($lastShift1Row, $lastShift2Row, $lastLegendRow);
         $sheet->getPageSetup()
@@ -1540,7 +1541,7 @@ class ExcelExportImportService
         $sheet->getPageMargins()->setTop(0.25)->setBottom(0.25)->setLeft(0.25)->setRight(0.25);
 
         $prefix = $blankTemplate ? 'Template_Master_Jadwal_' : 'Master_Jadwal_Pelajaran_';
-        $filename = $prefix . \Illuminate\Support\Str::slug($academicYear->name . '_' . ($academicYear->semester ?: 'semester'), '_') . '.xlsx';
+        $filename = $prefix . \Illuminate\Support\Str::slug(($academicYear->year_name ?: '') . '_' . ($academicYear->semester ?: 'semester'), '_') . '.xlsx';
 
         return $this->streamSpreadsheet($spreadsheet, $filename);
     }
@@ -1762,7 +1763,8 @@ class ExcelExportImportService
         int $startCol,
         int $startRow,
         bool $blankTemplate,
-        \App\Models\SchoolSetting $school
+        \App\Models\SchoolSetting $school,
+        array $options = []
     ): int {
         $endCol = $startCol + 2;
         $currRow = $startRow;
@@ -1826,25 +1828,47 @@ class ExcelExportImportService
             );
         }
 
-        // 4. Blok Tanda Tangan Kepala Sekolah
+        // 4. Blok Tanda Tangan & Identitas Kepala Sekolah (Sumber: Kop Sekolah & Tahun Ajaran)
         $currRow++;
-        $sigCityDate = trim((string) ($school->district ?: 'Lemahabang'));
+        $city = trim((string) ($school->default_city ?: 'Lemahabang'));
+        $printDate = $options['print_date'] ?? null;
+        $showDigitalSignature = (bool) ($options['show_digital_signature'] ?? true);
+        $titimangsa = $blankTemplate
+            ? $city . ', ....................'
+            : IndonesianDate::titimangsa($city, $printDate);
+
+        $titleRow = $currRow;
         $sigRows = [
-            $sigCityDate . ', ' . now()->translatedFormat('F Y'),
+            $titimangsa,
             'Kepala ' . ($school->school_name ?: 'SMP Negeri 2 Lemahabang'),
             '',
             '',
-            trim((string) ($school->principal_name ?: '........................................')),
-            $school->principal_nip ? ('NIP. ' . $school->principal_nip) : '',
+            '',
+            trim((string) ($school->headmaster_name ?: '........................................')),
+            'NIP. ' . (trim((string) ($school->headmaster_nip ?? '')) ?: '-'),
         ];
         foreach ($sigRows as $idx => $line) {
             $sheet->mergeCells($this->range($startCol + 1, $currRow, $endCol, $currRow));
             $sheet->setCellValue($this->cell($startCol + 1, $currRow), $line);
             $sheet->getStyle($this->cell($startCol + 1, $currRow))->applyFromArray([
-                'font' => ['name' => 'Arial', 'size' => 8, 'bold' => $idx === 4, 'underline' => $idx === 4],
+                'font' => ['name' => 'Arial', 'size' => 8, 'bold' => $idx === 5, 'underline' => $idx === 5],
                 'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT],
             ]);
             $currRow++;
+        }
+
+        if (! $blankTemplate && $showDigitalSignature && ! empty($school->headmaster_signature)) {
+            $hmNorm = SignatureImageHelper::normalizeInk($school->headmaster_signature);
+            $hmImg = $this->createTempImageFromBase64($hmNorm['data_uri'] ?? null);
+            if ($hmImg) {
+                $drawing = new Drawing();
+                $drawing->setPath($hmImg);
+                $drawing->setHeight(58);
+                $drawing->setCoordinates($this->cell($startCol + 1, $titleRow + 1));
+                $drawing->setOffsetX(8);
+                $drawing->setOffsetY(4);
+                $drawing->setWorksheet($sheet);
+            }
         }
 
         return $currRow - 1;

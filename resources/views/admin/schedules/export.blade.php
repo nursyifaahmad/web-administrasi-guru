@@ -3,12 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cetak Master Jadwal Pelajaran - {{ $academicYear->name }}</title>
+    <title>Cetak Master Jadwal Pelajaran - {{ $academicYear->year_name ?: $academicYear->semester }}</title>
     @php
         $isTwoShift = (bool) ($exportData['is_two_shift'] ?? false);
         $isPdf = (bool) ($isPdf ?? false);
         $paperSize = $paperSize ?? 'F4';
         $orientation = $orientation ?? ($isTwoShift ? 'landscape' : 'portrait');
+        $printDate = $printDate ?? now()->toDateString();
+        $showDigitalSignature = $showDigitalSignature ?? true;
+        $titimangsa = $titimangsa ?? \App\Support\IndonesianDate::titimangsa($school->default_city ?: 'Lemahabang', $printDate);
+        $headmasterSignatureBox = $headmasterSignatureBox ?? (
+            ($showDigitalSignature && ! empty($school->headmaster_signature))
+                ? \App\Support\SignatureImageHelper::wetSignatureRenderBox($school->headmaster_signature, 28, 56, 150)
+                : null
+        );
         $cssPageSize = match ($paperSize) {
             'F4' => $orientation === 'landscape' ? '330mm 215mm' : '215mm 330mm',
             'A3' => 'A3 ' . $orientation,
@@ -312,10 +320,26 @@
         .td-left { text-align: left; }
 
         .signature-box {
-            margin-top: 5px;
+            margin-top: 7px;
             font-size: {{ $legendFontPt }};
-            line-height: 1.3;
+            line-height: 1.28;
             padding-left: 4px;
+            page-break-inside: avoid;
+        }
+
+        .sig-space-filled {
+            line-height: 0;
+        }
+
+        .sig-space-empty {
+            height: {{ $isTwoShift ? '24px' : '30px' }};
+        }
+
+        .sig-img {
+            display: block;
+            margin-left: 4px;
+            position: relative;
+            z-index: 10;
         }
 
         @media print {
@@ -373,16 +397,24 @@
                             <option value="landscape" {{ $orientation === 'landscape' ? 'selected' : '' }}>Landscape</option>
                         </select>
                     </label>
+                    <label style="font-size: 11px; color: #475569; font-weight: 600;">Tgl Cetak:
+                        <input type="date" name="print_date" value="{{ $printDate }}" onchange="this.form.submit()" class="toolbar-select">
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #334155; font-weight: 600; cursor: pointer;">
+                        <input type="hidden" name="show_digital_signature" value="0">
+                        <input type="checkbox" name="show_digital_signature" value="1" {{ $showDigitalSignature ? 'checked' : '' }} onchange="this.form.submit()">
+                        <span>Tampilkan TTD Digital</span>
+                    </label>
                 </form>
 
                 <button type="button" onclick="window.print()" class="btn-action btn-print">
                     Print / Save PDF Browser
                 </button>
-                <a href="{{ route('admin.schedules.master.export', ['academic_year_id' => $academicYear->id, 'paper_size' => $paperSize, 'orientation' => $orientation, 'download' => 1]) }}"
+                <a href="{{ route('admin.schedules.master.export', ['academic_year_id' => $academicYear->id, 'paper_size' => $paperSize, 'orientation' => $orientation, 'print_date' => $printDate, 'show_digital_signature' => $showDigitalSignature ? '1' : '0', 'download' => 1]) }}"
                    class="btn-action btn-pdf">
                     Download PDF (.pdf)
                 </a>
-                <a href="{{ route('admin.schedules.master.export-excel', ['academic_year_id' => $academicYear->id]) }}"
+                <a href="{{ route('admin.schedules.master.export-excel', ['academic_year_id' => $academicYear->id, 'print_date' => $printDate, 'show_digital_signature' => $showDigitalSignature ? '1' : '0']) }}"
                    class="btn-action btn-excel">
                     Export Excel (.xlsx)
                 </a>
@@ -402,7 +434,7 @@
                 <td class="kop-center">
                     <div class="kop-title">JADWAL PELAJARAN</div>
                     <div class="kop-sub">SEMESTER {{ strtoupper((string) ($academicYear->semester ?: 'GANJIL')) }}</div>
-                    <div class="kop-sub">TAHUN PELAJARAN {{ $academicYear->name }}</div>
+                    <div class="kop-sub">TAHUN PELAJARAN {{ $academicYear->year_name ?: '-' }}</div>
                     <div class="kop-school">
                         {{ strtoupper((string) ($school->school_name ?: 'SMP NEGERI 2 LEMAHABANG')) }} — Jadwal Pelajaran Sekolah
                     </div>
@@ -512,17 +544,26 @@
                             </tbody>
                         </table>
 
-                        {{-- Blok Tanda Tangan Kepala Sekolah --}}
+                        {{-- Blok Tanda Tangan & Identitas Kepala Sekolah (Sumber: Kop Sekolah & Tahun Ajaran) --}}
                         <div class="signature-box">
-                            <div>{{ $school->district ?: 'Lemahabang' }}, {{ now()->translatedFormat('F Y') }}</div>
+                            <div>{{ $titimangsa }}</div>
                             <div>Kepala {{ $school->school_name ?: 'SMP Negeri 2 Lemahabang' }}</div>
-                            <div style="height: {{ $isTwoShift ? '18px' : '24px' }};"></div>
-                            <div style="font-weight: 800; text-decoration: underline;">
-                                {{ $school->principal_name ?: '........................................' }}
-                            </div>
-                            @if(!empty($school->principal_nip))
-                                <div>NIP. {{ $school->principal_nip }}</div>
+                            @if(!empty($headmasterSignatureBox))
+                                <div class="sig-space-filled">
+                                    <img src="{{ $headmasterSignatureBox['data_uri'] }}"
+                                         class="sig-img"
+                                         width="{{ $headmasterSignatureBox['width'] }}"
+                                         height="{{ $headmasterSignatureBox['height'] }}"
+                                         style="width: {{ $headmasterSignatureBox['width'] }}px; height: {{ $headmasterSignatureBox['height'] }}px; margin-top: {{ $headmasterSignatureBox['margin_top'] }}px; margin-bottom: {{ $headmasterSignatureBox['margin_bottom'] }}px;"
+                                         alt="TTD Kepala Sekolah">
+                                </div>
+                            @else
+                                <div class="sig-space-empty"></div>
                             @endif
+                            <div style="font-weight: 800; text-decoration: underline;">
+                                {{ $school->headmaster_name ?: '........................................' }}
+                            </div>
+                            <div>NIP. {{ $school->headmaster_nip ?: '-' }}</div>
                         </div>
                     </td>
                 </tr>
