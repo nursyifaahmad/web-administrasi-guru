@@ -213,9 +213,10 @@ class PurgeSubjectClassesTest extends TestCase
 
     public function test_admin_kktp_page_displays_purge_button_for_subjects_with_classes(): void
     {
-        // 1. Mapel tanpa kelas menampilkan tombol "Hapus"
+        // 1. Mapel tanpa kelas menampilkan kolom No + Kode dan tombol "Hapus"
         $response = $this->actingAs($this->admin)->get(route('admin.kktp.index'));
         $response->assertOk();
+        $response->assertSeeInOrder(['No', 'Kode', 'Nama Mata Pelajaran']);
         $response->assertSee('Hapus');
 
         // 2. Buat kelas pada mapel Matematika

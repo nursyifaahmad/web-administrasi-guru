@@ -42,6 +42,7 @@
                 <table class="w-full text-xs text-left">
                     <thead class="bg-slate-50 text-slate-600 uppercase text-[11px] border-b border-slate-200">
                         <tr>
+                            <th class="px-3 py-3 text-center w-12">No</th>
                             <th class="px-4 py-3 w-28">Kode</th>
                             <th class="px-4 py-3">Nama Mata Pelajaran</th>
                             <th class="px-3 py-3 text-center w-28">KKTP Default</th>
@@ -55,6 +56,9 @@
                     <tbody class="divide-y divide-slate-100">
                         @foreach($subjects as $sub)
                             <tr class="hover:bg-slate-50/70">
+                                <td class="px-3 py-2.5 text-center font-semibold text-slate-500">
+                                    {{ $loop->iteration }}
+                                </td>
                                 <td class="px-4 py-2.5">
                                     <input type="text" name="subjects[{{ $sub->id }}][code]" value="{{ $sub->code }}" required
                                            class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-bold uppercase text-center">
