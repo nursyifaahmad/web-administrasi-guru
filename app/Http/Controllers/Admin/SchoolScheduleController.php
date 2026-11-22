@@ -314,9 +314,9 @@ class SchoolScheduleController extends Controller
     public function updateCell(Request $request, SchoolScheduleItem $item): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
-            'teacher_code' => ['nullable', 'string', 'max:50'],
-            'teacher_name' => ['nullable', 'string', 'max:100'],
-            'subject_name' => ['nullable', 'string', 'max:100'],
+            'teacher_code' => ['nullable', 'string', 'max:120'],
+            'teacher_name' => ['nullable', 'string', 'max:120'],
+            'subject_name' => ['nullable', 'string', 'max:120'],
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 

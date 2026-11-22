@@ -1610,10 +1610,13 @@ class SchoolScheduleMasterTest extends TestCase
         $sh->setCellValue('A3', 'SENIN')->setCellValue('B3', '0')->setCellValue('C3', '07.00 - 08.00')
             ->setCellValue('D3', 'UPACARA BENDERA');
         $sh->mergeCells('D3:F3');
-        $sh->setCellValue('B4', '1')->setCellValue('C4', '08.20 - 09.00')
-            ->setCellValue('D4', '2')->setCellValue('E4', '14A')->setCellValue('F4', '16');
-        $sh->setCellValue('B5', '7')->setCellValue('C5', '13.15 - 13.55')
+        $sh->setCellValue('B4', '')->setCellValue('C4', '08.00 - 08.20')
+            ->setCellValue('D4', 'PEMBIASAAN (BACA ALQURAN DI KELAS)');
+        $sh->mergeCells('D4:F4');
+        $sh->setCellValue('B5', '1')->setCellValue('C5', '08.20 - 09.00')
             ->setCellValue('D5', '2')->setCellValue('E5', '14A')->setCellValue('F5', '16');
+        $sh->setCellValue('B6', '7')->setCellValue('C6', '13.15 - 13.55')
+            ->setCellValue('D6', '2')->setCellValue('E6', '14A')->setCellValue('F6', '16');
 
         $sh->setCellValue('H1', 'Kode')->setCellValue('I1', 'Nama Guru')->setCellValue('J1', 'Mata Pelajaran');
         $sh->setCellValue('H2', '2')->setCellValue('I2', 'Guru Dua, S.Pd')->setCellValue('J2', 'Bahasa Indonesia');
@@ -1636,13 +1639,18 @@ class SchoolScheduleMasterTest extends TestCase
             $postResp->assertSee('1 Shift (Semua Rombel)');
             $postResp->assertSee('Jadwal 1 Shift:');
             $postResp->assertSee('07.00 – 13.55 WIB');
+            $postResp->assertSee('PEMBIASAAN (BACA ALQURAN DI KELAS)');
             $postResp->assertSee('8A');
             $postResp->assertSee('14A');
             $postResp->assertDontSee('Shift Siang:');
             $postResp->assertDontSee('Belum ada data jadwal untuk Shift Siang');
 
             $this->assertSame(0, SchoolScheduleItem::query()->where('academic_year_id', $year->id)->where('shift', 'siang')->count());
-            $this->assertSame(9, SchoolScheduleItem::query()->where('academic_year_id', $year->id)->where('shift', 'pagi')->count());
+            $this->assertSame(12, SchoolScheduleItem::query()->where('academic_year_id', $year->id)->where('shift', 'pagi')->count());
+            $this->assertDatabaseHas('school_schedule_items', [
+                'academic_year_id' => $year->id,
+                'teacher_code' => 'PEMBIASAAN (BACA ALQURAN DI KELAS)',
+            ]);
 
             $mainResp = $this->actingAs($admin)->get(route('schedules.main.index', [
                 'tab' => 'school_matrix',

@@ -3729,6 +3729,8 @@ CSV;
                 $tMeta = $normCode !== '' ? ($codeTeacherMap[$normCode] ?? null) : null;
                 $sc = $schoolClassesMap[$row['class_name']] ?? null;
 
+                $activityText = $isAct ? mb_substr((string) $tCode, 0, 120) : null;
+
                 SchoolScheduleItem::query()->create([
                     'academic_year_id' => $academicYear->id,
                     'day_of_week' => $row['day_of_week'],
@@ -3737,8 +3739,8 @@ CSV;
                     'time_range' => $row['time_range'],
                     'class_name' => $row['class_name'],
                     'school_class_id' => $sc?->id,
-                    'teacher_code' => $isAct ? $tCode : ($normCode !== '' ? $normCode : null),
-                    'teacher_name' => $tMeta['name'] ?? ($isAct ? $tCode : null),
+                    'teacher_code' => $isAct ? $activityText : ($normCode !== '' ? $normCode : null),
+                    'teacher_name' => $tMeta['name'] ?? $activityText,
                     'subject_name' => $tMeta['subject'] ?? null,
                     'user_id' => $tMeta['user_id'] ?? null,
                     'subject_id' => $tMeta['subject_id'] ?? null,
