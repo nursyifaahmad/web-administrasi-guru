@@ -49,16 +49,16 @@ class SchoolScheduleController extends Controller
             }
         }
 
-        $activeDay = (int) ($request->query('day') ?: 1); // 1 = Senin s.d. 6 = Sabtu
-        if ($activeDay < 1 || $activeDay > 6) {
-            $activeDay = 1;
-        }
+        $rawDay = $request->query('day');
+        $activeDay = ($rawDay !== null && $rawDay !== '' && $rawDay !== 'all' && (int) $rawDay >= 1 && (int) $rawDay <= 6)
+            ? (int) $rawDay
+            : 'all';
 
         $activeShift = $request->query('shift', 'all'); // 'all', 'pagi', 'siang'
 
-        // Ambil data konflik & matriks jadwal (jalankan deteksi bentrok terlebih dahulu agar status bentrok langsung tampil di sel tanpa perlu di-refresh)
+        // Ambil data konflik & matriks lengkap 6 hari (Senin–Sabtu) untuk Select & Tap dan Drag & Drop
         $conflicts = $this->scheduleService->detectConflicts($academicYear);
-        $matrixData = $this->scheduleService->getMasterMatrix($academicYear, $activeDay, $conflicts);
+        $matrixData = $this->scheduleService->getMasterMatrix($academicYear, null, $conflicts);
         $prerequisites = $this->scheduleService->checkMasterPrerequisites($academicYear);
 
         $teachers = $this->scheduleService->getMasterTeacherDirectory($academicYear);
@@ -436,9 +436,20 @@ class SchoolScheduleController extends Controller
         $successMsg = "Dua slot jadwal di Kelas {$item1->class_name} berhasil ditukar: ({$item1->day_name} Jam {$item1->period_order}) ⇄ ({$item2->day_name} Jam {$item2->period_order}). Total JP kelas tetap sama.";
 
         if ($request->wantsJson()) {
+            $freshConflicts = $this->scheduleService->detectConflicts($item1->academicYear);
+            $fresh1 = $item1->fresh();
+            $fresh2 = $item2->fresh();
+
             return response()->json([
                 'success' => true,
                 'message' => $successMsg,
+                'swapped_ids' => [$fresh1->id, $fresh2->id],
+                'items' => [
+                    $fresh1->id => $fresh1,
+                    $fresh2->id => $fresh2,
+                ],
+                'conflicts' => $freshConflicts,
+                'conflicts_count' => count($freshConflicts),
             ]);
         }
 

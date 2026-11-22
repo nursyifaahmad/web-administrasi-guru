@@ -1688,4 +1688,94 @@ class SchoolScheduleMasterTest extends TestCase
             @unlink($tmp);
         }
     }
+
+    public function test_master_schedule_displays_all_six_days_and_all_teacher_codes_simultaneously(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+        /** @var SchoolScheduleService $service */
+        $service = app(SchoolScheduleService::class);
+        $service->importFromWakasekCsv($year);
+
+        $response = $this->actingAs($admin)->get(route('admin.schedules.master.index'));
+
+        $response->assertOk();
+        foreach ([1, 2, 3, 4, 5, 6] as $d) {
+            $response->assertSee('data-day-section="' . $d . '"', false);
+        }
+        $response->assertSee('SEMUA HARI (SENIN–SABTU)');
+        $response->assertSee('Semua Kode Guru, Wali Kelas &amp; Guru Piket', false);
+        $response->assertSee('Mode Tukar Cepat Semua Sel');
+        $response->assertSee('onCellClick');
+        $response->assertSee('onCellPointerDown');
+        $response->assertViewHas('activeDay', 'all');
+
+        // Saat ?day=2 tetap memuat semua 6 hari untuk drag & drop lintas hari
+        $dayResp = $this->actingAs($admin)->get(route('admin.schedules.master.index', ['day' => 2]));
+        $dayResp->assertOk();
+        $dayResp->assertViewHas('activeDay', 2);
+        $dayResp->assertSee('data-day-section="1"', false);
+        $dayResp->assertSee('data-day-section="6"', false);
+    }
+
+    public function test_json_swap_cells_returns_updated_items_and_live_conflicts_when_resolved(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        // Buat bentrok Selasa Jam 1 untuk Kode 3 di kelas 7A & 7B
+        $item7aTue = SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 2,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '07.40 - 08.20',
+            'class_name' => '7A',
+            'teacher_code' => '3',
+            'teacher_name' => 'Guru Tiga',
+            'subject_name' => 'PJOK',
+        ]);
+        $item7bTue = SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 2,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '07.40 - 08.20',
+            'class_name' => '7B',
+            'teacher_code' => '3',
+            'teacher_name' => 'Guru Tiga',
+            'subject_name' => 'PJOK',
+        ]);
+        $item7aThu = SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 4,
+            'shift' => 'pagi',
+            'period_order' => 2,
+            'time_range' => '08.20 - 09.00',
+            'class_name' => '7A',
+            'teacher_code' => '7',
+            'teacher_name' => 'Guru Tujuh',
+            'subject_name' => 'Matematika',
+        ]);
+
+        // Pastikan sebelum swap terdeteksi 1 bentrok
+        app(SchoolScheduleService::class)->detectConflicts($year);
+        $this->assertTrue((bool) $item7aTue->fresh()->is_conflict);
+        $this->assertTrue((bool) $item7bTue->fresh()->is_conflict);
+
+        $resp = $this->actingAs($admin)->postJson(route('admin.schedules.master.swap'), [
+            'item_id_1' => $item7aTue->id,
+            'item_id_2' => $item7aThu->id,
+        ]);
+
+        $resp->assertOk();
+        $resp->assertJsonPath('success', true);
+        $resp->assertJsonPath('conflicts_count', 0);
+        $resp->assertJsonPath('conflicts', []);
+        $resp->assertJsonPath("items.{$item7aTue->id}.teacher_code", '7');
+        $resp->assertJsonPath("items.{$item7aTue->id}.is_conflict", false);
+        $resp->assertJsonPath("items.{$item7aThu->id}.teacher_code", '3');
+        $resp->assertJsonPath("items.{$item7aThu->id}.is_conflict", false);
+
+        // Pastikan sel pasangan 7B yang tadinya bentrok juga ikut pulih di DB
+        $this->assertFalse((bool) $item7bTue->fresh()->is_conflict);
+    }
 }

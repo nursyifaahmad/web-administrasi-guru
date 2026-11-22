@@ -5,92 +5,713 @@
 @section('page_subtitle', 'Pengaturan jadwal KBM ' . ($matrixData['total_classes'] ?? 21) . ' rombel, deteksi bentrok otomatis, dan sinkronisasi ke administrasi guru.')
 
 @section('content')
-<div class="space-y-6"
-     x-data="{
-        createChoiceModal: false,
-        createChoiceStep: 'choose',
-        editModal: false,
-        swapModal: false,
-        importScheduleModal: false,
-        selectedItem: null,
-        selectedTeacherCode: '',
-        selectedTeacherName: '',
-        selectedSubjectName: '',
-        swapItem1: null,
-        swapItem2Id: '',
-        swapTargetSlots: [],
-        loadingSwapTargets: false,
-        swapFilterDay: 'all',
-        teachersList: @js($teachers->values()),
-        activeDay: {{ $activeDay }},
+@php
+    $matrixByDay = $matrixData['matrix_by_day'] ?? [];
+    $isTwoShift = (bool) ($matrixData['is_two_shift'] ?? false);
+    $shift1Meta = $matrixData['shift1_meta'] ?? [];
+    $shift2Meta = $matrixData['shift2_meta'] ?? [];
+    $daysMap = \App\Services\SchoolScheduleService::DAYS_MAP;
 
-        openEdit(item) {
-            this.selectedItem = item;
-            this.selectedTeacherCode = item.teacher_code || '';
-            this.selectedTeacherName = item.teacher_name || '';
-            this.selectedSubjectName = item.subject_name || '';
-            this.editModal = true;
-        },
-
-        onTeacherSelect(code) {
-            this.selectedTeacherCode = code;
-            let t = this.teachersList.find(x => String(x.code) === String(code));
-            if (t) {
-                this.selectedTeacherName = t.name;
-                this.selectedSubjectName = t.subject;
-            } else if (code === '') {
-                this.selectedTeacherName = '';
-                this.selectedSubjectName = '';
-            }
-        },
-
-        async openSwap(item) {
-            this.swapItem1 = item;
-            this.swapItem2Id = '';
-            this.swapTargetSlots = [];
-            this.loadingSwapTargets = true;
-            this.swapFilterDay = 'all';
-            this.swapModal = true;
-
-            try {
-                let resp = await fetch('{{ route('admin.schedules.master.swap-targets') }}?item_id=' + item.id, {
-                    headers: { 'Accept': 'application/json' }
-                });
-                let data = await resp.json();
-                if (data.success && data.slots) {
-                    this.swapTargetSlots = data.slots;
+    $cellsMap = [];
+    foreach ($matrixByDay as $dNum => $dData) {
+        foreach (['pagi_slots', 'siang_slots'] as $slotKey) {
+            foreach (($dData[$slotKey] ?? []) as $slot) {
+                $isSlotAct = (bool) ($slot['is_activity'] ?? false);
+                foreach (($slot['classes'] ?? []) as $item) {
+                    if (! $item || empty($item->id)) {
+                        continue;
+                    }
+                    $cellsMap[(int) $item->id] = [
+                        'id' => (int) $item->id,
+                        'day_of_week' => (int) $item->day_of_week,
+                        'day_name' => $daysMap[(int) $item->day_of_week] ?? ('Hari ' . $item->day_of_week),
+                        'shift' => (string) $item->shift,
+                        'period_order' => (int) $item->period_order,
+                        'time_range' => (string) $item->time_range,
+                        'class_name' => (string) $item->class_name,
+                        'teacher_code' => $item->teacher_code !== null ? (string) $item->teacher_code : null,
+                        'teacher_name' => $item->teacher_name !== null ? (string) $item->teacher_name : null,
+                        'subject_name' => $item->subject_name !== null ? (string) $item->subject_name : null,
+                        'user_id' => $item->user_id ? (int) $item->user_id : null,
+                        'subject_id' => $item->subject_id ? (int) $item->subject_id : null,
+                        'is_conflict' => (bool) $item->is_conflict,
+                        'conflict_notes' => $item->conflict_notes ? (string) $item->conflict_notes : null,
+                        'is_activity' => $isSlotAct || $item->isCommonActivity(),
+                    ];
                 }
-            } catch (err) {
-                console.error('Gagal memuat slot target penukaran:', err);
-            } finally {
-                this.loadingSwapTargets = false;
             }
-        },
-
-        get filteredSwapTargets() {
-            if (this.swapFilterDay === 'all') {
-                return this.swapTargetSlots;
-            }
-            return this.swapTargetSlots.filter(s => String(s.day_of_week) === String(this.swapFilterDay));
-        },
-
-        isCommonActivity(item) {
-            if (!item || !item.teacher_code) return false;
-            let code = String(item.teacher_code).trim().toUpperCase();
-            return ['UPACARA', 'SHOLAT', 'DHUHA', 'ISTIRAHAT', 'KEAGAMAAN', 'SABTU BERSIH', 'SABSIH', 'PAGI CERIA', 'PEMBIASAAN', 'LITERASI', 'EKSTRAKURIKULER']
-                .some(kw => code.includes(kw));
         }
-     }">
+    }
+
+    $boardConfig = [
+        'teachers' => $teachers->values()->all(),
+        'cellsMap' => $cellsMap,
+        'conflicts' => array_values($conflicts),
+        'activeDay' => $activeDay === 'all' ? 'all' : (string) $activeDay,
+        'swapUrl' => route('admin.schedules.master.swap'),
+        'swapTargetsUrl' => route('admin.schedules.master.swap-targets'),
+        'csrfToken' => csrf_token(),
+    ];
+@endphp
+
+<script>
+    window.masterScheduleBoard = function (cfg) {
+        const ACTIVITY_KEYWORDS = [
+            'UPACARA', 'SHOLAT', 'DHUHA', 'ISTIRAHAT', 'KEAGAMAAN',
+            'SABTU BERSIH', 'SABSIH', 'PAGI CERIA', 'PEMBIASAAN', 'LITERASI', 'EKSTRAKURIKULER'
+        ];
+
+        return {
+            createChoiceModal: false,
+            createChoiceStep: 'choose',
+            editModal: false,
+            swapModal: false,
+            importScheduleModal: false,
+            selectedItem: null,
+            selectedTeacherCode: '',
+            selectedTeacherName: '',
+            selectedSubjectName: '',
+            swapItem1: null,
+            swapItem2Id: '',
+            swapTargetSlots: [],
+            loadingSwapTargets: false,
+            swapFilterDay: 'all',
+
+            teachersList: cfg.teachers || [],
+            cellsMap: cfg.cellsMap || {},
+            conflictsList: cfg.conflicts || [],
+            activeDayFilter: cfg.activeDay || 'all',
+            conflictsExpanded: false,
+            openLegend: true,
+            teacherSearch: '',
+            highlightedTeacherCode: '',
+            quickSwapMode: false,
+
+            activeSourceId: null,
+            targetCleanMap: {},
+            cleanTargetsCount: 0,
+            hasUnsyncedSwaps: false,
+            isSwapping: false,
+            lastSwapUndo: null,
+            toast: null,
+            toastTimer: null,
+            pulseCellId: null,
+
+            dragState: {
+                active: false,
+                sourceId: null,
+                overTargetId: null,
+                x: 0,
+                y: 0,
+            },
+            pointerCandidate: null,
+            suppressNextClickUntil: 0,
+            autoScrollInterval: null,
+
+            normCode(code) {
+                return String(code || '').trim().replace(/\s+/g, '').toUpperCase();
+            },
+
+            isActivityText(code) {
+                if (!code) return false;
+                const upper = String(code).trim().toUpperCase();
+                return ACTIVITY_KEYWORDS.some((kw) => upper.includes(kw));
+            },
+
+            isCommonActivity(item) {
+                return !!(item && (item.is_activity || this.isActivityText(item.teacher_code)));
+            },
+
+            get activeSourceCell() {
+                if (!this.activeSourceId) return null;
+                return this.cellsMap[this.activeSourceId] || null;
+            },
+
+            get activeTargetPreviewCell() {
+                const tid = this.dragState.active ? this.dragState.overTargetId : null;
+                return tid ? (this.cellsMap[tid] || null) : null;
+            },
+
+            get filteredTeachersLegend() {
+                const q = this.teacherSearch.trim().toLowerCase();
+                if (!q) return this.teachersList;
+                return this.teachersList.filter((t) => {
+                    return String(t.code || '').toLowerCase().includes(q)
+                        || String(t.name || '').toLowerCase().includes(q)
+                        || String(t.subject || '').toLowerCase().includes(q);
+                });
+            },
+
+            dayConflictsCount(dayNum) {
+                return this.conflictsList.filter((c) => Number(c.day_of_week) === Number(dayNum)).length;
+            },
+
+            setDayFilter(val) {
+                this.activeDayFilter = String(val);
+            },
+
+            toggleTeacherHighlight(code) {
+                const norm = this.normCode(code);
+                this.highlightedTeacherCode = (this.highlightedTeacherCode === norm) ? '' : norm;
+            },
+
+            showToast(type, message) {
+                this.toast = { type, message };
+                if (this.toastTimer) clearTimeout(this.toastTimer);
+                this.toastTimer = setTimeout(() => {
+                    this.toast = null;
+                }, 6500);
+            },
+
+            openEdit(item) {
+                if (!item) return;
+                this.selectedItem = item;
+                this.selectedTeacherCode = item.teacher_code || '';
+                this.selectedTeacherName = item.teacher_name || '';
+                this.selectedSubjectName = item.subject_name || '';
+                this.editModal = true;
+            },
+
+            onTeacherSelect(code) {
+                this.selectedTeacherCode = code;
+                const t = this.teachersList.find((x) => String(x.code) === String(code));
+                if (t) {
+                    this.selectedTeacherName = t.name;
+                    this.selectedSubjectName = t.subject;
+                } else if (code === '') {
+                    this.selectedTeacherName = '';
+                    this.selectedSubjectName = '';
+                }
+            },
+
+            async openSwap(item) {
+                if (!item) return;
+                this.swapItem1 = item;
+                this.swapItem2Id = '';
+                this.swapTargetSlots = [];
+                this.loadingSwapTargets = true;
+                this.swapFilterDay = 'all';
+                this.swapModal = true;
+
+                try {
+                    const resp = await fetch(cfg.swapTargetsUrl + '?item_id=' + item.id, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const data = await resp.json();
+                    if (data.success && data.slots) {
+                        this.swapTargetSlots = data.slots;
+                    }
+                } catch (err) {
+                    console.error('Gagal memuat slot target penukaran:', err);
+                } finally {
+                    this.loadingSwapTargets = false;
+                }
+            },
+
+            get filteredSwapTargets() {
+                if (this.swapFilterDay === 'all') {
+                    return this.swapTargetSlots;
+                }
+                return this.swapTargetSlots.filter((s) => String(s.day_of_week) === String(this.swapFilterDay));
+            },
+
+            computeTargetStatusMap(sourceCell) {
+                const map = {};
+                let cleanCount = 0;
+                if (!sourceCell) {
+                    this.targetCleanMap = map;
+                    this.cleanTargetsCount = 0;
+                    return;
+                }
+
+                const bySlot = {};
+                const all = Object.values(this.cellsMap);
+                for (let i = 0; i < all.length; i++) {
+                    const c = all[i];
+                    const sk = c.day_of_week + '_' + c.shift + '_' + c.time_range;
+                    if (!bySlot[sk]) bySlot[sk] = [];
+                    bySlot[sk].push(c);
+                }
+
+                const srcSlotKey = sourceCell.day_of_week + '_' + sourceCell.shift + '_' + sourceCell.time_range;
+                const srcCode = !sourceCell.is_activity ? this.normCode(sourceCell.teacher_code) : '';
+
+                for (let i = 0; i < all.length; i++) {
+                    const target = all[i];
+                    if (target.id === sourceCell.id || target.class_name !== sourceCell.class_name || target.is_activity) {
+                        continue;
+                    }
+
+                    const dstSlotKey = target.day_of_week + '_' + target.shift + '_' + target.time_range;
+                    const dstCode = !target.is_activity ? this.normCode(target.teacher_code) : '';
+
+                    let srcClash = false;
+                    if (srcCode !== '') {
+                        const dstSiblings = bySlot[dstSlotKey] || [];
+                        for (let j = 0; j < dstSiblings.length; j++) {
+                            const sib = dstSiblings[j];
+                            if (sib.id === sourceCell.id || sib.id === target.id || sib.is_activity) continue;
+                            if (this.normCode(sib.teacher_code) === srcCode) {
+                                srcClash = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    let dstClash = false;
+                    if (dstCode !== '') {
+                        const srcSiblings = bySlot[srcSlotKey] || [];
+                        for (let j = 0; j < srcSiblings.length; j++) {
+                            const sib = srcSiblings[j];
+                            if (sib.id === sourceCell.id || sib.id === target.id || sib.is_activity) continue;
+                            if (this.normCode(sib.teacher_code) === dstCode) {
+                                dstClash = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    const isClean = !srcClash && !dstClash;
+                    map[target.id] = isClean;
+                    if (isClean) cleanCount++;
+                }
+
+                this.targetCleanMap = map;
+                this.cleanTargetsCount = cleanCount;
+            },
+
+            selectSwapSource(cell) {
+                if (!cell || cell.is_activity) return;
+                this.activeSourceId = cell.id;
+                this.computeTargetStatusMap(cell);
+            },
+
+            clearSwapSelection() {
+                this.activeSourceId = null;
+                this.targetCleanMap = {};
+                this.cleanTargetsCount = 0;
+            },
+
+            isSameClassValidTarget(targetId) {
+                const src = this.activeSourceCell;
+                const tgt = this.cellsMap[targetId];
+                if (!src || !tgt) return false;
+                return tgt.id !== src.id && tgt.class_name === src.class_name && !tgt.is_activity;
+            },
+
+            focusConflictCell(itemId, selectImmediately = false) {
+                const cell = this.cellsMap[itemId];
+                if (!cell) return;
+                this.activeDayFilter = 'all';
+                if (selectImmediately) {
+                    this.selectSwapSource(cell);
+                }
+                this.pulseCellId = cell.id;
+                setTimeout(() => {
+                    if (this.pulseCellId === cell.id) this.pulseCellId = null;
+                }, 1800);
+
+                this.$nextTick(() => {
+                    const el = document.getElementById('schedule-cell-' + cell.id);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                    }
+                });
+            },
+
+            onCellClick(id) {
+                if (Date.now() < this.suppressNextClickUntil || this.isSwapping) {
+                    return;
+                }
+                const cell = this.cellsMap[id];
+                if (!cell || cell.is_activity) {
+                    return;
+                }
+
+                const src = this.activeSourceCell;
+                if (src) {
+                    if (cell.id === src.id) {
+                        this.clearSwapSelection();
+                        return;
+                    }
+                    if (cell.class_name === src.class_name) {
+                        this.executeSwap(src.id, cell.id);
+                        return;
+                    }
+                    this.showToast('warning', 'Penukaran hanya dapat dilakukan pada kolom Kelas ' + src.class_name + '. Klik Batal (Esc) untuk memilih kelas lain.');
+                    return;
+                }
+
+                if (cell.is_conflict || this.quickSwapMode) {
+                    this.selectSwapSource(cell);
+                    return;
+                }
+
+                this.openEdit(cell);
+            },
+
+            onCellPointerDown(e, id) {
+                if (this.isSwapping) return;
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+                const cell = this.cellsMap[id];
+                if (!cell || cell.is_activity) return;
+
+                this.cancelPointerCandidate();
+
+                const holdMs = e.pointerType === 'touch' ? 220 : 170;
+                const cand = {
+                    id: cell.id,
+                    pointerId: e.pointerId,
+                    pointerType: e.pointerType,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    curX: e.clientX,
+                    curY: e.clientY,
+                    timer: null,
+                };
+
+                cand.timer = setTimeout(() => {
+                    if (this.pointerCandidate && this.pointerCandidate.id === cand.id) {
+                        this.beginDrag(cand.id, cand.curX, cand.curY);
+                    }
+                }, holdMs);
+
+                this.pointerCandidate = cand;
+
+                window.addEventListener('pointermove', this._boundPointerMove, { passive: true });
+                window.addEventListener('pointerup', this._boundPointerUp);
+                window.addEventListener('pointercancel', this._boundPointerUp);
+            },
+
+            handleGlobalPointerMove(e) {
+                if (this.dragState.active) {
+                    this.dragState.x = e.clientX;
+                    this.dragState.y = e.clientY;
+                    this.updateDragTargetAt(e.clientX, e.clientY);
+                    return;
+                }
+
+                const cand = this.pointerCandidate;
+                if (!cand || e.pointerId !== cand.pointerId) return;
+
+                cand.curX = e.clientX;
+                cand.curY = e.clientY;
+                const dist = Math.hypot(e.clientX - cand.startX, e.clientY - cand.startY);
+
+                if (cand.pointerType === 'touch' && dist >= 10) {
+                    // Biarkan scroll layar sentuh berjalan normal jika jari digeser sebelum hold threshold
+                    this.cancelPointerCandidate();
+                    return;
+                }
+
+                if (cand.pointerType === 'mouse' && dist >= 6) {
+                    this.beginDrag(cand.id, e.clientX, e.clientY);
+                }
+            },
+
+            handleGlobalPointerUp(e) {
+                if (this.dragState.active) {
+                    const srcId = this.dragState.sourceId;
+                    const dstId = this.dragState.overTargetId;
+                    const srcCell = this.cellsMap[srcId];
+
+                    this.suppressNextClickUntil = Date.now() + 320;
+                    this.endDragCleanup();
+
+                    if (srcId && dstId && dstId !== srcId) {
+                        this.executeSwap(srcId, dstId);
+                    } else if (srcCell) {
+                        const under = document.elementFromPoint(e.clientX, e.clientY);
+                        const btn = under ? under.closest('[data-schedule-cell-id]') : null;
+                        const underId = btn ? Number(btn.getAttribute('data-schedule-cell-id')) : null;
+                        const underCell = underId ? this.cellsMap[underId] : null;
+                        if (underCell && underCell.id !== srcCell.id && underCell.class_name !== srcCell.class_name) {
+                            this.showToast('warning', 'Lepaskan di sel berwarna hijau/kuning dalam kolom Kelas ' + srcCell.class_name + ' untuk menukar jadwal.');
+                        }
+                    }
+                    return;
+                }
+
+                this.cancelPointerCandidate();
+            },
+
+            beginDrag(sourceId, x, y) {
+                const cell = this.cellsMap[sourceId];
+                if (!cell || cell.is_activity) {
+                    this.cancelPointerCandidate();
+                    return;
+                }
+                if (this.pointerCandidate && this.pointerCandidate.timer) {
+                    clearTimeout(this.pointerCandidate.timer);
+                }
+                this.pointerCandidate = null;
+
+                this.activeSourceId = sourceId;
+                this.computeTargetStatusMap(cell);
+
+                this.dragState.active = true;
+                this.dragState.sourceId = sourceId;
+                this.dragState.overTargetId = null;
+                this.dragState.x = x;
+                this.dragState.y = y;
+
+                document.body.style.userSelect = 'none';
+                this.startAutoScrollLoop();
+                this.updateDragTargetAt(x, y);
+            },
+
+            updateDragTargetAt(x, y) {
+                const el = document.elementFromPoint(x, y);
+                const btn = el ? el.closest('[data-schedule-cell-id]') : null;
+                const tid = btn ? Number(btn.getAttribute('data-schedule-cell-id')) : null;
+                if (tid && this.isSameClassValidTarget(tid)) {
+                    this.dragState.overTargetId = tid;
+                } else {
+                    this.dragState.overTargetId = null;
+                }
+            },
+
+            startAutoScrollLoop() {
+                if (this.autoScrollInterval) clearInterval(this.autoScrollInterval);
+                this.autoScrollInterval = setInterval(() => {
+                    if (!this.dragState.active) return;
+                    const x = this.dragState.x;
+                    const y = this.dragState.y;
+                    const margin = 72;
+
+                    if (y < margin) {
+                        window.scrollBy(0, -14);
+                    } else if (window.innerHeight - y < margin) {
+                        window.scrollBy(0, 14);
+                    }
+
+                    const containers = document.querySelectorAll('[data-matrix-scroll]');
+                    containers.forEach((box) => {
+                        const rect = box.getBoundingClientRect();
+                        if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+                        if (y - rect.top < 54) box.scrollTop -= 14;
+                        else if (rect.bottom - y < 54) box.scrollTop += 14;
+                        if (x - rect.left < 72) box.scrollLeft -= 14;
+                        else if (rect.right - x < 72) box.scrollLeft += 14;
+                    });
+                }, 25);
+            },
+
+            cancelPointerCandidate() {
+                if (this.pointerCandidate && this.pointerCandidate.timer) {
+                    clearTimeout(this.pointerCandidate.timer);
+                }
+                this.pointerCandidate = null;
+                window.removeEventListener('pointermove', this._boundPointerMove);
+                window.removeEventListener('pointerup', this._boundPointerUp);
+                window.removeEventListener('pointercancel', this._boundPointerUp);
+            },
+
+            endDragCleanup() {
+                if (this.autoScrollInterval) {
+                    clearInterval(this.autoScrollInterval);
+                    this.autoScrollInterval = null;
+                }
+                this.dragState.active = false;
+                this.dragState.sourceId = null;
+                this.dragState.overTargetId = null;
+                document.body.style.userSelect = '';
+                this.clearSwapSelection();
+                this.cancelPointerCandidate();
+            },
+
+            async executeSwap(itemId1, itemId2, isUndo = false) {
+                if (this.isSwapping || !itemId1 || !itemId2 || itemId1 === itemId2) return;
+                this.isSwapping = true;
+                try {
+                    const resp = await fetch(cfg.swapUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': cfg.csrfToken,
+                        },
+                        body: JSON.stringify({
+                            item_id_1: Number(itemId1),
+                            item_id_2: Number(itemId2),
+                        }),
+                    });
+
+                    const data = await resp.json();
+                    if (!resp.ok || !data.success) {
+                        this.showToast('error', data.message || 'Gagal menukar jadwal.');
+                        return;
+                    }
+
+                    if (data.items) {
+                        Object.keys(data.items).forEach((k) => {
+                            const updated = data.items[k];
+                            if (updated && this.cellsMap[updated.id]) {
+                                this.cellsMap[updated.id] = {
+                                    ...this.cellsMap[updated.id],
+                                    teacher_code: updated.teacher_code,
+                                    teacher_name: updated.teacher_name,
+                                    subject_name: updated.subject_name,
+                                    user_id: updated.user_id,
+                                    subject_id: updated.subject_id,
+                                    is_conflict: Boolean(updated.is_conflict),
+                                    conflict_notes: updated.conflict_notes,
+                                };
+                            }
+                        });
+                    }
+
+                    if (Array.isArray(data.conflicts)) {
+                        this.conflictsList = data.conflicts;
+                        const conflictNotesById = {};
+                        data.conflicts.forEach((c) => {
+                            const note = '⚠️ BENTROK: Kode ' + c.teacher_code + ' (' + c.teacher_name + ') di kelas ' + (c.clashing_classes || []).join(' & ');
+                            (c.item_ids || []).forEach((cid) => {
+                                conflictNotesById[cid] = note;
+                            });
+                        });
+                        Object.values(this.cellsMap).forEach((cell) => {
+                            const hasConf = Object.prototype.hasOwnProperty.call(conflictNotesById, cell.id);
+                            cell.is_conflict = hasConf;
+                            cell.conflict_notes = hasConf ? conflictNotesById[cell.id] : null;
+                        });
+                    }
+
+                    this.hasUnsyncedSwaps = true;
+                    this.clearSwapSelection();
+
+                    if (isUndo) {
+                        this.lastSwapUndo = null;
+                        this.showToast('success', 'Penukaran terakhir berhasil diurungkan.');
+                    } else {
+                        this.lastSwapUndo = { itemId1, itemId2 };
+                        this.showToast('success', data.message);
+                    }
+                } catch (err) {
+                    console.error('Swap AJAX gagal:', err);
+                    this.showToast('error', 'Terjadi kesalahan koneksi saat menukar jadwal.');
+                } finally {
+                    this.isSwapping = false;
+                }
+            },
+
+            cellButtonClasses(id, defaultHoverCls) {
+                const cell = this.cellsMap[id];
+                if (!cell) return '';
+
+                if (this.activeSourceId === id) {
+                    return 'bg-indigo-600 text-white font-black ring-4 ring-amber-400 shadow-lg scale-[1.04] z-10 cursor-pointer';
+                }
+
+                if (this.dragState.active && this.dragState.overTargetId === id) {
+                    const clean = Boolean(this.targetCleanMap[id]);
+                    return clean
+                        ? 'bg-emerald-500 text-white font-black ring-4 ring-emerald-300 shadow-lg scale-105 z-10 cursor-copy'
+                        : 'bg-amber-500 text-white font-black ring-4 ring-amber-300 shadow-lg scale-105 z-10 cursor-copy';
+                }
+
+                if (this.activeSourceId) {
+                    if (this.isSameClassValidTarget(id)) {
+                        const clean = Boolean(this.targetCleanMap[id]);
+                        return clean
+                            ? 'bg-emerald-50 text-emerald-900 font-black border-2 border-dashed border-emerald-500 hover:bg-emerald-100 hover:scale-[1.03] cursor-pointer'
+                            : 'bg-amber-50 text-amber-900 font-black border-2 border-dashed border-amber-400 hover:bg-amber-100 hover:scale-[1.03] cursor-pointer';
+                    }
+                    if (cell.is_conflict) {
+                        return 'bg-rose-200/70 text-rose-900 opacity-40 cursor-not-allowed';
+                    }
+                    return 'opacity-35 text-slate-500 cursor-not-allowed';
+                }
+
+                const pulse = (this.pulseCellId === id) ? ' ring-4 ring-indigo-500 shadow-md ' : '';
+                const tHighlight = (this.highlightedTeacherCode && !cell.is_activity && this.normCode(cell.teacher_code) === this.highlightedTeacherCode)
+                    ? ' ring-2 ring-sky-500 bg-sky-100 text-sky-950 font-black '
+                    : '';
+
+                if (cell.is_conflict) {
+                    return 'bg-rose-600 text-white font-black ring-2 ring-rose-400 animate-pulse cursor-grab active:cursor-grabbing hover:bg-rose-700' + pulse;
+                }
+
+                return (tHighlight || defaultHoverCls) + ' cursor-grab active:cursor-grabbing' + pulse;
+            },
+
+            cellBadgeText(id) {
+                const cell = this.cellsMap[id];
+                if (!cell) return '';
+                if (this.activeSourceId === id) return 'DIPILIH';
+                if (this.dragState.active && this.dragState.overTargetId === id) return 'LEPAS ✓';
+                if (this.activeSourceId && this.isSameClassValidTarget(id)) {
+                    return this.targetCleanMap[id] ? '✓ AMAN' : '! BENTROK';
+                }
+                if (cell.is_conflict) return 'BENTROK';
+                return '';
+            },
+
+            cellBadgeClass(id) {
+                if (this.activeSourceId === id) return 'bg-amber-300 text-slate-950';
+                if (this.dragState.active && this.dragState.overTargetId === id) return 'bg-white/95 text-slate-900';
+                if (this.activeSourceId && this.isSameClassValidTarget(id)) {
+                    return this.targetCleanMap[id] ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white';
+                }
+                return 'bg-rose-900/40 text-white';
+            },
+
+            cellTooltip(id) {
+                const cell = this.cellsMap[id];
+                if (!cell) return '';
+                if (this.activeSourceId && this.isSameClassValidTarget(id)) {
+                    const stateTxt = this.targetCleanMap[id] ? 'Bebas bentrok bila ditukar ke sel ini' : 'Masih bentrok bila ditukar ke sel ini';
+                    return cell.day_name + ' Jam ' + cell.period_order + ' (' + cell.time_range + ') — ' + stateTxt;
+                }
+                if (cell.is_conflict) {
+                    return (cell.conflict_notes || 'BENTROK') + ' | Klik untuk pilih atau tekan & seret ke sel tujuan';
+                }
+                const info = cell.teacher_code ? ((cell.teacher_name || ('Kode ' + cell.teacher_code)) + (cell.subject_name ? ' (' + cell.subject_name + ')' : '')) : 'Slot Kosong';
+                return info + ' | Klik untuk edit, atau tahan & seret untuk tukar slot';
+            },
+
+            init() {
+                this._boundPointerMove = (e) => this.handleGlobalPointerMove(e);
+                this._boundPointerUp = (e) => this.handleGlobalPointerUp(e);
+            },
+
+            destroy() {
+                this.endDragCleanup();
+            },
+        };
+    };
+</script>
+
+<div class="space-y-5"
+     x-data="masterScheduleBoard(@js($boardConfig))"
+     @keydown.escape.window="clearSwapSelection(); endDragCleanup(); createChoiceModal = false; importScheduleModal = false; editModal = false; swapModal = false;">
+
+    {{-- Ghost Pill Melayang saat Drag & Drop --}}
+    <div x-show="dragState.active" x-cloak
+         :style="'left:' + (dragState.x + 14) + 'px; top:' + (dragState.y - 26) + 'px;'"
+         class="fixed z-[100] pointer-events-none select-none flex items-center gap-2 px-3 py-2 rounded-2xl shadow-2xl border-2 text-xs font-extrabold transition-colors"
+         :class="dragState.overTargetId ? (targetCleanMap[dragState.overTargetId] ? 'bg-emerald-600 text-white border-emerald-300' : 'bg-amber-500 text-white border-amber-200') : 'bg-indigo-700 text-white border-amber-300'">
+        <span class="px-2 py-0.5 rounded-lg bg-white/20 font-black"
+              x-text="activeSourceCell ? ('Kelas ' + activeSourceCell.class_name) : ''"></span>
+        <span x-text="activeSourceCell ? (activeSourceCell.teacher_code ? ('Kode ' + activeSourceCell.teacher_code) : 'Kosong') : ''"></span>
+        <span class="text-[10px] font-bold opacity-90"
+              x-text="dragState.overTargetId ? (targetCleanMap[dragState.overTargetId] ? '→ Lepas (Bebas Bentrok ✓)' : '→ Lepas (Masih Bentrok !)') : (activeSourceCell ? ('Geser ke kolom ' + activeSourceCell.class_name) : '')"></span>
+    </div>
 
     {{-- Header Action Bar --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-4 md:p-5 shadow-2xs flex flex-wrap items-center justify-between gap-4">
         <div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
                 <span class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-bold">
                     Tahun Ajaran: {{ $academicYear->full_label ?? '-' }}
                 </span>
                 <span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
-                    {{ $matrixData['total_classes'] ?? 21 }} Rombel &bull; {{ ($matrixData['is_two_shift'] ?? false) ? '2 Shift (Pagi & Siang)' : '1 Shift (Semua Rombel)' }}
+                    {{ $matrixData['total_classes'] ?? 21 }} Rombel &bull; {{ $isTwoShift ? '2 Shift (Pagi & Siang)' : '1 Shift (Semua Rombel)' }}
+                </span>
+                <span x-show="hasUnsyncedSwaps" x-cloak
+                      class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 text-xs font-extrabold animate-pulse">
+                    Jadwal Diubah — Jangan lupa klik Sinkronkan ke Guru
                 </span>
             </div>
             <h2 class="text-base font-extrabold text-slate-900 mt-2">Pusat Pengaturan Jadwal Pelajaran Wakasek</h2>
@@ -110,8 +731,9 @@
                   onsubmit="return confirm('Sinkronkan seluruh jadwal dari Master Jadwal ke Buku Administrasi Kelas Guru? Seluruh hari mengajar & jam pelajaran guru akan diperbarui otomatis.')">
                 @csrf
                 <button type="submit"
-                        class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition border border-indigo-200">
-                    <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs transition border"
+                        :class="hasUnsyncedSwaps ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 shadow-sm' : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     <span>Sinkronkan ke Guru</span>
                 </button>
             </form>
@@ -258,131 +880,206 @@
         @endif
     @endif
 
-    {{-- Banner Peringatan Jadwal Bertabrakan (Conflict Detection Engine) --}}
-    @if(count($conflicts) > 0)
-        <div class="rounded-2xl bg-rose-50 border border-rose-200 p-4 md:p-5 shadow-2xs" x-data="{ expanded: false }">
-            <div class="flex items-start justify-between gap-3">
-                <div class="flex items-start gap-3">
-                    <div class="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 font-bold text-base shadow-xs">
-                        ⚠️
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-extrabold text-rose-900">
-                            Terdeteksi {{ count($conflicts) }} Titik Jadwal Bertabrakan (Bentrok Jam Sama)
-                        </h3>
-                        <p class="text-xs text-rose-700 mt-0.5 leading-relaxed">
-                            Sistem mendeteksi guru yang dijadwalkan mengajar di 2 kelas berbeda pada hari dan jam yang sama persis.
-                            Klik tombol di samping untuk melihat rincian dan gunakan tombol <strong>Tukar Slot</strong> untuk memperbaikinya langsung.
-                        </p>
-                    </div>
-                </div>
-                <button type="button" @click="expanded = !expanded"
-                        class="px-3 py-1.5 rounded-lg bg-rose-200/80 hover:bg-rose-300/80 text-rose-900 font-bold text-xs transition shrink-0">
-                    <span x-text="expanded ? 'Tutup Rincian' : 'Lihat ' + {{ count($conflicts) }} + ' Bentrok'"></span>
-                </button>
-            </div>
-
-            {{-- Daftar Rincian Bentrok yang Terbuka --}}
-            <div x-show="expanded" x-collapse class="mt-4 pt-3 border-t border-rose-200/70 space-y-2">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    @foreach($conflicts as $idx => $c)
-                        <div class="p-3 rounded-xl bg-white border border-rose-200 shadow-2xs flex items-center justify-between gap-3">
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-1.5 text-xs font-extrabold text-rose-900">
-                                    <span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px]">#{{ $idx + 1 }}</span>
-                                    <span>{{ $c['day_name'] }} &bull; Shift {{ $c['shift'] }}</span>
-                                    <span class="text-rose-600 font-semibold">({{ $c['time_range'] }})</span>
-                                </div>
-                                <div class="text-xs text-slate-800 font-bold mt-1 truncate">
-                                    Kode {{ $c['teacher_code'] }}: {{ $c['teacher_name'] }}
-                                </div>
-                                <div class="text-[11px] text-slate-500">
-                                    Mapel: {{ $c['subject_name'] }} &bull; Kelas:
-                                    <span class="font-extrabold text-rose-700 underline">{{ implode(' & ', $c['clashing_classes']) }}</span>
-                                </div>
-                            </div>
-                            <a href="{{ route('admin.schedules.master.index', ['day' => $c['day_of_week'], 'academic_year_id' => $academicYear?->id]) }}"
-                               class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold transition shrink-0">
-                                Ke Hari {{ $c['day_name'] }} &rarr;
-                            </a>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-        </div>
-    @else
-        <div class="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 flex items-center justify-between gap-3 shadow-2xs">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-extrabold text-sm shrink-0">
-                    ✓
+    {{-- Banner Peringatan Jadwal Bertabrakan (Live Reactive via Alpine conflictsList) --}}
+    <div x-show="conflictsList.length > 0" {{ count($conflicts) === 0 ? 'x-cloak' : '' }}
+         class="rounded-2xl bg-rose-50 border border-rose-200 p-4 md:p-5 shadow-2xs">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+            <div class="flex items-start gap-3">
+                <div class="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 font-bold text-base shadow-xs">
+                    ⚠️
                 </div>
                 <div>
-                    <h3 class="text-sm font-extrabold text-emerald-950">Jadwal Sempurna & Bebas Bentrok</h3>
-                    <p class="text-xs text-emerald-700">Tidak ada jadwal guru yang bertabrakan pada hari dan jam yang sama.</p>
+                    <h3 class="text-sm font-extrabold text-rose-900">
+                        <span x-text="'Terdeteksi ' + conflictsList.length + ' Titik Jadwal Bertabrakan (Bentrok Jam Sama)'">
+                            Terdeteksi {{ count($conflicts) }} Titik Jadwal Bertabrakan (Bentrok Jam Sama)
+                        </span>
+                    </h3>
+                    <p class="text-xs text-rose-700 mt-0.5 leading-relaxed">
+                        Langsung <strong>klik sel BENTROK berwarna merah</strong> lalu tap sel tujuan di kelas yang sama (<strong>Select &amp; Tap</strong>), atau <strong>tekan &amp; tahan lalu geser</strong> ke sel tujuan (<strong>Drag &amp; Drop</strong>) pada seluruh hari Senin–Sabtu.
+                    </p>
                 </div>
             </div>
-            <span class="px-2.5 py-1 rounded-md bg-emerald-200 text-emerald-900 font-bold text-xs">Valid</span>
+            <button type="button" @click="conflictsExpanded = !conflictsExpanded"
+                    class="px-3 py-1.5 rounded-lg bg-rose-200/80 hover:bg-rose-300/80 text-rose-900 font-bold text-xs transition shrink-0 cursor-pointer">
+                <span x-text="conflictsExpanded ? 'Tutup Rincian' : 'Lihat ' + conflictsList.length + ' Bentrok'"></span>
+            </button>
         </div>
-    @endif
 
-    {{-- Tab Navigasi Hari (Senin – Sabtu) --}}
-    <div class="bg-white rounded-2xl border border-slate-200 p-2 shadow-2xs">
-        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            @foreach(\App\Services\SchoolScheduleService::DAYS_MAP as $dNum => $dName)
-                @php
-                    $isDayActive = $activeDay === $dNum;
-                    $dayConflicts = collect($conflicts)->where('day_of_week', $dNum)->count();
-                @endphp
-                <a href="{{ route('admin.schedules.master.index', ['day' => $dNum, 'academic_year_id' => $academicYear?->id]) }}"
-                   class="flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-center font-bold text-xs transition flex items-center justify-center gap-2 {{ $isDayActive ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100' }}">
-                    <span>{{ strtoupper($dName) }}</span>
-                    @if($dayConflicts > 0)
-                        <span class="px-1.5 py-0.2 rounded-full {{ $isDayActive ? 'bg-white text-rose-700' : 'bg-rose-100 text-rose-700' }} text-[10px] font-extrabold">
-                            {{ $dayConflicts }} ⚠️
-                        </span>
-                    @endif
-                </a>
-            @endforeach
+        <div x-show="conflictsExpanded" x-collapse x-cloak class="mt-4 pt-3 border-t border-rose-200/70 space-y-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                <template x-for="(c, idx) in conflictsList" :key="'conf_' + idx + '_' + c.day_of_week + '_' + c.teacher_code">
+                    <div class="p-3 rounded-xl bg-white border border-rose-200 shadow-2xs flex items-center justify-between gap-3 flex-wrap">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-1.5 text-xs font-extrabold text-rose-900">
+                                <span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px]" x-text="'#' + (idx + 1)"></span>
+                                <span x-text="c.day_name + ' • Shift ' + c.shift"></span>
+                                <span class="text-rose-600 font-semibold" x-text="'(' + c.time_range + ')'"></span>
+                            </div>
+                            <div class="text-xs text-slate-800 font-bold mt-1 truncate"
+                                 x-text="'Kode ' + c.teacher_code + ': ' + c.teacher_name"></div>
+                            <div class="text-[11px] text-slate-500">
+                                <span x-text="'Mapel: ' + c.subject_name + ' • Kelas: '"></span>
+                                <span class="font-extrabold text-rose-700 underline" x-text="(c.clashing_classes || []).join(' & ')"></span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0 flex-wrap">
+                            <template x-for="(clsName, cIdx) in (c.clashing_classes || [])" :key="cIdx">
+                                <button type="button"
+                                        x-show="c.item_ids && c.item_ids[cIdx]"
+                                        @click="focusConflictCell(c.item_ids[cIdx], true)"
+                                        class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition cursor-pointer"
+                                        x-text="'Pilih ' + clsName + ' →'"></button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
         </div>
     </div>
 
-    {{-- MATRIKS JADWAL HARI TERPILIH (DINAMIS 1 SHIFT / 2 SHIFT) --}}
-    @php
-        $dayMatrix = $matrixData['matrix_by_day'][$activeDay] ?? null;
-        $pagiSlots = $dayMatrix['pagi_slots'] ?? collect();
-        $siangSlots = $dayMatrix['siang_slots'] ?? collect();
-        $isTwoShift = (bool) ($matrixData['is_two_shift'] ?? false);
-        $shift1Meta = $matrixData['shift1_meta'] ?? [];
-        $shift2Meta = $matrixData['shift2_meta'] ?? [];
+    <div x-show="conflictsList.length === 0" {{ count($conflicts) > 0 ? 'x-cloak' : '' }}
+         class="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 flex items-center justify-between gap-3 shadow-2xs">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-extrabold text-sm shrink-0">
+                ✓
+            </div>
+            <div>
+                <h3 class="text-sm font-extrabold text-emerald-950">Jadwal Sempurna &amp; Bebas Bentrok</h3>
+                <p class="text-xs text-emerald-700">Tidak ada jadwal guru yang bertabrakan pada hari dan jam yang sama.</p>
+            </div>
+        </div>
+        <span class="px-2.5 py-1 rounded-md bg-emerald-200 text-emerald-900 font-bold text-xs">Valid</span>
+    </div>
 
+    {{-- Toast Feedback + Undo Penukaran Terakhir --}}
+    <div x-show="toast || lastSwapUndo" x-cloak
+         class="rounded-2xl border p-3.5 shadow-sm flex flex-wrap items-center justify-between gap-3 transition"
+         :class="toast?.type === 'error' ? 'bg-rose-50 border-rose-300 text-rose-900' : (toast?.type === 'warning' ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-emerald-50 border-emerald-300 text-emerald-900')">
+        <div class="flex items-center gap-2.5 text-xs font-bold min-w-0">
+            <span x-text="toast ? toast.message : 'Penukaran terakhir selesai.'"></span>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <button type="button" x-show="lastSwapUndo"
+                    :disabled="isSwapping"
+                    @click="executeSwap(lastSwapUndo.itemId1, lastSwapUndo.itemId2, true)"
+                    class="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs font-extrabold transition cursor-pointer shadow-2xs">
+                ⇄ Urungkan Penukaran Terakhir
+            </button>
+            <button type="button" @click="toast = null; lastSwapUndo = null" class="text-slate-500 hover:text-slate-900 font-bold px-1.5 cursor-pointer">&times;</button>
+        </div>
+    </div>
+
+    {{-- Sticky Bar saat Sel Dipilih (Select & Tap) --}}
+    <div x-show="activeSourceCell" x-cloak
+         class="sticky top-16 z-30 rounded-2xl bg-indigo-950 text-white border-2 border-amber-400 p-3.5 md:p-4 shadow-xl flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+            <span class="px-2.5 py-1 rounded-xl bg-amber-400 text-slate-950 font-black text-xs shrink-0"
+                  x-text="activeSourceCell ? ('DIPILIH: KELAS ' + activeSourceCell.class_name) : ''"></span>
+            <div class="min-w-0">
+                <div class="text-xs font-extrabold truncate"
+                     x-text="activeSourceCell ? (activeSourceCell.day_name + ' • Jam ' + activeSourceCell.period_order + ' (' + activeSourceCell.time_range + ') — ' + (activeSourceCell.teacher_code ? ('Kode ' + activeSourceCell.teacher_code + ' (' + (activeSourceCell.teacher_name || '-') + ')') : 'Slot Kosong')) : ''"></div>
+                <div class="text-[11px] text-indigo-200 mt-0.5">
+                    Arahkan &amp; tap sel berwarna <span class="text-emerald-300 font-bold">hijau (Bebas Bentrok: <span x-text="cleanTargetsCount"></span> sel)</span> atau <span class="text-amber-300 font-bold">kuning</span> di kolom Kelas <strong x-text="activeSourceCell?.class_name"></strong>.
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <button type="button"
+                    @click="let c = activeSourceCell; clearSwapSelection(); openEdit(c)"
+                    class="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition cursor-pointer">
+                Edit Guru Sel Ini
+            </button>
+            <button type="button"
+                    @click="clearSwapSelection()"
+                    class="px-3 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-extrabold transition cursor-pointer">
+                ✕ Batal Pilih (Esc)
+            </button>
+        </div>
+    </div>
+
+    {{-- Bar Filter Semua Hari + Mode Tukar Cepat + Indikator Sorot Kode Guru --}}
+    <div class="bg-white rounded-2xl border border-slate-200 p-3 shadow-2xs space-y-2.5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 min-w-0">
+                <button type="button"
+                        @click="setDayFilter('all')"
+                        class="px-3.5 py-2 rounded-xl font-extrabold text-xs transition shrink-0 cursor-pointer flex items-center gap-1.5"
+                        :class="activeDayFilter === 'all' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'">
+                    <span>SEMUA HARI (SENIN–SABTU)</span>
+                </button>
+                @foreach($daysMap as $dNum => $dName)
+                    <button type="button"
+                            @click="setDayFilter(activeDayFilter === '{{ $dNum }}' ? 'all' : '{{ $dNum }}')"
+                            class="px-3 py-2 rounded-xl font-bold text-xs transition shrink-0 cursor-pointer flex items-center gap-1.5"
+                            :class="activeDayFilter === '{{ $dNum }}' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'">
+                        <span>{{ strtoupper($dName) }}</span>
+                        <span x-show="dayConflictsCount({{ $dNum }}) > 0" x-cloak
+                              class="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold"
+                              :class="activeDayFilter === '{{ $dNum }}' ? 'bg-white text-rose-700' : 'bg-rose-100 text-rose-700'"
+                              x-text="dayConflictsCount({{ $dNum }}) + ' ⚠️'"></span>
+                    </button>
+                @endforeach
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0 flex-wrap">
+                <button type="button" x-show="highlightedTeacherCode !== ''" x-cloak
+                        @click="highlightedTeacherCode = ''"
+                        class="px-3 py-1.5 rounded-xl bg-sky-100 hover:bg-sky-200 text-sky-900 text-xs font-extrabold transition cursor-pointer">
+                    Sorot Kode <span x-text="highlightedTeacherCode"></span> &times;
+                </button>
+                <button type="button"
+                        @click="quickSwapMode = !quickSwapMode; clearSwapSelection()"
+                        class="px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+                        :class="quickSwapMode ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'"
+                        title="Jika aktif, mengklik sel normal juga langsung memilih sel untuk ditukar (Select & Tap)">
+                    <span>⇄ Mode Tukar Cepat Semua Sel</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+            <span>
+                <strong class="text-slate-700">Cara Cepat Atasi Bentrok:</strong>
+                (1) <strong>Select &amp; Tap:</strong> klik sel merah <span class="px-1 py-0.2 rounded bg-rose-600 text-white font-bold text-[10px]">BENTROK</span> lalu klik tujuan di kolom kelas sama, atau
+                (2) <strong>Drag &amp; Drop:</strong> tekan &amp; tahan lalu geser &amp; lepaskan di sel tujuan.
+            </span>
+            <span class="font-semibold text-slate-600" x-show="isSwapping" x-cloak>Menyimpan penukaran...</span>
+        </div>
+    </div>
+
+    {{-- MATRIKS JADWAL SEMUA HARI (DINAMIS 1 SHIFT / 2 SHIFT, STICKY HEADER & KOLOM KIRI) --}}
+    @php
         $gradeHeaderThemes = [
             '7' => ['th' => 'bg-emerald-50 text-emerald-900', 'btn' => 'hover:bg-emerald-50 hover:text-emerald-900'],
             '8' => ['th' => 'bg-amber-50 text-amber-900',     'btn' => 'hover:bg-amber-50 hover:text-amber-900'],
             '9' => ['th' => 'bg-blue-50 text-blue-900',       'btn' => 'hover:bg-blue-50 hover:text-blue-900'],
         ];
 
+        $hasAnySiangSlots = collect($matrixByDay)->contains(fn ($d) => count($d['siang_slots'] ?? []) > 0);
+        $mondayRef = $matrixByDay[1] ?? collect($matrixByDay)->first();
+
         $shiftSections = [
             [
                 'key' => 'pagi',
                 'title' => $shift1Meta['title'] ?? 'Jadwal 1 Shift: Semua Rombel',
-                'time_range' => $dayMatrix['pagi_time_range'] ?? '-',
+                'time_range' => $mondayRef['pagi_time_range'] ?? '-',
                 'banner_bg' => 'from-emerald-950 via-slate-900 to-slate-900',
                 'dot_bg' => 'bg-emerald-400',
                 'classes' => $shift1Meta['flat_classes'] ?? ['7A','7B','7C','7D','7E','7F','7G','8A','8B','8C','8D','8E','8F','8G','9A','9B','9C','9D','9E','9F','9G'],
-                'slots' => $pagiSlots,
-                'empty_text' => 'Belum ada data jadwal pada hari ini. Klik "Buat Jadwal Baru dari Awal" atau "Import Excel".',
+                'slot_key' => 'pagi_slots',
+                'empty_text' => 'Belum ada data jadwal. Klik "Buat Jadwal Baru dari Awal" atau "Import Excel".',
             ],
         ];
 
-        if ($isTwoShift || count($siangSlots) > 0) {
+        if ($isTwoShift || $hasAnySiangSlots) {
             $shiftSections[] = [
                 'key' => 'siang',
                 'title' => $shift2Meta['title'] ?? 'Shift Siang: Kelas VIII (8A–8G)',
-                'time_range' => $dayMatrix['siang_time_range'] ?? '-',
+                'time_range' => $mondayRef['siang_time_range'] ?? '-',
                 'banner_bg' => 'from-amber-950 via-slate-900 to-slate-900',
                 'dot_bg' => 'bg-amber-400',
                 'classes' => $shift2Meta['flat_classes'] ?? ['8A','8B','8C','8D','8E','8F','8G'],
-                'slots' => $siangSlots,
+                'slot_key' => 'siang_slots',
                 'empty_text' => 'Belum ada data jadwal untuk Shift Siang.',
             ];
         }
@@ -393,6 +1090,8 @@
             @php
                 $secClasses = $sec['classes'];
                 $secColCount = max(1, count($secClasses));
+                $secSlotKey = $sec['slot_key'];
+                $hasAnyRowInSection = collect($matrixByDay)->contains(fn ($d) => count($d[$secSlotKey] ?? []) > 0);
             @endphp
             <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
                 <div class="p-4 bg-gradient-to-r {{ $sec['banner_bg'] }} text-white flex flex-wrap items-center justify-between gap-3">
@@ -402,70 +1101,123 @@
                             {{ $sec['title'] }}
                         </h3>
                     </div>
-                    <span class="text-xs text-slate-300 font-medium">Jam Belajar: {{ $sec['time_range'] }}</span>
+                    <span class="text-xs text-slate-300 font-medium">Senin s.d. Sabtu &bull; Jam Belajar: {{ $sec['time_range'] }}</span>
                 </div>
 
-                <div class="overflow-x-auto">
+                <div data-matrix-scroll class="overflow-auto max-h-[75vh] relative">
                     <table class="w-full text-xs text-center border-collapse">
-                        <thead>
-                            <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-extrabold">
-                                <th class="p-2 border-r border-slate-200 w-12">Jam</th>
-                                <th class="p-2 border-r border-slate-200 w-28 whitespace-nowrap">Waktu</th>
+                        <thead class="sticky top-0 z-20 shadow-2xs">
+                            <tr class="bg-slate-100 border-b-2 border-slate-300 text-slate-700 font-extrabold">
+                                <th class="p-2 border-r border-slate-200 bg-slate-100 w-[72px] min-w-[72px] sticky left-0 z-30">Hari</th>
+                                <th class="p-2 border-r border-slate-200 bg-slate-100 w-[44px] min-w-[44px] sticky left-[72px] z-30">Jam</th>
+                                <th class="p-2 border-r border-slate-200 bg-slate-100 w-[96px] min-w-[96px] whitespace-nowrap sticky left-[116px] z-30">Waktu</th>
                                 @foreach($secClasses as $c)
                                     @php
                                         $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
                                         $gTh = $gradeHeaderThemes[$gKey]['th'] ?? 'bg-slate-50 text-slate-900';
                                     @endphp
-                                    <th class="p-2 border-r border-slate-200 {{ $gTh }} min-w-[52px]">{{ $c }}</th>
+                                    <th class="p-2 border-r border-slate-200 {{ $gTh }} min-w-[56px]"
+                                        :class="activeSourceCell && activeSourceCell.class_name === '{{ $c }}' ? 'ring-2 ring-inset ring-indigo-500 font-black' : ''">
+                                        {{ $c }}
+                                    </th>
                                 @endforeach
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
-                            @forelse($sec['slots'] as $slot)
-                                @if($slot['is_activity'])
-                                    <tr class="bg-amber-50/80 font-bold text-amber-900">
-                                        <td class="p-2 border-r border-slate-200 text-slate-500 font-semibold">{{ $slot['period_order'] ?: '-' }}</td>
-                                        <td class="p-2 border-r border-slate-200 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-                                        <td colspan="{{ $secColCount }}" class="p-2 text-center uppercase tracking-widest text-amber-800">
-                                            {{ $slot['activity_name'] }}
-                                        </td>
-                                    </tr>
-                                @else
-                                    <tr class="hover:bg-slate-50/60 transition">
-                                        <td class="p-2 border-r border-slate-200 font-bold text-slate-600 bg-slate-50/40">{{ $slot['period_order'] }}</td>
-                                        <td class="p-2 border-r border-slate-200 font-semibold text-slate-600 whitespace-nowrap">{{ $slot['time_range'] }}</td>
 
-                                        @foreach($secClasses as $c)
-                                            @php
-                                                $item = $slot['classes'][$c] ?? null;
-                                                $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
-                                                $gBtn = $gradeHeaderThemes[$gKey]['btn'] ?? 'hover:bg-emerald-50 hover:text-emerald-900';
-                                            @endphp
-                                            <td class="p-1 border-r border-slate-200 {{ $item?->is_conflict ? 'bg-rose-100/90 border-rose-400 font-bold text-rose-900' : '' }}">
-                                                @if($item)
-                                                    <button type="button" @click="openEdit({{ json_encode($item) }})"
-                                                            title="{{ $item->is_conflict ? $item->conflict_notes : ($item->teacher_name . ' (' . $item->subject_name . ')') }}"
-                                                            class="w-full py-1.5 px-1 rounded-lg text-center transition cursor-pointer flex flex-col items-center justify-center {{ $item->is_conflict ? 'bg-rose-600 text-white font-black ring-2 ring-rose-400 animate-pulse' : $gBtn }}">
-                                                        <span class="text-xs font-black">{{ $item->teacher_code ?: '-' }}</span>
-                                                        @if($item->is_conflict)
-                                                            <span class="text-[9px] uppercase tracking-tighter">BENTROK</span>
-                                                        @endif
-                                                    </button>
-                                                @else
-                                                    <span class="text-slate-300">-</span>
-                                                @endif
-                                            </td>
+                        @if($hasAnyRowInSection)
+                            @foreach($daysMap as $dNum => $dName)
+                                @php
+                                    $daySlots = $matrixByDay[$dNum][$secSlotKey] ?? collect();
+                                    $daySlotCount = count($daySlots);
+                                    $dayLabelUpper = $dNum === 5 ? "JUM'AT" : strtoupper($dName);
+                                @endphp
+                                @if($daySlotCount > 0)
+                                    <tbody x-show="activeDayFilter === 'all' || activeDayFilter === '{{ $dNum }}'"
+                                           data-day-section="{{ $dNum }}"
+                                           class="divide-y divide-slate-100 font-medium text-slate-800 border-t-2 border-slate-300">
+                                        @foreach($daySlots as $slotIdx => $slot)
+                                            @if($slot['is_activity'])
+                                                <tr class="bg-amber-50/80 font-bold text-amber-900">
+                                                    @if($slotIdx === 0)
+                                                        <td rowspan="{{ $daySlotCount }}"
+                                                            class="p-2 border-r border-slate-200 bg-slate-50 font-black text-[11px] text-slate-800 align-middle sticky left-0 z-10 w-[72px] min-w-[72px]">
+                                                            {{ $dayLabelUpper }}
+                                                        </td>
+                                                    @endif
+                                                    <td class="p-1.5 border-r border-slate-200 bg-amber-50 text-slate-500 font-semibold sticky left-[72px] z-10 w-[44px] min-w-[44px]">
+                                                        {{ $slot['period_order'] ?: '-' }}
+                                                    </td>
+                                                    <td class="p-1.5 border-r border-slate-200 bg-amber-50 whitespace-nowrap text-[11px] sticky left-[116px] z-10 w-[96px] min-w-[96px]">
+                                                        {{ $slot['time_range'] }}
+                                                    </td>
+                                                    <td colspan="{{ $secColCount }}" class="p-2 text-center uppercase tracking-widest text-amber-800">
+                                                        {{ $slot['activity_name'] }}
+                                                    </td>
+                                                </tr>
+                                            @else
+                                                <tr class="hover:bg-slate-50/50 transition">
+                                                    @if($slotIdx === 0)
+                                                        <td rowspan="{{ $daySlotCount }}"
+                                                            class="p-2 border-r border-slate-200 bg-slate-50 font-black text-[11px] text-slate-800 align-middle sticky left-0 z-10 w-[72px] min-w-[72px]">
+                                                            {{ $dayLabelUpper }}
+                                                        </td>
+                                                    @endif
+                                                    <td class="p-1.5 border-r border-slate-200 font-bold text-slate-600 bg-slate-50 sticky left-[72px] z-10 w-[44px] min-w-[44px]">
+                                                        {{ $slot['period_order'] }}
+                                                    </td>
+                                                    <td class="p-1.5 border-r border-slate-200 font-semibold text-slate-600 bg-white whitespace-nowrap text-[11px] sticky left-[116px] z-10 w-[96px] min-w-[96px]">
+                                                        {{ $slot['time_range'] }}
+                                                    </td>
+
+                                                    @foreach($secClasses as $c)
+                                                        @php
+                                                            $item = $slot['classes'][$c] ?? null;
+                                                            $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
+                                                            $gBtn = $gradeHeaderThemes[$gKey]['btn'] ?? 'hover:bg-emerald-50 hover:text-emerald-900';
+                                                            $cid = $item?->id ? (int) $item->id : null;
+                                                        @endphp
+                                                        <td class="p-1 border-r border-slate-200 transition-colors"
+                                                            @if($cid)
+                                                                data-schedule-cell-id="{{ $cid }}"
+                                                                :class="cellsMap[{{ $cid }}]?.is_conflict && activeSourceId !== {{ $cid }} ? 'bg-rose-100/90 border-rose-400 font-bold text-rose-900' : ''"
+                                                            @endif>
+                                                            @if($cid)
+                                                                <button type="button"
+                                                                        id="schedule-cell-{{ $cid }}"
+                                                                        data-schedule-cell-id="{{ $cid }}"
+                                                                        @click="onCellClick({{ $cid }})"
+                                                                        @pointerdown="onCellPointerDown($event, {{ $cid }})"
+                                                                        :title="cellTooltip({{ $cid }})"
+                                                                        style="touch-action: pan-x pan-y;"
+                                                                        class="w-full py-1.5 px-1 rounded-lg text-center transition select-none flex flex-col items-center justify-center relative"
+                                                                        :class="cellButtonClasses({{ $cid }}, '{{ $gBtn }}')">
+                                                                    <span class="text-xs font-black leading-tight"
+                                                                          x-text="cellsMap[{{ $cid }}]?.teacher_code || '-'">{{ $item->teacher_code ?: '-' }}</span>
+                                                                    <span x-show="cellBadgeText({{ $cid }}) !== ''"
+                                                                          x-text="cellBadgeText({{ $cid }})"
+                                                                          class="text-[8px] font-extrabold uppercase tracking-tighter leading-none mt-0.5 px-1 py-0.5 rounded"
+                                                                          :class="cellBadgeClass({{ $cid }})">{{ $item->is_conflict ? 'BENTROK' : '' }}</span>
+                                                                </button>
+                                                            @else
+                                                                <span class="text-slate-300">-</span>
+                                                            @endif
+                                                        </td>
+                                                    @endforeach
+                                                </tr>
+                                            @endif
                                         @endforeach
-                                    </tr>
+                                    </tbody>
                                 @endif
-                            @empty
+                            @endforeach
+                        @else
+                            <tbody>
                                 <tr>
-                                    <td colspan="{{ 2 + $secColCount }}" class="p-8 text-center text-slate-400">
+                                    <td colspan="{{ 3 + $secColCount }}" class="p-8 text-center text-slate-400">
                                         {{ $sec['empty_text'] }}
                                     </td>
                                 </tr>
-                            @endforelse
-                        </tbody>
+                            </tbody>
+                        @endif
                     </table>
                 </div>
             </div>
@@ -767,51 +1519,63 @@
         </div>
     </div>
 
-    {{-- LEGENDA KODE GURU, WALI KELAS & GURU PIKET (TERPUSAT DARI MASTER GURU) --}}
-    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4" x-data="{ openLegend: false }">
-        <div class="flex items-center justify-between cursor-pointer" @click="openLegend = !openLegend">
+    {{-- LEGENDA SEMUA KODE GURU, WALI KELAS & GURU PIKET (TERBUKA & BISA DISOROT KE MATRIKS) --}}
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 cursor-pointer" @click="openLegend = !openLegend">
             <div class="flex items-center gap-2 flex-wrap">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <h3 class="text-sm font-extrabold text-slate-900">Legenda Kode Guru, Wali Kelas &amp; Guru Piket (Sinkron Master Guru)</h3>
+                <h3 class="text-sm font-extrabold text-slate-900">Semua Kode Guru, Wali Kelas &amp; Guru Piket (Sinkron Master Guru)</h3>
                 <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-xs font-bold">{{ $teachers->count() }} Kode</span>
+                <span class="text-[11px] text-slate-500 font-medium hidden sm:inline">&bull; Klik kartu kode guru untuk menyorot seluruh jam mengajarnya di matriks</span>
             </div>
             <div class="flex items-center gap-3">
                 <a href="{{ route('admin.teachers.index') }}" @click.stop class="text-xs font-bold text-indigo-700 hover:underline">
                     Kelola di Master Guru &rarr;
                 </a>
-                <button type="button" class="text-xs font-bold text-emerald-700 hover:underline">
-                    <span x-text="openLegend ? 'Sembunyikan' : 'Buka Legenda Lengkap &darr;'"></span>
+                <button type="button" class="text-xs font-bold text-emerald-700 hover:underline cursor-pointer">
+                    <span x-text="openLegend ? 'Sembunyikan' : 'Buka Semua Kode Guru &darr;'"></span>
                 </button>
             </div>
         </div>
 
-        <div x-show="openLegend" x-collapse class="pt-3 border-t border-slate-100 space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
-                @foreach($teachers as $t)
-                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+        <div x-show="openLegend" x-collapse class="pt-3 border-t border-slate-100 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="relative w-full sm:w-72">
+                    <input type="text" x-model="teacherSearch"
+                           placeholder="Cari kode / nama guru / mapel..."
+                           class="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <span class="text-[11px] text-slate-500 font-semibold"
+                      x-text="'Menampilkan ' + filteredTeachersLegend.length + ' dari ' + teachersList.length + ' kode guru'"></span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 text-xs">
+                <template x-for="t in filteredTeachersLegend" :key="'leg_' + t.code">
+                    <button type="button"
+                            @click="toggleTeacherHighlight(t.code)"
+                            class="text-left p-2.5 rounded-xl border flex items-center justify-between gap-2 transition cursor-pointer"
+                            :class="highlightedTeacherCode === normCode(t.code) ? 'bg-sky-50 border-sky-400 ring-2 ring-sky-400' : 'bg-slate-50 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/40'">
                         <div class="flex items-center gap-2.5 min-w-0">
-                            <span class="w-8 h-8 rounded-lg bg-emerald-600 text-white font-extrabold flex items-center justify-center text-xs shrink-0">
-                                {{ $t->code }}
-                            </span>
+                            <span class="w-8 h-8 rounded-lg text-white font-extrabold flex items-center justify-center text-xs shrink-0"
+                                  :class="highlightedTeacherCode === normCode(t.code) ? 'bg-sky-600' : 'bg-emerald-600'"
+                                  x-text="t.code"></span>
                             <div class="min-w-0">
-                                <div class="font-bold text-slate-900 truncate">{{ $t->name }}</div>
-                                <div class="text-[11px] text-slate-500 truncate">{{ $t->subject ?: '-' }}</div>
+                                <div class="font-bold text-slate-900 truncate" x-text="t.name"></div>
+                                <div class="text-[11px] text-slate-500 truncate" x-text="t.subject || '-'"></div>
                             </div>
                         </div>
                         <div class="flex flex-col items-end gap-1 shrink-0">
-                            @if($t->homeroom_class)
-                                <span class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-bold">
-                                    Wali {{ $t->homeroom_class }}
-                                </span>
-                            @endif
-                            @if(!empty($t->piket_day))
-                                <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                                    Piket {{ $t->piket_day }}
-                                </span>
-                            @endif
+                            <template x-if="t.homeroom_class">
+                                <span class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-bold"
+                                      x-text="'Wali ' + t.homeroom_class"></span>
+                            </template>
+                            <template x-if="t.piket_day">
+                                <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold"
+                                      x-text="'Piket ' + t.piket_day"></span>
+                            </template>
                         </div>
-                    </div>
-                @endforeach
+                    </button>
+                </template>
             </div>
         </div>
     </div>
