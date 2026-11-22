@@ -1429,6 +1429,10 @@ class SchoolScheduleMasterTest extends TestCase
         $bd = Subject::query()->create(['code' => 'BD', 'name' => 'Bahasa Daerah', 'default_kktp' => 75, 'is_active' => true]);
         $bin = Subject::query()->create(['code' => 'BIN', 'name' => 'Bahasa Indonesia', 'default_kktp' => 76, 'is_active' => true]);
         $big = Subject::query()->create(['code' => 'BIG', 'name' => 'Bahasa Inggris', 'default_kktp' => 75, 'is_active' => true]);
+        $pjok = Subject::query()->create(['code' => 'PJOK', 'name' => 'Pendidikan Jasmani , Olahraga, dan Kesehatan', 'default_kktp' => 75, 'is_active' => true]);
+        $pkn = Subject::query()->create(['code' => 'PKN', 'name' => 'Pendidikan Pancasila', 'default_kktp' => 78, 'is_active' => true]);
+        $bk = Subject::query()->create(['code' => 'BK', 'name' => 'Bimbingan Konseling', 'default_kktp' => 75, 'is_active' => true]);
+        $sbd = Subject::query()->create(['code' => 'SBD', 'name' => 'Seni Budaya & Prakarya', 'default_kktp' => 78, 'is_active' => true]);
 
         TeachingClass::query()->create([
             'academic_year_id' => $year->id,
@@ -1438,13 +1442,26 @@ class SchoolScheduleMasterTest extends TestCase
             'grade_level' => 'VII',
             'homeroom_teacher_name' => '-',
         ]);
+        TeachingClass::query()->create([
+            'academic_year_id' => $year->id,
+            'teacher_id' => $guru->id,
+            'subject_id' => $pjok->id,
+            'class_name' => 'VII-B',
+            'grade_level' => 'VII',
+            'homeroom_teacher_name' => '-',
+        ]);
 
-        // Simulasikan 6 baris duplikat hasil insiden migrasi sebelumnya di server
+        // Simulasikan seluruh baris duplikat hasil insiden migrasi sebelumnya di server
         $bdaerah = Subject::query()->create(['code' => 'BDAERAH', 'name' => 'B. DAERAH', 'default_kktp' => 75, 'is_active' => true]);
         $cirebon = Subject::query()->create(['code' => 'CIREBON', 'name' => 'CIREBON', 'default_kktp' => 75, 'is_active' => true]);
         $daerah = Subject::query()->create(['code' => 'DAERAH', 'name' => 'DAERAH', 'default_kktp' => 75, 'is_active' => true]);
         $indonesi = Subject::query()->create(['code' => 'INDONESI', 'name' => 'INDONESIA', 'default_kktp' => 75, 'is_active' => true]);
         $inggris = Subject::query()->create(['code' => 'INGGRIS', 'name' => 'INGGRIS', 'default_kktp' => 75, 'is_active' => true]);
+        $penjas = Subject::query()->create(['code' => 'PENJAS', 'name' => 'PENJAS', 'default_kktp' => 75, 'is_active' => true]);
+        $penjaske = Subject::query()->create(['code' => 'PENJASKE', 'name' => 'PENJASKES', 'default_kktp' => 75, 'is_active' => true]);
+        $pendpancasila = Subject::query()->create(['code' => 'PENDPANCASIL', 'name' => 'PEND. PANCASILA', 'default_kktp' => 75, 'is_active' => true]);
+        $layananbk = Subject::query()->create(['code' => 'LAYANANBK', 'name' => 'LAYANAN BK', 'default_kktp' => 75, 'is_active' => true]);
+        $senibudaya = Subject::query()->create(['code' => 'SENIBUDAYA', 'name' => 'SENI BUDAYA', 'default_kktp' => 75, 'is_active' => true]);
         $kepsek = Subject::query()->create(['code' => 'KEPSEK', 'name' => 'Kep.Sek.', 'default_kktp' => 75, 'is_active' => true]);
 
         $kepsekUser = User::query()->create(['name' => 'Teti Kusmiyati', 'email' => 'teti@test.local', 'role' => 'guru', 'default_subject' => 'Kep.Sek.', 'password' => bcrypt('x')]);
@@ -1453,6 +1470,11 @@ class SchoolScheduleMasterTest extends TestCase
         $tetiOkt = User::query()->create(['name' => 'Teti Oktaviani', 'email' => 'teti.o@test.local', 'role' => 'guru', 'default_subject' => 'DAERAH', 'password' => bcrypt('x')]);
         $eem = User::query()->create(['name' => 'Eem Amirah', 'email' => 'eem@test.local', 'role' => 'guru', 'default_subject' => 'INDONESIA', 'password' => bcrypt('x')]);
         $tri = User::query()->create(['name' => 'Tri Mulyani', 'email' => 'tri@test.local', 'role' => 'guru', 'default_subject' => 'INGGRIS', 'password' => bcrypt('x')]);
+        $rudiPjk = User::query()->create(['name' => 'Rudi Indrawan PJK', 'email' => 'rudi.pjk@test.local', 'role' => 'guru', 'default_subject' => 'PENJAS', 'password' => bcrypt('x')]);
+        $soetanPjk = User::query()->create(['name' => 'Soetan Asrul Sani', 'email' => 'soetan.pjk@test.local', 'role' => 'guru', 'default_subject' => 'PENJASKES', 'password' => bcrypt('x')]);
+        $adePkn = User::query()->create(['name' => 'Ade Sri Putih', 'email' => 'ade.pkn@test.local', 'role' => 'guru', 'default_subject' => 'PEND. PANCASILA', 'password' => bcrypt('x')]);
+        $piohBk = User::query()->create(['name' => 'Pioh Susanti', 'email' => 'pioh.bk@test.local', 'role' => 'guru', 'default_subject' => 'LAYANAN BK', 'password' => bcrypt('x')]);
+        $nopiSbd = User::query()->create(['name' => 'Nopi Nopiani', 'email' => 'nopi.sbd@test.local', 'role' => 'guru', 'default_subject' => 'SENI BUDAYA', 'password' => bcrypt('x')]);
 
         TeacherSubject::query()->create(['user_id' => $kepsekUser->id, 'subject_id' => $kepsek->id, 'teaching_code' => '1']);
         TeacherSubject::query()->create(['user_id' => $suryati->id, 'subject_id' => $cirebon->id, 'teaching_code' => '13']);
@@ -1460,18 +1482,32 @@ class SchoolScheduleMasterTest extends TestCase
         TeacherSubject::query()->create(['user_id' => $tetiOkt->id, 'subject_id' => $daerah->id, 'teaching_code' => '24B']);
         TeacherSubject::query()->create(['user_id' => $eem->id, 'subject_id' => $indonesi->id, 'teaching_code' => '4']);
         TeacherSubject::query()->create(['user_id' => $tri->id, 'subject_id' => $inggris->id, 'teaching_code' => '10']);
+        TeacherSubject::query()->create(['user_id' => $rudiPjk->id, 'subject_id' => $penjas->id, 'teaching_code' => '3']);
+        TeacherSubject::query()->create(['user_id' => $soetanPjk->id, 'subject_id' => $penjaske->id, 'teaching_code' => '16']);
+        TeacherSubject::query()->create(['user_id' => $adePkn->id, 'subject_id' => $pendpancasila->id, 'teaching_code' => '22']);
+        TeacherSubject::query()->create(['user_id' => $piohBk->id, 'subject_id' => $layananbk->id, 'teaching_code' => '33']);
+        TeacherSubject::query()->create(['user_id' => $nopiSbd->id, 'subject_id' => $senibudaya->id, 'teaching_code' => '19']);
 
         $migration = require database_path('migrations/2026_11_23_000001_cleanup_duplicate_subjects_and_allow_nullable_teacher_subject.php');
         $migration->up();
+        $migration2 = require database_path('migrations/2026_11_23_000002_cleanup_remaining_duplicate_subjects.php');
+        $migration2->up();
 
-        $this->assertSame(3, Subject::query()->count());
+        $this->assertSame(7, Subject::query()->count());
         $this->assertDatabaseHas('teacher_subjects', ['user_id' => $kepsekUser->id, 'subject_id' => null, 'role_label' => 'Kep.Sek.', 'teaching_code_normalized' => '1']);
         $this->assertDatabaseHas('teacher_subjects', ['user_id' => $suryati->id, 'subject_id' => $bd->id, 'teaching_code_normalized' => '13']);
         $this->assertDatabaseHas('teacher_subjects', ['user_id' => $ismail->id, 'subject_id' => $bd->id, 'teaching_code_normalized' => '14B']);
         $this->assertDatabaseHas('teacher_subjects', ['user_id' => $tetiOkt->id, 'subject_id' => $bd->id, 'teaching_code_normalized' => '24B']);
         $this->assertDatabaseHas('teacher_subjects', ['user_id' => $eem->id, 'subject_id' => $bin->id, 'teaching_code_normalized' => '4']);
         $this->assertDatabaseHas('teacher_subjects', ['user_id' => $tri->id, 'subject_id' => $big->id, 'teaching_code_normalized' => '10']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $rudiPjk->id, 'subject_id' => $pjok->id, 'teaching_code_normalized' => '3']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $soetanPjk->id, 'subject_id' => $pjok->id, 'teaching_code_normalized' => '16']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $adePkn->id, 'subject_id' => $pkn->id, 'teaching_code_normalized' => '22']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $piohBk->id, 'subject_id' => $bk->id, 'teaching_code_normalized' => '33']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $nopiSbd->id, 'subject_id' => $sbd->id, 'teaching_code_normalized' => '19']);
         $this->assertSame('Bahasa Daerah', $suryati->fresh()->default_subject);
+        $this->assertSame('Pendidikan Jasmani , Olahraga, dan Kesehatan', $rudiPjk->fresh()->default_subject);
         $this->assertDatabaseHas('teaching_classes', ['subject_id' => $bd->id, 'class_name' => 'VII-A']);
+        $this->assertDatabaseHas('teaching_classes', ['subject_id' => $pjok->id, 'class_name' => 'VII-B']);
     }
 }

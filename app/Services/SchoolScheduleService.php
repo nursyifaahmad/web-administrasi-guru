@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -281,17 +282,17 @@ class SchoolScheduleService
         if (str_starts_with($cleanRaw, 'mat') || $cleanRaw === 'mtk') {
             return str_contains($cleanName, 'matematika') || $cleanCode === 'mtk';
         }
-        if (str_contains($cleanRaw, 'penjas') || str_contains($cleanRaw, 'pjok') || $cleanRaw === 'pjk') {
-            return str_contains($cleanName, 'pjok') || str_contains($cleanName, 'penjas') || $cleanCode === 'pjk';
+        if (str_contains($cleanRaw, 'penjas') || str_contains($cleanRaw, 'pjok') || str_contains($cleanRaw, 'pendidikanjasmani') || str_contains($cleanRaw, 'jasmaniolahraga') || $cleanRaw === 'pjk') {
+            return str_contains($cleanName, 'pjok') || str_contains($cleanName, 'penjas') || str_contains($cleanName, 'pendidikanjasmani') || str_contains($cleanName, 'jasmaniolahraga') || in_array($cleanCode, ['pjk', 'pjok', 'penjas'], true);
         }
-        if (str_contains($cleanRaw, 'seni') || $cleanRaw === 'sbk' || $cleanRaw === 'sbd') {
-            return str_contains($cleanName, 'seni') || $cleanCode === 'sbd';
+        if (str_contains($cleanRaw, 'seni') || $cleanRaw === 'sbk' || $cleanRaw === 'sbd' || $cleanRaw === 'sbdp') {
+            return str_contains($cleanName, 'seni') || in_array($cleanCode, ['sbd', 'sbk', 'sbdp'], true);
         }
         if (str_contains($cleanRaw, 'pancasila') || $cleanRaw === 'pkn' || $cleanRaw === 'ppkn') {
-            return str_contains($cleanName, 'pancasila') || str_contains($cleanName, 'pkn') || $cleanCode === 'pkn';
+            return str_contains($cleanName, 'pancasila') || str_contains($cleanName, 'pkn') || in_array($cleanCode, ['pkn', 'ppkn'], true);
         }
-        if ((str_contains($cleanRaw, 'agama') && str_contains($cleanRaw, 'islam')) || $cleanRaw === 'pai' || $cleanRaw === 'pabp') {
-            return str_contains($cleanName, 'agama') || str_contains($cleanName, 'pai') || $cleanCode === 'pai';
+        if ((str_contains($cleanRaw, 'agama') && str_contains($cleanRaw, 'islam')) || str_contains($cleanRaw, 'pabp') || $cleanRaw === 'pai') {
+            return str_contains($cleanName, 'agama') || str_contains($cleanName, 'pai') || in_array($cleanCode, ['pai', 'pabp'], true);
         }
         if (str_contains($cleanRaw, 'bimbingan') || str_contains($cleanRaw, 'konseling') || $cleanRaw === 'bk' || $cleanRaw === 'layananbk') {
             return str_contains($cleanName, 'bimbingan') || str_contains($cleanName, 'konseling') || $cleanCode === 'bk';
@@ -345,6 +346,161 @@ class SchoolScheduleService
         }
 
         return null;
+    }
+
+    /**
+     * Bersihkan mata pelajaran palsu/duplikat (0 kelas) agar relasinya kembali terhubung ke mapel induk sah
+     * serta pindahkan tugas non-KBM (seperti Kep.Sek.) ke teacher_subjects.role_label.
+     */
+    public static function cleanupDuplicateSubjects(): void
+    {
+        $subjects = DB::table('subjects')->orderBy('id')->get();
+        if ($subjects->isEmpty()) {
+            return;
+        }
+
+        $hasModulesTable = Schema::hasTable('teaching_modules');
+        $canonicalCodes = array_values(array_unique(array_merge(
+            collect(self::CANONICAL_SUBJECT_CATALOG)->pluck('code')->map(fn ($c) => strtoupper((string) $c))->all(),
+            ['PJOK', 'PPKN', 'PABP', 'SBDP']
+        )));
+
+        $classCounts = DB::table('teaching_classes')
+            ->selectRaw('subject_id, COUNT(*) as cnt')
+            ->groupBy('subject_id')
+            ->pluck('cnt', 'subject_id')
+            ->all();
+
+        $moduleCounts = $hasModulesTable
+            ? DB::table('teaching_modules')
+                ->selectRaw('subject_id, COUNT(*) as cnt')
+                ->groupBy('subject_id')
+                ->pluck('cnt', 'subject_id')
+                ->all()
+            : [];
+
+        $removedIds = [];
+
+        // A. Lepaskan baris non-mapel (Kep.Sek., Kepala Sekolah, Wakasek, dll.) ke teacher_subjects.role_label
+        foreach ($subjects as $sub) {
+            if (! self::isNonTeachingRoleLabel($sub->name)
+                && ! self::isNonTeachingRoleLabel($sub->code)) {
+                continue;
+            }
+
+            $usage = (int) ($classCounts[$sub->id] ?? 0) + (int) ($moduleCounts[$sub->id] ?? 0);
+            if ($usage > 0) {
+                continue;
+            }
+
+            $roleText = trim((string) $sub->name) ?: 'Kep.Sek.';
+            DB::table('teacher_subjects')
+                ->where('subject_id', $sub->id)
+                ->update([
+                    'subject_id' => null,
+                    'role_label' => $roleText,
+                ]);
+
+            DB::table('school_schedule_items')
+                ->where('subject_id', $sub->id)
+                ->update(['subject_id' => null]);
+
+            DB::table('subjects')->where('id', $sub->id)->delete();
+            $removedIds[$sub->id] = true;
+        }
+
+        // B. Susun kandidat induk mapel sah (diurutkan berdasarkan penggunaan kelas & modul tertinggi, lalu kode kanonik)
+        $remainingSubjects = $subjects->reject(fn ($s) => isset($removedIds[$s->id]))->values();
+        $usageOf = fn ($s): int => (int) ($classCounts[$s->id] ?? 0) + (int) ($moduleCounts[$s->id] ?? 0);
+
+        $canonicalTargets = $remainingSubjects->filter(function ($s) use ($usageOf, $canonicalCodes) {
+            $isCatalogCode = in_array(strtoupper(trim((string) $s->code)), $canonicalCodes, true);
+
+            return $usageOf($s) > 0 || $isCatalogCode;
+        })->sortByDesc(function ($s) use ($classCounts, $moduleCounts, $canonicalCodes) {
+            $usageScore = ((int) ($classCounts[$s->id] ?? 0) * 1000) + ((int) ($moduleCounts[$s->id] ?? 0) * 100);
+            $catalogBonus = in_array(strtoupper(trim((string) $s->code)), $canonicalCodes, true) ? 50 : 0;
+
+            return $usageScore + $catalogBonus;
+        })->values();
+
+        foreach ($remainingSubjects as $dup) {
+            if (isset($removedIds[$dup->id])) {
+                continue;
+            }
+
+            $dupUsage = $usageOf($dup);
+            if ($dupUsage > 0) {
+                continue;
+            }
+
+            $dupCode = strtoupper(trim((string) $dup->code));
+            $target = $canonicalTargets->first(function ($t) use ($dup, $dupCode, $canonicalCodes, $usageOf) {
+                if ((int) $t->id === (int) $dup->id) {
+                    return false;
+                }
+
+                // Apabila kedua-duanya 0 kelas, jangan hapus kode yang termasuk katalog kanonik
+                if ($usageOf($t) === 0 && in_array($dupCode, $canonicalCodes, true)) {
+                    return false;
+                }
+
+                return self::isSubjectLabelMatch($dup->name, $t->code, $t->name)
+                    || self::isSubjectLabelMatch($dup->code, $t->code, $t->name);
+            });
+
+            if (! $target) {
+                continue;
+            }
+
+            self::mergeSubjectRows($dup, $target);
+            $removedIds[$dup->id] = true;
+        }
+    }
+
+    protected static function mergeSubjectRows(object $dup, object $target): void
+    {
+        $dupRows = DB::table('teacher_subjects')->where('subject_id', $dup->id)->get();
+
+        foreach ($dupRows as $row) {
+            $existingCanonical = DB::table('teacher_subjects')
+                ->where('user_id', $row->user_id)
+                ->where('subject_id', $target->id)
+                ->first();
+
+            if ($existingCanonical) {
+                $dupCodeNorm = $row->teaching_code_normalized ?? null;
+                $dupCodeRaw = $row->teaching_code ?? null;
+
+                DB::table('teacher_subjects')->where('id', $row->id)->delete();
+
+                if (empty($existingCanonical->teaching_code_normalized) && ! empty($dupCodeNorm)) {
+                    DB::table('teacher_subjects')
+                        ->where('id', $existingCanonical->id)
+                        ->update([
+                            'teaching_code' => $dupCodeRaw,
+                            'teaching_code_normalized' => $dupCodeNorm,
+                        ]);
+                }
+            } else {
+                DB::table('teacher_subjects')
+                    ->where('id', $row->id)
+                    ->update(['subject_id' => $target->id]);
+            }
+        }
+
+        DB::table('school_schedule_items')
+            ->where('subject_id', $dup->id)
+            ->update([
+                'subject_id' => $target->id,
+                'subject_name' => $target->name,
+            ]);
+
+        DB::table('users')
+            ->where('default_subject', $dup->name)
+            ->update(['default_subject' => $target->name]);
+
+        DB::table('subjects')->where('id', $dup->id)->delete();
     }
 
     public const RAW_WAKASEK_CSV = <<<'CSV'
