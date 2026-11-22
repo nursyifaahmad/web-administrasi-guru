@@ -56,6 +56,22 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertOk();
         $response->assertSee('Master Jadwal Pelajaran Sekolah');
         $response->assertSee('Buat Jadwal Baru dari Awal');
+        $response->assertDontSee('+ Buat Jadwal Baru dari Awal', false);
+
+        $this->actingAs($admin)->get(route('admin.teachers.index'))
+            ->assertOk()
+            ->assertSee('Tambah Master Guru', false)
+            ->assertDontSee('+ Tambah Master Guru', false);
+
+        $this->actingAs($admin)->get(route('admin.classes.index'))
+            ->assertOk()
+            ->assertSee('Tambah Rombel Baru', false)
+            ->assertDontSee('+ Tambah Rombel Baru', false);
+
+        $this->actingAs($admin)->get(route('admin.events.index'))
+            ->assertOk()
+            ->assertSee('Tambah Hari Libur / Agenda', false)
+            ->assertDontSee('+ Tambah Hari Libur / Agenda', false);
     }
 
     public function test_guru_cannot_access_admin_schedule_management(): void

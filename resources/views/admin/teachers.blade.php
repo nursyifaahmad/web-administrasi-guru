@@ -130,7 +130,7 @@
             <button type="button" @click="openCreateModal()"
                     class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-2xs transition cursor-pointer">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                <span>+ Tambah Master Guru</span>
+                <span>Tambah Master Guru</span>
             </button>
         </div>
     </div>
