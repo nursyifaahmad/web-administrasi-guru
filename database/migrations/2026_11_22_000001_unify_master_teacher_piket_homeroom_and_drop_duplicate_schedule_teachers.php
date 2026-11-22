@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\SchoolScheduleService;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -218,32 +219,46 @@ return new class extends Migration
                 }
             }
 
-            // Cocokkan atau buat Subject dan tautkan TeacherSubject
+            // Cocokkan Subject yang sudah ada memakai alias resmi (tanpa memotong awalan Bahasa 'B.')
             $subjLabel = trim((string) ($row->subject ?? ''));
-            $subjLabelClean = trim((string) preg_replace('/^[a-z]\.\s*/i', '', $subjLabel)) ?: ($subjLabel ?: 'Mata Pelajaran');
-            $subject = $subjects->first(fn ($s) => strcasecmp($s->name, $subjLabelClean) === 0 || strcasecmp($s->code, $subjLabelClean) === 0);
+            $subject = null;
+            if ($subjLabel !== '' && ! SchoolScheduleService::isNonTeachingRoleLabel($subjLabel)) {
+                $subject = $subjects->first(fn ($s) => SchoolScheduleService::isExactSubjectLabelMatch($subjLabel, $s->code, $s->name))
+                    ?: $subjects->first(fn ($s) => SchoolScheduleService::isSubjectLabelMatch($subjLabel, $s->code, $s->name));
 
-            if (! $subject) {
-                $subjCodeBase = strtoupper(substr((string) preg_replace('/[^A-Za-z0-9]/', '', $subjLabelClean), 0, 12)) ?: ('MP' . $normCode);
-                $subjCode = $subjCodeBase;
-                $sIdx = 1;
-                while (DB::table('subjects')->where('code', $subjCode)->exists()) {
-                    $subjCode = substr($subjCodeBase, 0, 10) . $sIdx++;
+                if (! $subject) {
+                    $cleanName = SchoolScheduleService::normalizeSubjectLabel($subjLabel) ?: $subjLabel;
+                    $subjCodeBase = null;
+                    foreach (SchoolScheduleService::CANONICAL_SUBJECT_CATALOG as $canon) {
+                        if (SchoolScheduleService::isSubjectLabelMatch($subjLabel, $canon['code'], $canon['name'])) {
+                            $cleanName = $canon['name'];
+                            $subjCodeBase = $canon['code'];
+                            break;
+                        }
+                    }
+
+                    $subjCodeBase = $subjCodeBase
+                        ?: (strtoupper(substr((string) preg_replace('/[^A-Za-z0-9]/', '', $cleanName), 0, 12)) ?: ('MP' . $normCode));
+                    $subjCode = $subjCodeBase;
+                    $sIdx = 1;
+                    while (DB::table('subjects')->where('code', $subjCode)->exists()) {
+                        $subjCode = substr($subjCodeBase, 0, 10) . $sIdx++;
+                    }
+
+                    $newSubjId = DB::table('subjects')->insertGetId([
+                        'code' => $subjCode,
+                        'name' => $cleanName,
+                        'default_kktp' => 75,
+                        'is_active' => true,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                    $subject = DB::table('subjects')->where('id', $newSubjId)->first();
+                    $subjects->push($subject);
                 }
-
-                $newSubjId = DB::table('subjects')->insertGetId([
-                    'code' => $subjCode,
-                    'name' => $subjLabelClean,
-                    'default_kktp' => 75,
-                    'is_active' => true,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-                $subject = DB::table('subjects')->where('id', $newSubjId)->first();
-                $subjects->push($subject);
             }
 
-            if (! isset($usedNormalizedCodes[$normCode])) {
+            if ($subject && ! isset($usedNormalizedCodes[$normCode])) {
                 $existingPair = DB::table('teacher_subjects')
                     ->where('user_id', $user->id)
                     ->where('subject_id', $subject->id)
@@ -310,8 +325,8 @@ return new class extends Migration
                 ->update([
                     'user_id' => $user->id,
                     'teacher_name' => $user->name,
-                    'subject_id' => $subject->id,
-                    'subject_name' => $subject->name,
+                    'subject_id' => $subject?->id,
+                    'subject_name' => $subject?->name ?? ($subjLabel ?: null),
                 ]);
         }
     }

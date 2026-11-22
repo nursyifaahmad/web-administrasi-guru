@@ -142,14 +142,16 @@ class SchoolScheduleController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function ($u) {
-                $subjects = $u->teacherSubjects->map(function ($ts) {
-                    return [
-                        'subject_id' => $ts->subject_id,
-                        'subject_name' => $ts->subject?->name,
-                        'subject_code' => $ts->subject?->code,
-                        'teaching_code' => $ts->teaching_code,
-                    ];
-                })->values()->all();
+                $subjects = $u->teacherSubjects
+                    ->filter(fn ($ts) => $ts->subject_id !== null || ! empty($ts->role_label))
+                    ->map(function ($ts) {
+                        return [
+                            'subject_id' => $ts->subject_id,
+                            'subject_name' => $ts->subject?->name ?: $ts->role_label,
+                            'subject_code' => $ts->subject?->code,
+                            'teaching_code' => $ts->teaching_code,
+                        ];
+                    })->values()->all();
 
                 if (empty($subjects) && ! empty($u->default_subject)) {
                     $subjects = [[

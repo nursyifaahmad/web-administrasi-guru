@@ -128,59 +128,223 @@ class SchoolScheduleService
     }
 
     /**
-     * Membandingkan teks nama mata pelajaran dari jadwal/CSV dengan master data Subject
-     * Mendukung singkatan seperti B. INGGRIS -> Bahasa Inggris, PENJAS -> PJOK, dll.
+     * Katalog kanonik mata pelajaran standar SMP sebagai rujukan pencocokan alias dan inisialisasi awal DB kosong.
+     *
+     * @var list<array{code: string, name: string}>
      */
-    public static function isSubjectMatch(?string $rawSubject, Subject $subject): bool
+    public const CANONICAL_SUBJECT_CATALOG = [
+        ['code' => 'MTK', 'name' => 'Matematika'],
+        ['code' => 'BIN', 'name' => 'Bahasa Indonesia'],
+        ['code' => 'BIG', 'name' => 'Bahasa Inggris'],
+        ['code' => 'IPA', 'name' => 'Ilmu Pengetahuan Alam'],
+        ['code' => 'IPS', 'name' => 'Ilmu Pengetahuan Sosial'],
+        ['code' => 'PKN', 'name' => 'Pendidikan Pancasila'],
+        ['code' => 'PAI', 'name' => 'Pendidikan Agama Islam & Budi Pekerti'],
+        ['code' => 'INF', 'name' => 'Informatika'],
+        ['code' => 'PJK', 'name' => 'PJOK'],
+        ['code' => 'SBD', 'name' => 'Seni Budaya & Prakarya'],
+        ['code' => 'BD', 'name' => 'Bahasa Daerah'],
+        ['code' => 'BK', 'name' => 'Bimbingan Konseling'],
+    ];
+
+    /**
+     * Deteksi apakah teks pada kolom mata pelajaran adalah jabatan/tugas non-KBM (mis. Kep.Sek.),
+     * yang tidak boleh dijadikan baris Mata Pelajaran / KKTP.
+     */
+    public static function isNonTeachingRoleLabel(?string $rawLabel): bool
     {
-        if (empty($rawSubject)) {
+        $clean = self::cleanAlphaString($rawLabel);
+        if ($clean === '') {
             return false;
         }
 
-        $cleanRaw = self::cleanAlphaString($rawSubject);
-        $cleanName = self::cleanAlphaString($subject->name);
-        $cleanCode = strtolower(trim($subject->code ?? ''));
-
-        if ($cleanRaw === $cleanName || $cleanRaw === $cleanCode) {
+        if (in_array($clean, [
+            'kepsek',
+            'kepalasekolah',
+            'kepalamadrasah',
+            'kepalasek',
+            'wakasek',
+            'wakilkepalasekolah',
+            'wakilkapalasekolah',
+            'tu',
+            'tatausaha',
+            'kepalatu',
+            'bendahara',
+            'operator',
+        ], true)) {
             return true;
         }
 
-        if (str_starts_with($cleanName, $cleanRaw) || str_starts_with($cleanRaw, $cleanName)) {
+        return str_starts_with($clean, 'kepsek') || str_starts_with($clean, 'kepalasekolah');
+    }
+
+    /**
+     * Bersihkan teks mata pelajaran tanpa merusak awalan huruf Bahasa (`B.`),
+     * membuang bullet opsi (`a.`, `b. B.`), serta memperluas singkatan `B.` -> `Bahasa`.
+     */
+    public static function normalizeSubjectLabel(?string $rawLabel): string
+    {
+        $label = trim((string) preg_replace('/\s+/', ' ', trim((string) $rawLabel)));
+        if ($label === '') {
+            return '';
+        }
+
+        // Hapus bullet opsi sub-item (contoh: "a.PAI", "a. SENI BUDAYA", "b. B. DAERAH") tanpa menghapus "B.INDONESIA"
+        $label = trim((string) preg_replace('/^(?:a\.\s*|[b-z]\.\s*(?=[a-z]\.))/i', '', $label));
+
+        // Ekspansi "B." / "Bhs." menjadi "Bahasa "
+        $label = trim((string) preg_replace('/^(?:bhs|b)\.\s*/i', 'Bahasa ', $label));
+
+        return trim((string) preg_replace('/\s+/', ' ', $label));
+    }
+
+    /**
+     * Pencocokan persis (prioritas utama sebelum alias luas) terhadap sepasang kode & nama mata pelajaran.
+     */
+    public static function isExactSubjectLabelMatch(?string $rawSubject, ?string $subjectCode, ?string $subjectName): bool
+    {
+        if (empty($rawSubject) || self::isNonTeachingRoleLabel($rawSubject)) {
+            return false;
+        }
+
+        $cleanRaw = self::cleanAlphaString(self::normalizeSubjectLabel($rawSubject));
+        $cleanRawOriginal = self::cleanAlphaString($rawSubject);
+        $cleanName = self::cleanAlphaString(self::normalizeSubjectLabel($subjectName));
+        $cleanCode = strtolower(trim((string) $subjectCode));
+
+        if ($cleanRaw === '' && $cleanRawOriginal === '') {
+            return false;
+        }
+
+        if ($cleanRaw === $cleanName || $cleanRawOriginal === $cleanName) {
             return true;
         }
 
-        $expandedRaw = preg_replace('/^b([a-z]+)/', 'bahasa$1', $cleanRaw);
-        if ($expandedRaw === $cleanName || str_starts_with($cleanName, $expandedRaw) || str_starts_with($expandedRaw, $cleanName)) {
+        if ($cleanCode !== '' && ($cleanRaw === $cleanCode || $cleanRawOriginal === $cleanCode)) {
             return true;
         }
 
-        if (str_contains($cleanRaw, 'inggris') && str_contains($cleanName, 'inggris')) {
+        // Jika sekolah secara khusus punya mapel bernama "Bahasa Cirebon" atau "Bahasa Sunda"
+        if (str_contains($cleanRaw, 'cirebon') && str_contains($cleanName, 'cirebon')) {
             return true;
         }
-        if (str_contains($cleanRaw, 'indonesia') && str_contains($cleanName, 'indonesia')) {
-            return true;
-        }
-        if ((str_starts_with($cleanRaw, 'mat') || $cleanRaw === 'mtk') && str_contains($cleanName, 'matematika')) {
-            return true;
-        }
-        if (str_contains($cleanRaw, 'penjas') || str_contains($cleanRaw, 'pjok')) {
-            return str_contains($cleanName, 'pjok') || str_contains($cleanName, 'penjas');
-        }
-        if (str_contains($cleanRaw, 'seni') && str_contains($cleanName, 'seni')) {
-            return true;
-        }
-        if (str_contains($cleanRaw, 'pancasila') || str_contains($cleanRaw, 'pkn')) {
-            return str_contains($cleanName, 'pancasila') || str_contains($cleanName, 'pkn');
-        }
-        if (str_contains($cleanRaw, 'agama') || str_contains($cleanRaw, 'pai')) {
-            return str_contains($cleanName, 'agama') || str_contains($cleanName, 'pai');
-        }
-
-        if (strlen($cleanRaw) >= 4 && str_contains($cleanName, $cleanRaw)) {
+        if (str_contains($cleanRaw, 'sunda') && str_contains($cleanName, 'sunda')) {
             return true;
         }
 
         return false;
+    }
+
+    /**
+     * Membandingkan teks nama mata pelajaran dari jadwal/CSV terhadap kode & nama master Subject (termasuk alias).
+     * Mendukung B.INDONESIA -> BIN, B. INGGRIS -> BIG, b. B. DAERAH / B. DAERAH / B. CIREBON -> BD, PENJAS -> PJOK, dll.
+     */
+    public static function isSubjectLabelMatch(?string $rawSubject, ?string $subjectCode, ?string $subjectName): bool
+    {
+        if (empty($rawSubject) || self::isNonTeachingRoleLabel($rawSubject)) {
+            return false;
+        }
+
+        if (self::isExactSubjectLabelMatch($rawSubject, $subjectCode, $subjectName)) {
+            return true;
+        }
+
+        $cleanRaw = self::cleanAlphaString(self::normalizeSubjectLabel($rawSubject));
+        $cleanName = self::cleanAlphaString(self::normalizeSubjectLabel($subjectName));
+        $cleanCode = strtolower(trim((string) $subjectCode));
+
+        if ($cleanRaw === '') {
+            return false;
+        }
+
+        if (strlen($cleanRaw) >= 3 && strlen($cleanName) >= 3
+            && (str_starts_with($cleanName, $cleanRaw) || str_starts_with($cleanRaw, $cleanName))) {
+            return true;
+        }
+
+        $expandedRaw = preg_replace('/^b([a-z]{3,})/', 'bahasa$1', $cleanRaw);
+        if ($expandedRaw === $cleanName
+            || (strlen((string) $expandedRaw) >= 3 && strlen($cleanName) >= 3
+                && (str_starts_with($cleanName, (string) $expandedRaw) || str_starts_with((string) $expandedRaw, $cleanName)))) {
+            return true;
+        }
+
+        if (str_contains($cleanRaw, 'inggris') || $cleanRaw === 'bing' || $cleanRaw === 'big') {
+            return str_contains($cleanName, 'inggris') || $cleanCode === 'big';
+        }
+        if (str_contains($cleanRaw, 'indonesi') || $cleanRaw === 'bindo' || $cleanRaw === 'bin') {
+            return str_contains($cleanName, 'indonesi') || $cleanCode === 'bin';
+        }
+        if (str_contains($cleanRaw, 'daerah') || str_contains($cleanRaw, 'cirebon') || $cleanRaw === 'bd' || str_contains($cleanRaw, 'mulok')) {
+            return str_contains($cleanName, 'daerah') || $cleanCode === 'bd';
+        }
+        if (str_starts_with($cleanRaw, 'mat') || $cleanRaw === 'mtk') {
+            return str_contains($cleanName, 'matematika') || $cleanCode === 'mtk';
+        }
+        if (str_contains($cleanRaw, 'penjas') || str_contains($cleanRaw, 'pjok') || $cleanRaw === 'pjk') {
+            return str_contains($cleanName, 'pjok') || str_contains($cleanName, 'penjas') || $cleanCode === 'pjk';
+        }
+        if (str_contains($cleanRaw, 'seni') || $cleanRaw === 'sbk' || $cleanRaw === 'sbd') {
+            return str_contains($cleanName, 'seni') || $cleanCode === 'sbd';
+        }
+        if (str_contains($cleanRaw, 'pancasila') || $cleanRaw === 'pkn' || $cleanRaw === 'ppkn') {
+            return str_contains($cleanName, 'pancasila') || str_contains($cleanName, 'pkn') || $cleanCode === 'pkn';
+        }
+        if ((str_contains($cleanRaw, 'agama') && str_contains($cleanRaw, 'islam')) || $cleanRaw === 'pai' || $cleanRaw === 'pabp') {
+            return str_contains($cleanName, 'agama') || str_contains($cleanName, 'pai') || $cleanCode === 'pai';
+        }
+        if (str_contains($cleanRaw, 'bimbingan') || str_contains($cleanRaw, 'konseling') || $cleanRaw === 'bk' || $cleanRaw === 'layananbk') {
+            return str_contains($cleanName, 'bimbingan') || str_contains($cleanName, 'konseling') || $cleanCode === 'bk';
+        }
+        if (str_contains($cleanRaw, 'informatika') || $cleanRaw === 'tik' || $cleanRaw === 'inf') {
+            return str_contains($cleanName, 'informatika') || $cleanCode === 'inf';
+        }
+        if (str_contains($cleanRaw, 'pengetahuanalam') || $cleanRaw === 'ipa') {
+            return str_contains($cleanName, 'pengetahuanalam') || $cleanCode === 'ipa';
+        }
+        if (str_contains($cleanRaw, 'pengetahuansosial') || $cleanRaw === 'ips') {
+            return str_contains($cleanName, 'pengetahuansosial') || $cleanCode === 'ips';
+        }
+
+        if (strlen($cleanRaw) >= 5 && str_contains($cleanName, $cleanRaw)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Membandingkan teks nama mata pelajaran dari jadwal/CSV dengan master data Subject.
+     */
+    public static function isSubjectMatch(?string $rawSubject, Subject $subject): bool
+    {
+        return self::isSubjectLabelMatch($rawSubject, $subject->code, $subject->name);
+    }
+
+    /**
+     * Cari Subject tercocok pada koleksi Subject dengan prioritas kecocokan persis sebelum alias.
+     *
+     * @param  iterable<Subject>  $subjects
+     */
+    public static function findBestMatchingSubject(?string $rawSubject, iterable $subjects): ?Subject
+    {
+        if (empty($rawSubject) || self::isNonTeachingRoleLabel($rawSubject)) {
+            return null;
+        }
+
+        foreach ($subjects as $s) {
+            if (self::isExactSubjectLabelMatch($rawSubject, $s->code, $s->name)) {
+                return $s;
+            }
+        }
+
+        foreach ($subjects as $s) {
+            if (self::isSubjectLabelMatch($rawSubject, $s->code, $s->name)) {
+                return $s;
+            }
+        }
+
+        return null;
     }
 
     public const RAW_WAKASEK_CSV = <<<'CSV'
@@ -345,7 +509,7 @@ CSV;
             }
 
             // Sinkronkan Master Guru (users + teacher_subjects + piket_days) & Wali Kelas (school_classes)
-            $codeTeacherMap = $this->syncImportedMasterEntities($academicYear, $teachersData, $piketEntries, $homeroomMap);
+            $codeTeacherMap = $this->syncImportedMasterEntities($academicYear, $teachersData, $piketEntries, $homeroomMap, true);
 
             // Bersihkan items lama pada tahun ajaran ini
             SchoolScheduleItem::query()->where('academic_year_id', $academicYear->id)->delete();
@@ -551,7 +715,7 @@ CSV;
                     'id' => $ts->id,
                     'code' => $ts->teaching_code_normalized ?: self::normalizeTeachingCode($ts->teaching_code),
                     'name' => $user->name,
-                    'subject' => $ts->subject?->name ?? ($user->default_subject ?: '-'),
+                    'subject' => $ts->subject?->name ?? ($ts->role_label ?: ($user->default_subject ?: '-')),
                     'subject_code' => $ts->subject?->code,
                     'subject_id' => $ts->subject_id,
                     'user_id' => $user->id,
@@ -655,7 +819,7 @@ CSV;
                 }
 
                 $user = $ts->user;
-                $subjectName = $ts->subject?->name ?? $user->default_subject;
+                $subjectName = $ts->subject?->name ?? ($ts->role_label ?: $user->default_subject);
 
                 $affected = SchoolScheduleItem::query()
                     ->where('academic_year_id', $academicYear->id)
@@ -720,7 +884,8 @@ CSV;
         AcademicYear $academicYear,
         array $parsedTeachers,
         array $parsedPiket,
-        array $parsedHomerooms
+        array $parsedHomerooms,
+        bool $allowCanonicalSubjectCreation = false
     ): array {
         // 1. Validasi anti-bentrok internal & terhadap pemilik kode aktif di Master Guru
         $normalizedFileTeachers = [];
@@ -800,34 +965,82 @@ CSV;
                 $user->update(['is_active' => true]);
             }
 
-            $subject = $this->resolveOrCreateSubjectFromLabel($tData['subject'], $normCode, $subjects);
+            $resolved = $this->resolveImportedSubjectAssignment(
+                $tData['subject'],
+                $normCode,
+                $holderTs,
+                $user,
+                $subjects,
+                $allowCanonicalSubjectCreation
+            );
 
-            $existingPair = TeacherSubject::query()
-                ->where('user_id', $user->id)
-                ->where('subject_id', $subject->id)
-                ->first();
+            $subject = $resolved['subject'];
+            $roleLabel = $resolved['role_label'];
 
-            if ($existingPair) {
-                if ($existingPair->teaching_code_normalized !== $normCode) {
-                    $existingPair->update(['teaching_code' => $normCode]);
+            if ($subject) {
+                $existingPair = TeacherSubject::query()
+                    ->where('user_id', $user->id)
+                    ->where('subject_id', $subject->id)
+                    ->first();
+
+                if ($existingPair) {
+                    $dirtyUpdates = [];
+                    if ($existingPair->teaching_code_normalized !== $normCode) {
+                        $dirtyUpdates['teaching_code'] = $normCode;
+                    }
+                    if ($existingPair->role_label !== null) {
+                        $dirtyUpdates['role_label'] = null;
+                    }
+                    if (! empty($dirtyUpdates)) {
+                        $existingPair->update($dirtyUpdates);
+                    }
+                } else {
+                    TeacherSubject::query()->create([
+                        'user_id' => $user->id,
+                        'subject_id' => $subject->id,
+                        'role_label' => null,
+                        'teaching_code' => $normCode,
+                    ]);
                 }
+
+                $displaySubject = $subject->name;
+                $subjectId = $subject->id;
             } else {
-                TeacherSubject::query()->create([
-                    'user_id' => $user->id,
-                    'subject_id' => $subject->id,
-                    'teaching_code' => $normCode,
-                ]);
+                $existingNonSubject = ($holderTs && $holderTs->user_id === $user->id && $holderTs->subject_id === null)
+                    ? $holderTs
+                    : TeacherSubject::query()
+                        ->where('user_id', $user->id)
+                        ->whereNull('subject_id')
+                        ->where('teaching_code_normalized', $normCode)
+                        ->first();
+
+                if ($existingNonSubject) {
+                    $existingNonSubject->update([
+                        'role_label' => $roleLabel,
+                        'teaching_code' => $normCode,
+                    ]);
+                } else {
+                    TeacherSubject::query()->create([
+                        'user_id' => $user->id,
+                        'subject_id' => null,
+                        'role_label' => $roleLabel,
+                        'teaching_code' => $normCode,
+                    ]);
+                }
+
+                $displaySubject = $roleLabel;
+                $subjectId = null;
             }
 
-            if (empty($user->default_subject)) {
-                $user->update(['default_subject' => $subject->name]);
+            if (empty($user->default_subject) && ! empty($displaySubject)) {
+                $user->update(['default_subject' => $displaySubject]);
             }
 
             $codeMetaMap[$normCode] = [
                 'user_id' => $user->id,
                 'name' => $user->name,
-                'subject' => $subject->name,
-                'subject_id' => $subject->id,
+                'subject' => $displaySubject,
+                'subject_id' => $subjectId,
             ];
         }
 
@@ -837,7 +1050,7 @@ CSV;
                 $codeMetaMap[$normCode] = [
                     'user_id' => $ts->user->id,
                     'name' => $ts->user->name,
-                    'subject' => $ts->subject?->name ?? $ts->user->default_subject,
+                    'subject' => $ts->subject?->name ?? ($ts->role_label ?: $ts->user->default_subject),
                     'subject_id' => $ts->subject_id,
                 ];
             }
@@ -935,7 +1148,9 @@ CSV;
         }
 
         $cleanSubj = $subjectLabel !== null
-            ? trim((string) preg_replace('/^[a-z]\.\s*/i', '', trim($subjectLabel)))
+            ? (self::isNonTeachingRoleLabel($subjectLabel)
+                ? trim($subjectLabel)
+                : self::normalizeSubjectLabel($subjectLabel))
             : null;
 
         $created = User::query()->create([
@@ -952,20 +1167,87 @@ CSV;
         return $created;
     }
 
-    protected function resolveOrCreateSubjectFromLabel(?string $rawLabel, string $codeSeed, Collection $subjectsCache): Subject
-    {
-        $clean = trim((string) preg_replace('/^[a-z]\.\s*/i', '', trim((string) $rawLabel)));
-        if ($clean === '') {
-            $clean = 'Mata Pelajaran';
+    /**
+     * Selesaikan penugasan mapel/jabatan dari label CSV/Excel tanpa membuat mata pelajaran duplikat.
+     *
+     * @return array{subject: ?Subject, role_label: ?string}
+     *
+     * @throws \InvalidArgumentException
+     */
+    protected function resolveImportedSubjectAssignment(
+        ?string $rawLabel,
+        string $codeSeed,
+        ?TeacherSubject $holderTs,
+        User $user,
+        Collection $subjectsCache,
+        bool $allowCanonicalSubjectCreation = false
+    ): array {
+        $trimmed = trim((string) $rawLabel);
+
+        // 1. Jabatan non-KBM (seperti Kep.Sek.) -> jangan pernah buat Mata Pelajaran baru di tabel subjects
+        if (self::isNonTeachingRoleLabel($trimmed)) {
+            return [
+                'subject' => null,
+                'role_label' => $trimmed,
+            ];
         }
 
-        $matched = $subjectsCache->first(fn (Subject $s) => self::isSubjectMatch($clean, $s));
+        // 2. Jika kolom Mata Pelajaran kosong pada baris legenda, gunakan relasi existing bila ada
+        if ($trimmed === '') {
+            if ($holderTs) {
+                return [
+                    'subject' => $holderTs->subject,
+                    'role_label' => $holderTs->role_label,
+                ];
+            }
+            if (! empty($user->default_subject)) {
+                return $this->resolveImportedSubjectAssignment(
+                    $user->default_subject,
+                    $codeSeed,
+                    null,
+                    $user,
+                    $subjectsCache,
+                    $allowCanonicalSubjectCreation
+                );
+            }
+
+            throw new \InvalidArgumentException(
+                "Kolom Mata Pelajaran untuk Kode Guru '{$codeSeed}' ({$user->name}) kosong. Pilih/isi nama mata pelajaran yang terdaftar di Master Mapel & KKTP."
+            );
+        }
+
+        // 3. Cocokkan ketat terhadap Master Mata Pelajaran yang sudah ada (termasuk alias pintar)
+        $matched = self::findBestMatchingSubject($trimmed, $subjectsCache);
         if ($matched) {
-            return $matched;
+            return [
+                'subject' => $matched,
+                'role_label' => null,
+            ];
         }
 
-        $baseCode = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $clean));
-        $baseCode = substr($baseCode ?: ('MP' . $codeSeed), 0, 12);
+        // 4. Pada Import Excel/CSV dari admin, dilarang keras membuat baris Subject baru secara otomatis
+        if (! $allowCanonicalSubjectCreation) {
+            throw new \InvalidArgumentException(
+                "Mata pelajaran '{$trimmed}' pada Kode Guru '{$codeSeed}' belum terdaftar di Master Mata Pelajaran & KKTP. Tambahkan atau perbaiki penamaannya di menu Admin -> Master Mapel & KKTP terlebih dahulu."
+            );
+        }
+
+        // 5. Hanya untuk inisialisasi awal template Wakasek pada database kosong: buat dari katalog kanonik bersih
+        $cleanName = self::normalizeSubjectLabel($trimmed) ?: $trimmed;
+        $baseCode = null;
+        foreach (self::CANONICAL_SUBJECT_CATALOG as $canon) {
+            if (self::isSubjectLabelMatch($trimmed, $canon['code'], $canon['name'])) {
+                $cleanName = $canon['name'];
+                $baseCode = $canon['code'];
+                break;
+            }
+        }
+
+        if ($baseCode === null) {
+            $baseCode = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $cleanName));
+            $baseCode = substr($baseCode ?: ('MP' . $codeSeed), 0, 12);
+        }
+
         $subjCode = $baseCode;
         $i = 1;
         while (Subject::query()->where('code', $subjCode)->exists()) {
@@ -974,14 +1256,17 @@ CSV;
 
         $created = Subject::query()->create([
             'code' => $subjCode,
-            'name' => $clean,
+            'name' => $cleanName,
             'default_kktp' => 75,
             'is_active' => true,
         ]);
 
         $subjectsCache->push($created);
 
-        return $created;
+        return [
+            'subject' => $created,
+            'role_label' => null,
+        ];
     }
 
     public static function formatClassDisplayName(string $normalizedClassCode): string
@@ -1769,7 +2054,7 @@ CSV;
 
             if ($ts && $ts->user) {
                 $teacherName = $ts->user->name;
-                $subjectName = $ts->subject?->name ?? $ts->user->default_subject;
+                $subjectName = $ts->subject?->name ?? ($ts->role_label ?: $ts->user->default_subject);
                 $userId = $ts->user_id;
                 $subjectId = $ts->subject_id;
             }
@@ -1979,7 +2264,12 @@ CSV;
             ->values()
             ->all();
 
-        $subjectNames = $teacherSubjects->map(fn (TeacherSubject $ts) => $ts->subject?->name)->filter()->unique()->values()->all();
+        $subjectNames = $teacherSubjects
+            ->map(fn (TeacherSubject $ts) => $ts->subject?->name ?: $ts->role_label)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
 
         if ($user->exists && $user->id) {
             // Tautkan slot jadwal yang belum terhubung user_id bila kode atau namanya cocok
@@ -3055,8 +3345,8 @@ CSV;
             $parsedHomerooms,
             $parsedItems
         ) {
-            // 1. Validasi anti-bentrok & sinkronkan langsung ke Master Guru, Piket, dan Master Rombel
-            $codeTeacherMap = $this->syncImportedMasterEntities($academicYear, $parsedTeachers, $parsedPiket, $parsedHomerooms);
+            // 1. Validasi anti-bentrok & sinkronkan langsung ke Master Guru, Piket, dan Master Rombel (dilarang buat mapel baru otomatis)
+            $codeTeacherMap = $this->syncImportedMasterEntities($academicYear, $parsedTeachers, $parsedPiket, $parsedHomerooms, false);
 
             // 2. Pastikan seluruh rombel pada matriks tersedia di Master Rombel
             $allClassCodes = collect($parsedItems)->pluck('class_name')->unique()->filter()->values();

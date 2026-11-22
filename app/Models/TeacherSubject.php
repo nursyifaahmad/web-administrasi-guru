@@ -10,6 +10,7 @@ class TeacherSubject extends Model
     protected $fillable = [
         'user_id',
         'subject_id',
+        'role_label',
         'teaching_code',
         'teaching_code_normalized',
     ];
@@ -38,5 +39,10 @@ class TeacherSubject extends Model
     public function subject(): BelongsTo
     {
         return $this->belongsTo(Subject::class, 'subject_id');
+    }
+
+    public function getDisplayLabelAttribute(): string
+    {
+        return $this->subject?->name ?: ($this->role_label ?: '-');
     }
 }

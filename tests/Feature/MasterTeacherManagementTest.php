@@ -408,4 +408,35 @@ class MasterTeacherManagementTest extends TestCase
         $jadwalUtama->assertSee('Siti Aminah, S.Pd.');
         $jadwalUtama->assertSee('Kelas 7A');
     }
+
+    public function test_admin_can_save_non_subject_role_like_kepsek_without_creating_subject(): void
+    {
+        [$admin, $teacher, $year, $subjectMtk, $subjectIpa] = $this->createEnvironment();
+        $initialSubjectCount = Subject::query()->count();
+
+        $createResp = $this->actingAs($admin)->post(route('admin.teachers.store'), [
+            'name' => 'Teti Kusmiyati, S.Pd., MM',
+            'email' => 'kepsek.test@smpn2lemahabang.sch.id',
+            'role' => 'guru',
+            'password' => 'guru123',
+            'teacher_subjects' => [
+                ['subject_id' => '', 'role_label' => 'Kep.Sek.', 'teaching_code' => '1'],
+            ],
+        ]);
+        $createResp->assertRedirect();
+        $createResp->assertSessionHas('success');
+
+        $kepsek = User::query()->where('email', 'kepsek.test@smpn2lemahabang.sch.id')->firstOrFail();
+        $this->assertSame($initialSubjectCount, Subject::query()->count());
+        $this->assertDatabaseHas('teacher_subjects', [
+            'user_id' => $kepsek->id,
+            'subject_id' => null,
+            'role_label' => 'Kep.Sek.',
+            'teaching_code_normalized' => '1',
+        ]);
+
+        $indexResp = $this->actingAs($admin)->get(route('admin.teachers.index'));
+        $indexResp->assertOk();
+        $indexResp->assertSee('Kep.Sek.');
+    }
 }

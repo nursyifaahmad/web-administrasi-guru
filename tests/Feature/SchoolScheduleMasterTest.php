@@ -125,9 +125,15 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertRedirect(route('admin.schedules.master.index'));
         $response->assertSessionHas('status');
 
-        // Check that 21 classes and 36 master teaching codes exist
+        // Check that 21 classes and 36 master teaching codes exist, without creating bogus subjects
         $this->assertSame(36, TeacherSubject::query()->whereNotNull('teaching_code_normalized')->count());
         $this->assertSame(21, SchoolClass::query()->where('academic_year_id', $year->id)->count());
+        $this->assertSame(0, Subject::query()->whereIn('code', ['BDAERAH', 'CIREBON', 'DAERAH', 'INDONESI', 'INGGRIS', 'KEPSEK'])->count());
+        $this->assertDatabaseHas('teacher_subjects', [
+            'teaching_code_normalized' => '1',
+            'subject_id' => null,
+            'role_label' => 'Kep.Sek.',
+        ]);
         $conflictCount = SchoolScheduleItem::query()->where('academic_year_id', $year->id)->where('is_conflict', true)->count();
         $this->assertGreaterThan(0, $conflictCount);
     }
@@ -970,6 +976,7 @@ class SchoolScheduleMasterTest extends TestCase
         [$admin, $guru, $year] = $this->createEnvironment();
 
         $mtk = Subject::query()->create(['name' => 'MATEMATIKA', 'code' => 'MTK', 'default_kktp' => 75, 'is_active' => true]);
+        Subject::query()->create(['name' => 'Informatika', 'code' => 'INF', 'default_kktp' => 76, 'is_active' => true]);
         $pjok = Subject::query()->create(['name' => 'Penjasorkes', 'code' => 'PJOK', 'default_kktp' => 75, 'is_active' => true]);
 
         $budi = User::query()->create([
@@ -1078,6 +1085,7 @@ class SchoolScheduleMasterTest extends TestCase
         [$admin, $guru, $year] = $this->createEnvironment();
 
         $mtk = Subject::query()->create(['name' => 'MATEMATIKA', 'code' => 'MTK', 'default_kktp' => 75, 'is_active' => true]);
+        Subject::query()->create(['name' => 'Informatika', 'code' => 'INF', 'default_kktp' => 76, 'is_active' => true]);
         TeacherSubject::query()->create([
             'user_id' => $guru->id,
             'subject_id' => $mtk->id,
@@ -1339,5 +1347,131 @@ class SchoolScheduleMasterTest extends TestCase
             @unlink($tmpOn);
             @unlink($tmpOff);
         }
+    }
+
+    public function test_import_excel_rejects_unknown_subject_maps_aliases_and_keeps_kepsek_without_creating_subjects(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        $bin = Subject::query()->create(['code' => 'BIN', 'name' => 'Bahasa Indonesia', 'default_kktp' => 76, 'is_active' => true]);
+        $big = Subject::query()->create(['code' => 'BIG', 'name' => 'Bahasa Inggris', 'default_kktp' => 75, 'is_active' => true]);
+        $bd = Subject::query()->create(['code' => 'BD', 'name' => 'Bahasa Daerah', 'default_kktp' => 75, 'is_active' => true]);
+        $pai = Subject::query()->create(['code' => 'PAI', 'name' => 'Pendidikan Agama Islam & Budi Pekerti', 'default_kktp' => 78, 'is_active' => true]);
+
+        // 1. Upload Excel berisi varian alias B.INDONESIA, B. INGGRIS, B. CIREBON, b. B. DAERAH, B. DAERAH, serta Kep.Sek.
+        $okSpreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $s = $okSpreadsheet->getActiveSheet();
+        $s->setCellValue('A1', 'HARI')->setCellValue('B1', 'JP KE')->setCellValue('C1', 'WAKTU')->setCellValue('D1', 'KELAS VII');
+        $s->setCellValue('D2', 'A');
+        $s->setCellValue('A3', 'SENIN')->setCellValue('B3', '1')->setCellValue('C3', '07.40 - 08.20')->setCellValue('D3', '4');
+
+        $s->setCellValue('F1', 'Kode')->setCellValue('G1', 'Nama Guru')->setCellValue('H1', 'Mata Pelajaran');
+        $s->setCellValue('F2', '1')->setCellValue('G2', 'TETI KUSMIYATI, S.Pd., MM')->setCellValue('H2', 'Kep.Sek.');
+        $s->setCellValue('F3', '4')->setCellValue('G3', 'Dra. EEM AMIRAH')->setCellValue('H3', 'B.INDONESIA');
+        $s->setCellValue('F4', '10')->setCellValue('G4', 'TRI MULYANI, S.Pd')->setCellValue('H4', 'B. INGGRIS');
+        $s->setCellValue('F5', '13')->setCellValue('G5', 'SURYATI, S.Pd')->setCellValue('H5', 'B. CIREBON');
+        $s->setCellValue('F6', '14A')->setCellValue('G6', 'ISMAIL, S.Pd. I')->setCellValue('H6', 'a.PAI');
+        $s->setCellValue('F7', '14B')->setCellValue('G7', 'ISMAIL, S.Pd. I')->setCellValue('H7', 'b. B. DAERAH');
+        $s->setCellValue('F8', '24B')->setCellValue('G8', 'TETI OKTAVIANI, S.Pd')->setCellValue('H8', 'B. DAERAH');
+
+        // 2. Upload Excel berisi mata pelajaran asing yang belum terdaftar di Master KKTP
+        $badSpreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sb = $badSpreadsheet->getActiveSheet();
+        $sb->setCellValue('A1', 'HARI')->setCellValue('B1', 'JP KE')->setCellValue('C1', 'WAKTU')->setCellValue('D1', 'KELAS VII');
+        $sb->setCellValue('D2', 'A');
+        $sb->setCellValue('A3', 'SENIN')->setCellValue('B3', '1')->setCellValue('C3', '07.40 - 08.20')->setCellValue('D3', '88');
+        $sb->setCellValue('F1', 'Kode')->setCellValue('G1', 'Nama Guru')->setCellValue('H1', 'Mata Pelajaran');
+        $sb->setCellValue('F2', '88')->setCellValue('G2', 'Guru Mapel Asing, S.Pd')->setCellValue('H2', 'ASTRONOMI KUANTUM');
+
+        $okTmp = tempnam(sys_get_temp_dir(), 'alias_ok_') . '.xlsx';
+        $badTmp = tempnam(sys_get_temp_dir(), 'alias_bad_') . '.xlsx';
+
+        try {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($okSpreadsheet))->save($okTmp);
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($badSpreadsheet))->save($badTmp);
+
+            $okResp = $this->actingAs($admin)->post(route('admin.schedules.master.import'), [
+                'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('ok.xlsx', (string) file_get_contents($okTmp)),
+            ]);
+            $okResp->assertRedirect();
+            $okResp->assertSessionHas('success');
+
+            $this->assertSame(4, Subject::query()->count(), 'Import alias dan Kep.Sek. tidak boleh menambah subject baru.');
+            $this->assertDatabaseHas('teacher_subjects', [
+                'teaching_code_normalized' => '1',
+                'subject_id' => null,
+                'role_label' => 'Kep.Sek.',
+            ]);
+            $this->assertDatabaseHas('teacher_subjects', ['teaching_code_normalized' => '4', 'subject_id' => $bin->id]);
+            $this->assertDatabaseHas('teacher_subjects', ['teaching_code_normalized' => '10', 'subject_id' => $big->id]);
+            $this->assertDatabaseHas('teacher_subjects', ['teaching_code_normalized' => '13', 'subject_id' => $bd->id]);
+            $this->assertDatabaseHas('teacher_subjects', ['teaching_code_normalized' => '14A', 'subject_id' => $pai->id]);
+            $this->assertDatabaseHas('teacher_subjects', ['teaching_code_normalized' => '14B', 'subject_id' => $bd->id]);
+            $this->assertDatabaseHas('teacher_subjects', ['teaching_code_normalized' => '24B', 'subject_id' => $bd->id]);
+
+            $badResp = $this->actingAs($admin)->post(route('admin.schedules.master.import'), [
+                'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('bad.xlsx', (string) file_get_contents($badTmp)),
+            ]);
+            $badResp->assertRedirect();
+            $badResp->assertSessionHas('error');
+            $this->assertStringContainsString('belum terdaftar', (string) session('error'));
+            $this->assertSame(4, Subject::query()->count());
+        } finally {
+            @unlink($okTmp);
+            @unlink($badTmp);
+        }
+    }
+
+    public function test_cleanup_migration_merges_duplicate_subjects_and_unlinks_kepsek_safely(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        $bd = Subject::query()->create(['code' => 'BD', 'name' => 'Bahasa Daerah', 'default_kktp' => 75, 'is_active' => true]);
+        $bin = Subject::query()->create(['code' => 'BIN', 'name' => 'Bahasa Indonesia', 'default_kktp' => 76, 'is_active' => true]);
+        $big = Subject::query()->create(['code' => 'BIG', 'name' => 'Bahasa Inggris', 'default_kktp' => 75, 'is_active' => true]);
+
+        TeachingClass::query()->create([
+            'academic_year_id' => $year->id,
+            'teacher_id' => $guru->id,
+            'subject_id' => $bd->id,
+            'class_name' => 'VII-A',
+            'grade_level' => 'VII',
+            'homeroom_teacher_name' => '-',
+        ]);
+
+        // Simulasikan 6 baris duplikat hasil insiden migrasi sebelumnya di server
+        $bdaerah = Subject::query()->create(['code' => 'BDAERAH', 'name' => 'B. DAERAH', 'default_kktp' => 75, 'is_active' => true]);
+        $cirebon = Subject::query()->create(['code' => 'CIREBON', 'name' => 'CIREBON', 'default_kktp' => 75, 'is_active' => true]);
+        $daerah = Subject::query()->create(['code' => 'DAERAH', 'name' => 'DAERAH', 'default_kktp' => 75, 'is_active' => true]);
+        $indonesi = Subject::query()->create(['code' => 'INDONESI', 'name' => 'INDONESIA', 'default_kktp' => 75, 'is_active' => true]);
+        $inggris = Subject::query()->create(['code' => 'INGGRIS', 'name' => 'INGGRIS', 'default_kktp' => 75, 'is_active' => true]);
+        $kepsek = Subject::query()->create(['code' => 'KEPSEK', 'name' => 'Kep.Sek.', 'default_kktp' => 75, 'is_active' => true]);
+
+        $kepsekUser = User::query()->create(['name' => 'Teti Kusmiyati', 'email' => 'teti@test.local', 'role' => 'guru', 'default_subject' => 'Kep.Sek.', 'password' => bcrypt('x')]);
+        $suryati = User::query()->create(['name' => 'Suryati', 'email' => 'suryati@test.local', 'role' => 'guru', 'default_subject' => 'CIREBON', 'password' => bcrypt('x')]);
+        $ismail = User::query()->create(['name' => 'Ismail', 'email' => 'ismail@test.local', 'role' => 'guru', 'default_subject' => 'B. DAERAH', 'password' => bcrypt('x')]);
+        $tetiOkt = User::query()->create(['name' => 'Teti Oktaviani', 'email' => 'teti.o@test.local', 'role' => 'guru', 'default_subject' => 'DAERAH', 'password' => bcrypt('x')]);
+        $eem = User::query()->create(['name' => 'Eem Amirah', 'email' => 'eem@test.local', 'role' => 'guru', 'default_subject' => 'INDONESIA', 'password' => bcrypt('x')]);
+        $tri = User::query()->create(['name' => 'Tri Mulyani', 'email' => 'tri@test.local', 'role' => 'guru', 'default_subject' => 'INGGRIS', 'password' => bcrypt('x')]);
+
+        TeacherSubject::query()->create(['user_id' => $kepsekUser->id, 'subject_id' => $kepsek->id, 'teaching_code' => '1']);
+        TeacherSubject::query()->create(['user_id' => $suryati->id, 'subject_id' => $cirebon->id, 'teaching_code' => '13']);
+        TeacherSubject::query()->create(['user_id' => $ismail->id, 'subject_id' => $bdaerah->id, 'teaching_code' => '14B']);
+        TeacherSubject::query()->create(['user_id' => $tetiOkt->id, 'subject_id' => $daerah->id, 'teaching_code' => '24B']);
+        TeacherSubject::query()->create(['user_id' => $eem->id, 'subject_id' => $indonesi->id, 'teaching_code' => '4']);
+        TeacherSubject::query()->create(['user_id' => $tri->id, 'subject_id' => $inggris->id, 'teaching_code' => '10']);
+
+        $migration = require database_path('migrations/2026_11_23_000001_cleanup_duplicate_subjects_and_allow_nullable_teacher_subject.php');
+        $migration->up();
+
+        $this->assertSame(3, Subject::query()->count());
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $kepsekUser->id, 'subject_id' => null, 'role_label' => 'Kep.Sek.', 'teaching_code_normalized' => '1']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $suryati->id, 'subject_id' => $bd->id, 'teaching_code_normalized' => '13']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $ismail->id, 'subject_id' => $bd->id, 'teaching_code_normalized' => '14B']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $tetiOkt->id, 'subject_id' => $bd->id, 'teaching_code_normalized' => '24B']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $eem->id, 'subject_id' => $bin->id, 'teaching_code_normalized' => '4']);
+        $this->assertDatabaseHas('teacher_subjects', ['user_id' => $tri->id, 'subject_id' => $big->id, 'teaching_code_normalized' => '10']);
+        $this->assertSame('Bahasa Daerah', $suryati->fresh()->default_subject);
+        $this->assertDatabaseHas('teaching_classes', ['subject_id' => $bd->id, 'class_name' => 'VII-A']);
     }
 }

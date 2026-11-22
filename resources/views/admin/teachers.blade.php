@@ -26,7 +26,7 @@
         homeroom_school_class_id: '',
         piket_days: [],
         teacher_subjects: [
-            { subject_id: '', teaching_code: '' }
+            { subject_id: '', role_label: '', teaching_code: '' }
         ],
     },
     normalizeCode(val) {
@@ -52,7 +52,7 @@
             homeroom_school_class_id: '',
             piket_days: [],
             teacher_subjects: [
-                { subject_id: '', teaching_code: '' }
+                { subject_id: '', role_label: '', teaching_code: '' }
             ],
         };
     },
@@ -70,13 +70,14 @@
         });
     },
     addSubjectRow(target) {
-        target.push({ subject_id: '', teaching_code: '' });
+        target.push({ subject_id: '', role_label: '', teaching_code: '' });
     },
     removeSubjectRow(target, index) {
         if (target.length > 1) {
             target.splice(index, 1);
         } else {
             target[0].subject_id = '';
+            target[0].role_label = '';
             target[0].teaching_code = '';
         }
     },
@@ -383,14 +384,21 @@
                                 @if($userTeacherSubjects->isNotEmpty())
                                     <div class="flex flex-wrap gap-1">
                                         @foreach($userTeacherSubjects as $ts)
-                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold text-[10px]"
-                                                  title="{{ $ts->subject?->name }}">
-                                                {{ $ts->subject?->code ?: '-' }}
-                                            </span>
+                                            @if($ts->subject)
+                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-extrabold text-[10px]"
+                                                      title="{{ $ts->subject->name }}">
+                                                    {{ $ts->subject->code }}
+                                                </span>
+                                            @elseif(!empty($ts->role_label))
+                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-300 font-extrabold text-[10px]"
+                                                      title="Tugas Non-Mapel: {{ $ts->role_label }}">
+                                                    {{ $ts->role_label }}
+                                                </span>
+                                            @endif
                                         @endforeach
                                     </div>
-                                    <div class="text-[10px] text-slate-500 truncate max-w-[170px] mt-0.5" title="{{ $userTeacherSubjects->map(fn($t) => $t->subject?->name)->filter()->join(', ') }}">
-                                        {{ $userTeacherSubjects->map(fn($t) => $t->subject?->name)->filter()->join(', ') }}
+                                    <div class="text-[10px] text-slate-500 truncate max-w-[170px] mt-0.5" title="{{ $userTeacherSubjects->map(fn($t) => $t->subject?->name ?: $t->role_label)->filter()->join(', ') }}">
+                                        {{ $userTeacherSubjects->map(fn($t) => $t->subject?->name ?: $t->role_label)->filter()->join(', ') }}
                                     </div>
                                 @elseif(!empty($u->default_subject))
                                     <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium text-[10px]">
@@ -493,10 +501,11 @@
                                                 'update_url' => route('admin.teachers.update', $u),
                                                 'teacher_subjects' => $userTeacherSubjects->isNotEmpty()
                                                     ? $userTeacherSubjects->map(fn($ts) => [
-                                                        'subject_id' => (string) $ts->subject_id,
+                                                        'subject_id' => $ts->subject_id ? (string) $ts->subject_id : '',
+                                                        'role_label' => $ts->role_label ?? '',
                                                         'teaching_code' => $ts->teaching_code ?? '',
                                                     ])->values()->all()
-                                                    : [['subject_id' => '', 'teaching_code' => '']],
+                                                    : [['subject_id' => '', 'role_label' => '', 'teaching_code' => '']],
                                             ]))"
                                             class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 cursor-pointer">
                                         Edit

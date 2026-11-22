@@ -152,7 +152,7 @@ class User extends Authenticatable
     {
         if ($this->relationLoaded('teacherSubjects')) {
             return $this->teacherSubjects
-                ->map(fn ($ts) => $ts->subject?->code)
+                ->map(fn ($ts) => $ts->subject?->code ?: $ts->role_label)
                 ->filter()
                 ->unique()
                 ->values()
@@ -189,13 +189,13 @@ class User extends Authenticatable
     public function preferredSubjectId(): ?int
     {
         if ($this->relationLoaded('teacherSubjects') && $this->teacherSubjects->isNotEmpty()) {
-            $subjId = $this->teacherSubjects->first()?->subject_id;
+            $subjId = $this->teacherSubjects->first(fn ($ts) => $ts->subject_id !== null)?->subject_id;
             if ($subjId) {
                 return (int) $subjId;
             }
         }
 
-        $directSubjId = $this->teacherSubjects()->value('subject_id');
+        $directSubjId = $this->teacherSubjects()->whereNotNull('subject_id')->value('subject_id');
         if ($directSubjId) {
             return (int) $directSubjId;
         }

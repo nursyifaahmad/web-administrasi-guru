@@ -18,8 +18,9 @@
                     <div class="flex-1">
                         <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Mata Pelajaran:</label>
                         <select :name="'teacher_subjects['+rIdx+'][subject_id]'" x-model="row.subject_id"
+                                @change="if(row.subject_id) row.role_label = ''"
                                 class="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white">
-                            <option value="">-- Pilih Mata Pelajaran --</option>
+                            <option value="">-- Tugas Non-Mapel / Pilih Mapel --</option>
                             <template x-for="sb in allSubjects" :key="sb.id">
                                 <option :value="sb.id" :selected="sb.id == row.subject_id" x-text="'[' + sb.code + '] ' + sb.name"></option>
                             </template>
@@ -39,6 +40,13 @@
                         </button>
                     </div>
                 </div>
+                <template x-if="!row.subject_id">
+                    <div>
+                        <input type="text" :name="'teacher_subjects['+rIdx+'][role_label]'" x-model="row.role_label"
+                               placeholder="Keterangan Non-Mapel (isi mis: Kep.Sek. jika bukan guru mapel)"
+                               class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700">
+                    </div>
+                </template>
                 <template x-if="findCodeConflict(row.teaching_code, {{ $currentUserId }})">
                     <div class="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">
                         ⚠️ Kode <span x-text="normalizeCode(row.teaching_code)"></span> sudah dipakai oleh <span x-text="findCodeConflict(row.teaching_code, {{ $currentUserId }})"></span>.

@@ -222,7 +222,8 @@ class TeacherAccountController extends Controller
             'signature_data' => ['nullable', 'string'],
             'signature_file' => ['nullable', 'image', 'max:2048'],
             'teacher_subjects' => ['nullable', 'array'],
-            'teacher_subjects.*.subject_id' => ['required_with:teacher_subjects', 'exists:subjects,id'],
+            'teacher_subjects.*.subject_id' => ['nullable', 'exists:subjects,id'],
+            'teacher_subjects.*.role_label' => ['nullable', 'string', 'max:120'],
             'teacher_subjects.*.teaching_code' => ['nullable', 'string', 'max:30'],
             'homeroom_school_class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
             'piket_days' => ['nullable', 'array'],
@@ -263,17 +264,28 @@ class TeacherAccountController extends Controller
 
             $assignedSubjectNames = [];
             foreach ($subjectRows as $row) {
-                $ts = TeacherSubject::query()->updateOrCreate(
-                    [
+                if ($row['subject_id'] !== null) {
+                    $ts = TeacherSubject::query()->updateOrCreate(
+                        [
+                            'user_id' => $user->id,
+                            'subject_id' => $row['subject_id'],
+                        ],
+                        [
+                            'role_label' => null,
+                            'teaching_code' => $row['teaching_code'],
+                        ]
+                    );
+                } else {
+                    $ts = TeacherSubject::query()->create([
                         'user_id' => $user->id,
-                        'subject_id' => $row['subject_id'],
-                    ],
-                    [
+                        'subject_id' => null,
+                        'role_label' => $row['role_label'],
                         'teaching_code' => $row['teaching_code'],
-                    ]
-                );
-                if ($ts->subject) {
-                    $assignedSubjectNames[] = $ts->subject->name;
+                    ]);
+                }
+                $label = $ts->subject?->name ?: $ts->role_label;
+                if ($label) {
+                    $assignedSubjectNames[] = $label;
                 }
             }
 
@@ -315,7 +327,8 @@ class TeacherAccountController extends Controller
             'signature_file' => ['nullable', 'image', 'max:2048'],
             'remove_signature' => ['nullable', 'boolean'],
             'teacher_subjects' => ['nullable', 'array'],
-            'teacher_subjects.*.subject_id' => ['required_with:teacher_subjects', 'exists:subjects,id'],
+            'teacher_subjects.*.subject_id' => ['nullable', 'exists:subjects,id'],
+            'teacher_subjects.*.role_label' => ['nullable', 'string', 'max:120'],
             'teacher_subjects.*.teaching_code' => ['nullable', 'string', 'max:30'],
             'homeroom_school_class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
             'piket_days' => ['nullable', 'array'],
@@ -382,10 +395,12 @@ class TeacherAccountController extends Controller
                     $ts = TeacherSubject::query()->create([
                         'user_id' => $teacher->id,
                         'subject_id' => $row['subject_id'],
+                        'role_label' => $row['subject_id'] !== null ? null : $row['role_label'],
                         'teaching_code' => $row['teaching_code'],
                     ]);
-                    if ($ts->subject) {
-                        $assignedSubjectNames[] = $ts->subject->name;
+                    $label = $ts->subject?->name ?: $ts->role_label;
+                    if ($label) {
+                        $assignedSubjectNames[] = $label;
                     }
                 }
                 if (! empty($assignedSubjectNames)) {
@@ -491,7 +506,7 @@ class TeacherAccountController extends Controller
     /**
      * Validasi anti-bentrok kode mengajar antar mapel maupun antar guru.
      *
-     * @return list<array{subject_id: int, teaching_code: ?string}>
+     * @return list<array{subject_id: ?int, role_label: ?string, teaching_code: ?string}>
      */
     protected function validateTeachingCodeConflicts(array $rows, ?int $ignoreUserId = null): array
     {
@@ -500,10 +515,17 @@ class TeacherAccountController extends Controller
         $codesToCheck = [];
 
         foreach ($rows as $row) {
-            if (empty($row['subject_id'])) {
+            $subjectId = ! empty($row['subject_id']) ? (int) $row['subject_id'] : null;
+            $roleLabel = trim((string) ($row['role_label'] ?? ''));
+            $normCode = TeacherSubject::normalizeCode($row['teaching_code'] ?? null);
+
+            if ($subjectId === null && $roleLabel === '' && $normCode === null) {
                 continue;
             }
-            $normCode = TeacherSubject::normalizeCode($row['teaching_code'] ?? null);
+            if ($subjectId === null && $roleLabel === '') {
+                $roleLabel = 'Tugas Non-Mapel';
+            }
+
             if ($normCode !== null) {
                 if (isset($seenInRequest[$normCode])) {
                     throw ValidationException::withMessages([
@@ -515,7 +537,8 @@ class TeacherAccountController extends Controller
             }
 
             $cleanRows[] = [
-                'subject_id' => (int) $row['subject_id'],
+                'subject_id' => $subjectId,
+                'role_label' => $subjectId !== null ? null : $roleLabel,
                 'teaching_code' => $normCode,
             ];
         }
@@ -529,7 +552,7 @@ class TeacherAccountController extends Controller
 
             if ($conflict) {
                 $ownerName = $conflict->user?->name ?? 'Guru lain';
-                $subjName = $conflict->subject?->name ?? '-';
+                $subjName = $conflict->subject?->name ?: ($conflict->role_label ?: '-');
                 throw ValidationException::withMessages([
                     'teacher_subjects' => "Bentrok Kode Mengajar '{$conflict->teaching_code_normalized}': sudah digunakan oleh {$ownerName} ({$subjName}). Satu kode mengajar hanya boleh dimiliki satu guru.",
                 ]);
