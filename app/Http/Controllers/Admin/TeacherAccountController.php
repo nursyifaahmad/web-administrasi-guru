@@ -220,7 +220,7 @@ class TeacherAccountController extends Controller
             'password' => ['required', 'string', 'min:6'],
             'schedule_codes' => ['nullable', 'string'],
             'signature_data' => ['nullable', 'string'],
-            'signature_file' => ['nullable', 'image', 'max:2048'],
+            'signature_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'teacher_subjects' => ['nullable', 'array'],
             'teacher_subjects.*.subject_id' => ['nullable', 'exists:subjects,id'],
             'teacher_subjects.*.role_label' => ['nullable', 'string', 'max:120'],
@@ -236,17 +236,7 @@ class TeacherAccountController extends Controller
 
         $piketDays = User::normalizePiketDays($request->input('piket_days', []));
 
-        $sigData = null;
-        if ($request->hasFile('signature_file')) {
-            $file = $request->file('signature_file');
-            $mime = $file->getMimeType() ?: 'image/png';
-            $rawBase64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file->getRealPath()));
-            $normalized = SignatureImageHelper::normalizeInk($rawBase64);
-            $sigData = $normalized['data_uri'] ?? $rawBase64;
-        } elseif (! empty($validated['signature_data'])) {
-            $normalized = SignatureImageHelper::normalizeInk($validated['signature_data']);
-            $sigData = $normalized['data_uri'] ?? $validated['signature_data'];
-        }
+        $sigData = $this->resolveTeacherSignatureInput($request);
 
         $user = DB::transaction(function () use ($validated, $sigData, $piketDays, $subjectRows, $homeroomClassId, $academicYear) {
             $user = User::query()->create([
@@ -324,7 +314,7 @@ class TeacherAccountController extends Controller
             'password' => ['nullable', 'string', 'min:6'],
             'is_active' => ['nullable', 'boolean'],
             'signature_data' => ['nullable', 'string'],
-            'signature_file' => ['nullable', 'image', 'max:2048'],
+            'signature_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'remove_signature' => ['nullable', 'boolean'],
             'teacher_subjects' => ['nullable', 'array'],
             'teacher_subjects.*.subject_id' => ['nullable', 'exists:subjects,id'],
@@ -360,15 +350,8 @@ class TeacherAccountController extends Controller
 
         if ($request->boolean('remove_signature')) {
             $payload['signature_data'] = null;
-        } elseif ($request->hasFile('signature_file')) {
-            $file = $request->file('signature_file');
-            $mime = $file->getMimeType() ?: 'image/png';
-            $rawBase64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file->getRealPath()));
-            $normalized = SignatureImageHelper::normalizeInk($rawBase64);
-            $payload['signature_data'] = $normalized['data_uri'] ?? $rawBase64;
-        } elseif (! empty($validated['signature_data'])) {
-            $normalized = SignatureImageHelper::normalizeInk($validated['signature_data']);
-            $payload['signature_data'] = $normalized['data_uri'] ?? $validated['signature_data'];
+        } elseif (($resolvedSig = $this->resolveTeacherSignatureInput($request)) !== null) {
+            $payload['signature_data'] = $resolvedSig;
         }
 
         if ($teacher->id !== $request->user()->id && $request->has('is_active')) {
@@ -449,21 +432,13 @@ class TeacherAccountController extends Controller
             return back()->with('success', "Tanda tangan digital {$teacher->name} berhasil dihapus.");
         }
 
-        $sigData = null;
         if ($request->hasFile('signature_file')) {
             $request->validate([
-                'signature_file' => ['required', 'image', 'max:2048'],
+                'signature_file' => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             ]);
-            $file = $request->file('signature_file');
-            $mime = $file->getMimeType() ?: 'image/png';
-            $rawBase64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file->getRealPath()));
-            $normalized = SignatureImageHelper::normalizeInk($rawBase64);
-            $sigData = $normalized['data_uri'] ?? $rawBase64;
-        } elseif ($request->filled('signature_data')) {
-            $raw = $request->input('signature_data');
-            $normalized = SignatureImageHelper::normalizeInk($raw);
-            $sigData = $normalized['data_uri'] ?? $raw;
         }
+
+        $sigData = $this->resolveTeacherSignatureInput($request);
 
         if ($sigData) {
             $teacher->update(['signature_data' => $sigData]);
@@ -473,6 +448,28 @@ class TeacherAccountController extends Controller
         }
 
         return back()->with('error', 'Tidak ada data tanda tangan yang diunggah.');
+    }
+
+    /**
+     * Resolusi & sanitasi tanda tangan raster (PNG/JPEG/WEBP) dari file upload maupun kanvas Base64.
+     */
+    protected function resolveTeacherSignatureInput(Request $request): ?string
+    {
+        $rawDataUri = null;
+
+        if ($request->hasFile('signature_file')) {
+            $rawDataUri = $this->uploadedImageToDataUri($request->file('signature_file'), 'signature_file');
+        } elseif ($request->filled('signature_data')) {
+            $rawDataUri = $this->sanitizeRasterImageDataUri($request->input('signature_data'), 'signature_data');
+        }
+
+        if (! $rawDataUri) {
+            return null;
+        }
+
+        $normalized = SignatureImageHelper::normalizeInk($rawDataUri);
+
+        return $normalized['data_uri'] ?? $rawDataUri;
     }
 
     public function toggleStatus(Request $request, User $teacher): RedirectResponse

@@ -56,6 +56,8 @@ class DatabaseBackupController extends Controller
 
         return response()->download($path, basename($path), [
             'Content-Type' => str_ends_with(strtolower($path), '.gz') ? 'application/gzip' : 'application/sql',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
         ]);
     }
 
@@ -69,10 +71,13 @@ class DatabaseBackupController extends Controller
             'filename' => ['required_if:source,server', 'nullable', 'string'],
             'backup_file' => ['required_if:source,upload', 'nullable', 'file', 'max:25600'], // max 25MB
             'confirm_restore' => ['required', 'accepted'],
+            'current_password' => ['required', 'string', 'current_password'],
         ], [
             'confirm_restore.accepted' => 'Anda wajib mencentang persetujuan konfirmasi resiko sebelum memulihkan database.',
             'backup_file.required_if' => 'Silakan pilih file backup yang ingin di-upload.',
             'backup_file.max' => 'Ukuran file backup maksimal adalah 25 MB.',
+            'current_password.required' => 'Password akun Anda wajib diisi untuk konfirmasi pemulihan database.',
+            'current_password.current_password' => 'Password konfirmasi yang Anda masukkan salah.',
         ]);
 
         try {

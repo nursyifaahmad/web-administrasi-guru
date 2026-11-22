@@ -79,7 +79,7 @@ class SchoolClassController extends Controller
             'homeroom_teacher_name' => ['nullable', 'string', 'max:180'],
             'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
             'homeroom_teacher_signature_data' => ['nullable', 'string'],
-            'homeroom_teacher_signature_file' => ['nullable', 'image', 'max:2048'],
+            'homeroom_teacher_signature_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
         ]);
 
         $homeroomTeacher = null;
@@ -99,9 +99,9 @@ class SchoolClassController extends Controller
 
         $wkSig = null;
         if ($request->hasFile('homeroom_teacher_signature_file')) {
-            $wkSig = $this->uploadedImageToDataUri($request->file('homeroom_teacher_signature_file'));
-        } elseif (! empty($validated['homeroom_teacher_signature_data']) && str_starts_with($validated['homeroom_teacher_signature_data'], 'data:image/')) {
-            $wkSig = $validated['homeroom_teacher_signature_data'];
+            $wkSig = $this->uploadedImageToDataUri($request->file('homeroom_teacher_signature_file'), 'homeroom_teacher_signature_file');
+        } elseif (! empty($validated['homeroom_teacher_signature_data'])) {
+            $wkSig = $this->sanitizeRasterImageDataUri($validated['homeroom_teacher_signature_data'], 'homeroom_teacher_signature_data');
         }
 
         $schoolClass = SchoolClass::query()->create([
@@ -167,7 +167,7 @@ class SchoolClassController extends Controller
             'homeroom_teacher_name' => ['nullable', 'string', 'max:180'],
             'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
             'homeroom_teacher_signature_data' => ['nullable', 'string'],
-            'homeroom_teacher_signature_file' => ['nullable', 'image', 'max:2048'],
+            'homeroom_teacher_signature_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'clear_homeroom_signature' => ['nullable', 'boolean'],
         ]);
 
@@ -354,13 +354,5 @@ class SchoolClassController extends Controller
         }
 
         return back()->with('success', "Berhasil mengimpor {$count} peserta didik ke Rombel {$schoolClass->name}.");
-    }
-
-    protected function uploadedImageToDataUri($file): string
-    {
-        $mime = $file->getMimeType() ?: 'image/png';
-        $contents = file_get_contents($file->getRealPath());
-
-        return 'data:' . $mime . ';base64,' . base64_encode($contents);
     }
 }

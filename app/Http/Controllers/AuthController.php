@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -35,6 +36,16 @@ class AuthController extends Controller
         ]);
 
         $identifier = trim($credentials['login']);
+        $throttleKey = 'login:' . mb_strtolower($identifier) . '|' . $request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+
+            return back()->withInput($request->only('login'))->withErrors([
+                'login' => "Terlalu banyak percobaan login gagal. Silakan coba lagi dalam {$seconds} detik.",
+            ]);
+        }
+
         $normalizedNip = preg_replace('/\s+/', '', $identifier);
 
         $user = User::query()
@@ -43,18 +54,11 @@ class AuthController extends Controller
             ->orWhereRaw("REPLACE(COALESCE(nip, ''), ' ', '') = ?", [$normalizedNip])
             ->first();
 
-        if (! $user && str_contains(strtolower($identifier), 'irfan')) {
-            $user = User::query()->where('email', 'like', '%irfan%')->first();
-        }
-
-        $passwordMatches = false;
-        if ($user) {
-            $passwordMatches = Hash::check($credentials['password'], $user->password)
-                || ($credentials['password'] === 'guru123' && Hash::check('password', $user->password))
-                || ($credentials['password'] === 'password' && Hash::check('guru123', $user->password));
-        }
+        $passwordMatches = $user && Hash::check($credentials['password'], $user->password);
 
         if (! $user || ! $passwordMatches) {
+            RateLimiter::hit($throttleKey, 60);
+
             return back()->withInput($request->only('login'))->withErrors([
                 'login' => 'Email / NIP atau kata sandi tidak sesuai.',
             ]);
@@ -66,6 +70,7 @@ class AuthController extends Controller
             ]);
         }
 
+        RateLimiter::clear($throttleKey);
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
 
@@ -112,9 +117,9 @@ class AuthController extends Controller
             'nip' => ['nullable', 'string', 'max:40'],
             'phone' => ['nullable', 'string', 'max:30'],
             'default_subject' => ['nullable', 'string', 'max:120'],
-            'password' => ['nullable', 'string', 'min:6', 'confirmed'],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
             'signature_data' => ['nullable', 'string'],
-            'signature_file' => ['nullable', 'image', 'max:2048'],
+            'signature_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'clear_signature' => ['nullable', 'boolean'],
         ]);
 
@@ -122,9 +127,9 @@ class AuthController extends Controller
         if ($request->boolean('clear_signature')) {
             $signature = null;
         } elseif ($request->hasFile('signature_file')) {
-            $signature = $this->uploadedImageToDataUri($request->file('signature_file'));
-        } elseif (! empty($validated['signature_data']) && str_starts_with($validated['signature_data'], 'data:image/')) {
-            $signature = $validated['signature_data'];
+            $signature = $this->uploadedImageToDataUri($request->file('signature_file'), 'signature_file');
+        } elseif ($request->filled('signature_data')) {
+            $signature = $this->sanitizeRasterImageDataUri($validated['signature_data'] ?? null, 'signature_data');
         }
 
         $payload = [

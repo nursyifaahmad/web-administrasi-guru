@@ -27,14 +27,14 @@ mkdir -p \
 
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
-chmod -R 777 storage/app/backups 2>/dev/null || true
+chmod -R 750 storage/app/backups 2>/dev/null || true
 
 if [ ! -f .env ]; then
     echo "==> File .env belum ada, menyalin dari .env.docker.example..."
     cp .env.docker.example .env
 fi
 
-chmod 644 .env || true
+chmod 640 .env || true
 php artisan config:clear --ansi >/dev/null 2>&1 || true
 
 if ! grep -qE '^APP_KEY=base64:.+' .env; then

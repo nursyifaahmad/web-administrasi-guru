@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureUserIsAdmin;
+use App\Http\Middleware\SecurityHeadersMiddleware;
 use App\Http\Middleware\ShareWorkspaceContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -16,6 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->redirectUsersTo(fn () => Auth::user()?->isAdmin() ? route('admin.dashboard') : route('schedules.index'));
         $middleware->trustProxies(at: '*');
+        $middleware->web(append: [
+            SecurityHeadersMiddleware::class,
+        ]);
         $middleware->validateCsrfTokens(except: [
             'logout',
         ]);

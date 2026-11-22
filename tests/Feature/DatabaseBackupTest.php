@@ -134,6 +134,7 @@ class DatabaseBackupTest extends TestCase
             'source' => 'server',
             'filename' => $initialBackup['filename'],
             'confirm_restore' => 1,
+            'current_password' => 'password',
         ]);
 
         $restoreRes->assertRedirect(route('admin.backup.index'));

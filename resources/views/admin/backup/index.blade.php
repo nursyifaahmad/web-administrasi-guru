@@ -11,9 +11,12 @@
     selectedRestoreFile: '',
     confirmedRestore: false,
     confirmedUpload: false,
+    restorePassword: '',
+    uploadPassword: '',
     openRestoreServer(filename) {
         this.selectedRestoreFile = filename;
         this.confirmedRestore = false;
+        this.restorePassword = '';
         this.restoreModal = true;
     }
 }">
@@ -291,6 +294,15 @@
                     </p>
                 </div>
 
+                <div>
+                    <label for="restore_current_password" class="block text-xs font-bold text-slate-700 mb-1">
+                        Konfirmasi Password Akun Admin
+                    </label>
+                    <input id="restore_current_password" type="password" name="current_password" x-model="restorePassword" required autocomplete="current-password"
+                           placeholder="Masukkan password login Anda saat ini..."
+                           class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none">
+                </div>
+
                 <div class="pt-2 border-t border-slate-100">
                     <label class="flex items-start gap-2.5 cursor-pointer p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100">
                         <input type="checkbox" name="confirm_restore" value="1" x-model="confirmedRestore"
@@ -307,7 +319,7 @@
                         Batalkan
                     </button>
                     <button type="submit"
-                            :disabled="!confirmedRestore"
+                            :disabled="!confirmedRestore || !restorePassword"
                             class="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs transition">
                         Ya, Pulihkan Database Sekarang
                     </button>
@@ -351,6 +363,15 @@
                     🛡️ Sistem otomatis membuat cadangan darurat (Safety Backup) sesaat sebelum proses upload dieksekusi.
                 </div>
 
+                <div>
+                    <label for="upload_current_password" class="block text-xs font-bold text-slate-700 mb-1">
+                        Konfirmasi Password Akun Admin
+                    </label>
+                    <input id="upload_current_password" type="password" name="current_password" x-model="uploadPassword" required autocomplete="current-password"
+                           placeholder="Masukkan password login Anda saat ini..."
+                           class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none">
+                </div>
+
                 <div class="pt-2 border-t border-slate-100">
                     <label class="flex items-start gap-2.5 cursor-pointer p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100">
                         <input type="checkbox" name="confirm_restore" value="1" x-model="confirmedUpload"
@@ -367,7 +388,7 @@
                         Batalkan
                     </button>
                     <button type="submit"
-                            :disabled="!confirmedUpload"
+                            :disabled="!confirmedUpload || !uploadPassword"
                             class="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs transition">
                         Upload &amp; Pulihkan Sekarang
                     </button>

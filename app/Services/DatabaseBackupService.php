@@ -19,19 +19,56 @@ class DatabaseBackupService
     {
         $dir = storage_path('app/backups');
         if (! File::isDirectory($dir)) {
-            File::makeDirectory($dir, 0777, true, true);
+            File::makeDirectory($dir, 0750, true, true);
         }
 
         if (! is_writable($dir)) {
-            @chmod($dir, 0777);
-            @chmod(dirname($dir), 0777);
+            @chmod($dir, 0750);
+            @chmod(dirname($dir), 0750);
         }
 
         if (! is_writable($dir)) {
-            throw new RuntimeException("Direktori backup tidak memiliki izin tulis ({$dir}). Silakan jalankan di terminal Mini PC: docker compose exec app chmod -R 777 /var/www/html/storage/app/backups");
+            throw new RuntimeException("Direktori backup tidak memiliki izin tulis ({$dir}). Silakan jalankan di terminal Mini PC: docker compose exec app chmod -R 750 /var/www/html/storage/app/backups");
         }
 
         return $dir;
+    }
+
+    /**
+     * Memastikan file backup SQL aman sebelum dieksekusi ke database.
+     */
+    protected function assertSafeSqlDump(string $sqlContent): void
+    {
+        if (! mb_check_encoding($sqlContent, 'UTF-8')) {
+            throw new RuntimeException('File backup ditolak karena encoding tidak valid (bukan UTF-8).');
+        }
+
+        if (preg_match('/<\?(?:php|=)/i', $sqlContent)) {
+            throw new RuntimeException('File backup ditolak karena mengandung tag skrip yang tidak diizinkan.');
+        }
+
+        // Hapus string literal dan komentar SQL agar kata biasa di dalam data teks tidak memicu false positive.
+        $strippedSql = preg_replace([
+            "/'(?:[^'\\\\]|\\\\.|'')*+'/",
+            '/--[^\r\n]*/',
+            '/\/\*[\s\S]*?\*\//',
+        ], ' ', $sqlContent) ?? $sqlContent;
+
+        if (preg_match('/\b(INTO\s+(?:OUT|DUMP)FILE|LOAD\s+DATA|LOAD_FILE\s*\()/i', $strippedSql)) {
+            throw new RuntimeException('File backup ditolak karena mengandung perintah akses file server yang dilarang.');
+        }
+    }
+
+    /**
+     * Memvalidasi identifier nama tabel SQL sebelum diinterpolasi ke query DDL.
+     */
+    protected function assertValidSqlIdentifier(string $identifier): string
+    {
+        if (! preg_match('/^[A-Za-z0-9_]+$/', $identifier)) {
+            throw new RuntimeException("Nama tabel tidak valid: {$identifier}");
+        }
+
+        return $identifier;
     }
 
     /**
@@ -127,6 +164,8 @@ class DatabaseBackupService
         if ($sqlContent === false || trim($sqlContent) === '') {
             throw new RuntimeException('File backup rusak atau tidak dapat didekompresi.');
         }
+
+        $this->assertSafeSqlDump($sqlContent);
 
         $connection = DB::connection();
         $driver = $connection->getDriverName();
@@ -304,6 +343,8 @@ class DatabaseBackupService
         }
 
         foreach ($tables as $table) {
+            $table = $this->assertValidSqlIdentifier((string) $table);
+
             // Write Create Table
             fwrite($fp, "-- --------------------------------------------------------\n");
             fwrite($fp, "-- Struktur Tabel: `{$table}`\n");
@@ -342,7 +383,7 @@ class DatabaseBackupService
             ->get();
 
         foreach ($tables as $row) {
-            $table = $row->name;
+            $table = $this->assertValidSqlIdentifier((string) $row->name);
             $sql = $row->sql;
 
             fwrite($fp, "-- --------------------------------------------------------\n");
@@ -362,6 +403,7 @@ class DatabaseBackupService
      */
     protected function dumpTableData($fp, string $table, \PDO $pdo, bool $isSqlite = false): void
     {
+        $table = $this->assertValidSqlIdentifier($table);
         $query = DB::table($table);
         $totalRows = $query->count();
         if ($totalRows === 0) {

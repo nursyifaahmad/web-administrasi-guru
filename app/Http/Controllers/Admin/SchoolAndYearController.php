@@ -41,11 +41,11 @@ class SchoolAndYearController extends Controller
             'default_city' => ['required', 'string', 'max:80'],
             'headmaster_name' => ['required', 'string', 'max:180'],
             'headmaster_nip' => ['nullable', 'string', 'max:40'],
-            'logo_left_file' => ['nullable', 'image', 'max:2048'],
-            'logo_right_file' => ['nullable', 'image', 'max:2048'],
+            'logo_left_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
+            'logo_right_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'logo_left_size' => ['nullable', 'integer', 'min:40', 'max:160'],
             'logo_right_size' => ['nullable', 'integer', 'min:40', 'max:160'],
-            'headmaster_signature_file' => ['nullable', 'image', 'max:2048'],
+            'headmaster_signature_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'headmaster_signature_data' => ['nullable', 'string'],
             'clear_logo_left' => ['nullable', 'boolean'],
             'clear_logo_right' => ['nullable', 'boolean'],
@@ -58,23 +58,23 @@ class SchoolAndYearController extends Controller
         if ($request->boolean('clear_logo_left')) {
             $logoLeft = null;
         } elseif ($request->hasFile('logo_left_file')) {
-            $logoLeft = $this->uploadedImageToDataUri($request->file('logo_left_file'));
+            $logoLeft = $this->uploadedImageToDataUri($request->file('logo_left_file'), 'logo_left_file');
         }
 
         $logoRight = $school->logo_right_data;
         if ($request->boolean('clear_logo_right')) {
             $logoRight = null;
         } elseif ($request->hasFile('logo_right_file')) {
-            $logoRight = $this->uploadedImageToDataUri($request->file('logo_right_file'));
+            $logoRight = $this->uploadedImageToDataUri($request->file('logo_right_file'), 'logo_right_file');
         }
 
         $hmSig = $school->headmaster_signature;
         if ($request->boolean('clear_headmaster_signature')) {
             $hmSig = null;
         } elseif ($request->hasFile('headmaster_signature_file')) {
-            $hmSig = $this->uploadedImageToDataUri($request->file('headmaster_signature_file'));
-        } elseif (! empty($validated['headmaster_signature_data']) && str_starts_with($validated['headmaster_signature_data'], 'data:image/')) {
-            $hmSig = $validated['headmaster_signature_data'];
+            $hmSig = $this->uploadedImageToDataUri($request->file('headmaster_signature_file'), 'headmaster_signature_file');
+        } elseif ($request->filled('headmaster_signature_data')) {
+            $hmSig = $this->sanitizeRasterImageDataUri($validated['headmaster_signature_data'] ?? null, 'headmaster_signature_data');
         }
 
         $school->update([

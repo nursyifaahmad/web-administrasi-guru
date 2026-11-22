@@ -127,8 +127,8 @@ class DailyJournalController extends Controller
 
         $signature = null;
         $mode = $validated['signature_mode'] ?? 'profile';
-        if ($mode === 'canvas' && ! empty($validated['signature_data']) && str_starts_with($validated['signature_data'], 'data:image/')) {
-            $signature = $validated['signature_data'];
+        if ($mode === 'canvas' && ! empty($validated['signature_data'])) {
+            $signature = $this->sanitizeRasterImageDataUri($validated['signature_data'], 'signature_data');
         } elseif ($mode === 'profile') {
             $signature = $teachingClass->teacher?->signature_data ?? $request->user()->signature_data;
         }
@@ -185,8 +185,8 @@ class DailyJournalController extends Controller
             $signature = null;
         } elseif ($mode === 'profile') {
             $signature = $teachingClass->teacher?->signature_data ?? $request->user()->signature_data;
-        } elseif ($mode === 'canvas' && ! empty($validated['signature_data']) && str_starts_with($validated['signature_data'], 'data:image/')) {
-            $signature = $validated['signature_data'];
+        } elseif ($mode === 'canvas' && ! empty($validated['signature_data'])) {
+            $signature = $this->sanitizeRasterImageDataUri($validated['signature_data'], 'signature_data');
         }
 
         $journal->update([

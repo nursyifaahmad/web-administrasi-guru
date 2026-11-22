@@ -305,7 +305,7 @@ class TeachingClassController extends Controller
             'homeroom_teacher_name' => ['nullable', 'string', 'max:180'],
             'homeroom_teacher_nip' => ['nullable', 'string', 'max:40'],
             'homeroom_teacher_signature_data' => ['nullable', 'string'],
-            'homeroom_teacher_signature_file' => ['nullable', 'image', 'max:2048'],
+            'homeroom_teacher_signature_file' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'clear_homeroom_signature' => ['nullable', 'boolean'],
         ]);
 
@@ -313,9 +313,9 @@ class TeachingClassController extends Controller
         if ($request->boolean('clear_homeroom_signature')) {
             $wkSig = null;
         } elseif ($request->hasFile('homeroom_teacher_signature_file')) {
-            $wkSig = $this->uploadedImageToDataUri($request->file('homeroom_teacher_signature_file'));
-        } elseif (! empty($validated['homeroom_teacher_signature_data']) && str_starts_with($validated['homeroom_teacher_signature_data'], 'data:image/')) {
-            $wkSig = $validated['homeroom_teacher_signature_data'];
+            $wkSig = $this->uploadedImageToDataUri($request->file('homeroom_teacher_signature_file'), 'homeroom_teacher_signature_file');
+        } elseif (! empty($validated['homeroom_teacher_signature_data'])) {
+            $wkSig = $this->sanitizeRasterImageDataUri($validated['homeroom_teacher_signature_data'], 'homeroom_teacher_signature_data');
         }
 
         $onlyTeachingDays = $request->boolean('only_teaching_days');
