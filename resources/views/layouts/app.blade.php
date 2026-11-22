@@ -541,16 +541,28 @@
 
             {{-- Flash Alerts --}}
             <div class="px-4 sm:px-6 pt-4 space-y-2">
-                @if(session('success'))
-                    <div x-data="{ show: true }" x-show="show"
-                         class="flex items-center justify-between gap-3 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-900 shadow-2xs">
-                        <div class="flex items-center gap-2.5">
-                            <svg class="w-5 h-5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                            <span class="font-medium">{{ session('success') }}</span>
+                @foreach([
+                    ['key' => 'success', 'box' => 'bg-emerald-50 border-emerald-200 text-emerald-900', 'iconCls' => 'text-emerald-600', 'btnCls' => 'text-emerald-600 hover:text-emerald-900', 'isError' => false],
+                    ['key' => 'status',  'box' => 'bg-emerald-50 border-emerald-200 text-emerald-900', 'iconCls' => 'text-emerald-600', 'btnCls' => 'text-emerald-600 hover:text-emerald-900', 'isError' => false],
+                    ['key' => 'error',   'box' => 'bg-rose-50 border-rose-200 text-rose-900',         'iconCls' => 'text-rose-600',    'btnCls' => 'text-rose-600 hover:text-rose-900',       'isError' => true],
+                ] as $flashCfg)
+                    @if(session($flashCfg['key']))
+                        <div x-data="{ show: true }" x-show="show"
+                             class="flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-2xs {{ $flashCfg['box'] }}">
+                            <div class="flex items-center gap-2.5">
+                                <svg class="w-5 h-5 shrink-0 {{ $flashCfg['iconCls'] }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    @if($flashCfg['isError'])
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    @else
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    @endif
+                                </svg>
+                                <span class="font-medium">{{ session($flashCfg['key']) }}</span>
+                            </div>
+                            <button type="button" @click="show = false" class="{{ $flashCfg['btnCls'] }}">&times;</button>
                         </div>
-                        <button @click="show = false" class="text-emerald-600 hover:text-emerald-900">&times;</button>
-                    </div>
-                @endif
+                    @endif
+                @endforeach
 
                 @if($errors->any())
                     <div class="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-900">

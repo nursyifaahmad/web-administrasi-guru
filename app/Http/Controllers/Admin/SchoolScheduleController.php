@@ -31,7 +31,7 @@ class SchoolScheduleController extends Controller
 
     public function index(Request $request): View
     {
-        $selectedYearId = $request->session()->get('active_academic_year_id');
+        $selectedYearId = $request->query('academic_year_id') ?: $request->session()->get('active_academic_year_id');
         $academicYear = $selectedYearId
             ? AcademicYear::query()->find($selectedYearId)
             : AcademicYear::active();

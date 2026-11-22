@@ -2,7 +2,7 @@
 
 @section('title', 'Master Jadwal Pelajaran Sekolah')
 @section('page_title', 'Master Jadwal Pelajaran Sekolah')
-@section('page_subtitle', 'Pengaturan jadwal KBM 21 rombel, deteksi bentrok otomatis, dan sinkronisasi ke administrasi guru.')
+@section('page_subtitle', 'Pengaturan jadwal KBM ' . ($matrixData['total_classes'] ?? 21) . ' rombel, deteksi bentrok otomatis, dan sinkronisasi ke administrasi guru.')
 
 @section('content')
 <div class="space-y-6"
@@ -77,7 +77,8 @@
         isCommonActivity(item) {
             if (!item || !item.teacher_code) return false;
             let code = String(item.teacher_code).trim().toUpperCase();
-            return ['UPACARA BENDERA', 'UPACARA', 'SHOLAT DHUHA', 'DHUHA', 'ISTIRAHAT', 'KEGIATAN KEAGAMAAN', 'SABTU BERSIH / OR', 'SABTU BERSIH', 'LITERASI'].includes(code);
+            return ['UPACARA', 'SHOLAT', 'DHUHA', 'ISTIRAHAT', 'KEAGAMAAN', 'SABTU BERSIH', 'SABSIH', 'PAGI CERIA', 'PEMBIASAAN', 'LITERASI', 'EKSTRAKURIKULER']
+                .some(kw => code.includes(kw));
         }
      }">
 
@@ -89,7 +90,7 @@
                     Tahun Ajaran: {{ $academicYear->full_label ?? '-' }}
                 </span>
                 <span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
-                    21 Rombel &bull; 2 Shift (Perbaikan Kelas)
+                    {{ $matrixData['total_classes'] ?? 21 }} Rombel &bull; {{ ($matrixData['is_two_shift'] ?? false) ? '2 Shift (Pagi & Siang)' : '1 Shift (Semua Rombel)' }}
                 </span>
             </div>
             <h2 class="text-base font-extrabold text-slate-900 mt-2">Pusat Pengaturan Jadwal Pelajaran Wakasek</h2>
@@ -300,7 +301,7 @@
                                     <span class="font-extrabold text-rose-700 underline">{{ implode(' & ', $c['clashing_classes']) }}</span>
                                 </div>
                             </div>
-                            <a href="{{ route('admin.schedules.master.index', ['day' => $c['day_of_week']]) }}"
+                            <a href="{{ route('admin.schedules.master.index', ['day' => $c['day_of_week'], 'academic_year_id' => $academicYear?->id]) }}"
                                class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold transition shrink-0">
                                 Ke Hari {{ $c['day_name'] }} &rarr;
                             </a>
@@ -332,7 +333,7 @@
                     $isDayActive = $activeDay === $dNum;
                     $dayConflicts = collect($conflicts)->where('day_of_week', $dNum)->count();
                 @endphp
-                <a href="{{ route('admin.schedules.master.index', ['day' => $dNum]) }}"
+                <a href="{{ route('admin.schedules.master.index', ['day' => $dNum, 'academic_year_id' => $academicYear?->id]) }}"
                    class="flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-center font-bold text-xs transition flex items-center justify-center gap-2 {{ $isDayActive ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100' }}">
                     <span>{{ strtoupper($dName) }}</span>
                     @if($dayConflicts > 0)
@@ -345,186 +346,130 @@
         </div>
     </div>
 
-    {{-- MATRIKS JADWAL HARI TERPILIH --}}
+    {{-- MATRIKS JADWAL HARI TERPILIH (DINAMIS 1 SHIFT / 2 SHIFT) --}}
     @php
         $dayMatrix = $matrixData['matrix_by_day'][$activeDay] ?? null;
         $pagiSlots = $dayMatrix['pagi_slots'] ?? collect();
         $siangSlots = $dayMatrix['siang_slots'] ?? collect();
+        $isTwoShift = (bool) ($matrixData['is_two_shift'] ?? false);
+        $shift1Meta = $matrixData['shift1_meta'] ?? [];
+        $shift2Meta = $matrixData['shift2_meta'] ?? [];
+
+        $gradeHeaderThemes = [
+            '7' => ['th' => 'bg-emerald-50 text-emerald-900', 'btn' => 'hover:bg-emerald-50 hover:text-emerald-900'],
+            '8' => ['th' => 'bg-amber-50 text-amber-900',     'btn' => 'hover:bg-amber-50 hover:text-amber-900'],
+            '9' => ['th' => 'bg-blue-50 text-blue-900',       'btn' => 'hover:bg-blue-50 hover:text-blue-900'],
+        ];
+
+        $shiftSections = [
+            [
+                'key' => 'pagi',
+                'title' => $shift1Meta['title'] ?? 'Jadwal 1 Shift: Semua Rombel',
+                'time_range' => $dayMatrix['pagi_time_range'] ?? '-',
+                'banner_bg' => 'from-emerald-950 via-slate-900 to-slate-900',
+                'dot_bg' => 'bg-emerald-400',
+                'classes' => $shift1Meta['flat_classes'] ?? ['7A','7B','7C','7D','7E','7F','7G','8A','8B','8C','8D','8E','8F','8G','9A','9B','9C','9D','9E','9F','9G'],
+                'slots' => $pagiSlots,
+                'empty_text' => 'Belum ada data jadwal pada hari ini. Klik "Buat Jadwal Baru dari Awal" atau "Import Excel".',
+            ],
+        ];
+
+        if ($isTwoShift || count($siangSlots) > 0) {
+            $shiftSections[] = [
+                'key' => 'siang',
+                'title' => $shift2Meta['title'] ?? 'Shift Siang: Kelas VIII (8A–8G)',
+                'time_range' => $dayMatrix['siang_time_range'] ?? '-',
+                'banner_bg' => 'from-amber-950 via-slate-900 to-slate-900',
+                'dot_bg' => 'bg-amber-400',
+                'classes' => $shift2Meta['flat_classes'] ?? ['8A','8B','8C','8D','8E','8F','8G'],
+                'slots' => $siangSlots,
+                'empty_text' => 'Belum ada data jadwal untuk Shift Siang.',
+            ];
+        }
     @endphp
 
     <div class="space-y-6">
-
-        {{-- 1. SHIFT PAGI: KELAS VII & KELAS IX --}}
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div class="p-4 bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 text-white flex flex-wrap items-center justify-between gap-3">
-                <div class="flex items-center gap-3">
-                    <span class="w-3 h-3 rounded-full bg-emerald-400"></span>
-                    <h3 class="text-sm font-extrabold uppercase tracking-wide">
-                        Shift Pagi: Kelas VII (7A–7G) & Kelas IX (9A–9G)
-                    </h3>
+        @foreach($shiftSections as $sec)
+            @php
+                $secClasses = $sec['classes'];
+                $secColCount = max(1, count($secClasses));
+            @endphp
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+                <div class="p-4 bg-gradient-to-r {{ $sec['banner_bg'] }} text-white flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 rounded-full {{ $sec['dot_bg'] }}"></span>
+                        <h3 class="text-sm font-extrabold uppercase tracking-wide">
+                            {{ $sec['title'] }}
+                        </h3>
+                    </div>
+                    <span class="text-xs text-slate-300 font-medium">Jam Belajar: {{ $sec['time_range'] }}</span>
                 </div>
-                <span class="text-xs text-slate-300 font-medium">Jam Belajar: 07.00 – 11.55 WIB</span>
-            </div>
 
-            <div class="overflow-x-auto">
-                <table class="w-full text-xs text-center border-collapse">
-                    <thead>
-                        <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-extrabold">
-                            <th class="p-2 border-r border-slate-200 w-12">Jam</th>
-                            <th class="p-2 border-r border-slate-200 w-28 whitespace-nowrap">Waktu</th>
-                            {{-- Header Kelas VII --}}
-                            @foreach(['7A','7B','7C','7D','7E','7F','7G'] as $c)
-                                <th class="p-2 border-r border-slate-200 bg-emerald-50 text-emerald-900 min-w-[55px]">{{ $c }}</th>
-                            @endforeach
-                            {{-- Header Kelas IX --}}
-                            @foreach(['9A','9B','9C','9D','9E','9F','9G'] as $c)
-                                <th class="p-2 border-r border-slate-200 bg-blue-50 text-blue-900 min-w-[55px]">{{ $c }}</th>
-                            @endforeach
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
-                        @forelse($pagiSlots as $slot)
-                            @if($slot['is_activity'])
-                                <tr class="bg-amber-50/80 font-bold text-amber-900">
-                                    <td class="p-2 border-r border-slate-200 text-slate-500 font-semibold">{{ $slot['period_order'] ?: '-' }}</td>
-                                    <td class="p-2 border-r border-slate-200 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-                                    <td colspan="14" class="p-2 text-center uppercase tracking-widest text-amber-800">
-                                        {{ $slot['activity_name'] }}
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-center border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-extrabold">
+                                <th class="p-2 border-r border-slate-200 w-12">Jam</th>
+                                <th class="p-2 border-r border-slate-200 w-28 whitespace-nowrap">Waktu</th>
+                                @foreach($secClasses as $c)
+                                    @php
+                                        $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
+                                        $gTh = $gradeHeaderThemes[$gKey]['th'] ?? 'bg-slate-50 text-slate-900';
+                                    @endphp
+                                    <th class="p-2 border-r border-slate-200 {{ $gTh }} min-w-[52px]">{{ $c }}</th>
+                                @endforeach
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
+                            @forelse($sec['slots'] as $slot)
+                                @if($slot['is_activity'])
+                                    <tr class="bg-amber-50/80 font-bold text-amber-900">
+                                        <td class="p-2 border-r border-slate-200 text-slate-500 font-semibold">{{ $slot['period_order'] ?: '-' }}</td>
+                                        <td class="p-2 border-r border-slate-200 whitespace-nowrap">{{ $slot['time_range'] }}</td>
+                                        <td colspan="{{ $secColCount }}" class="p-2 text-center uppercase tracking-widest text-amber-800">
+                                            {{ $slot['activity_name'] }}
+                                        </td>
+                                    </tr>
+                                @else
+                                    <tr class="hover:bg-slate-50/60 transition">
+                                        <td class="p-2 border-r border-slate-200 font-bold text-slate-600 bg-slate-50/40">{{ $slot['period_order'] }}</td>
+                                        <td class="p-2 border-r border-slate-200 font-semibold text-slate-600 whitespace-nowrap">{{ $slot['time_range'] }}</td>
+
+                                        @foreach($secClasses as $c)
+                                            @php
+                                                $item = $slot['classes'][$c] ?? null;
+                                                $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
+                                                $gBtn = $gradeHeaderThemes[$gKey]['btn'] ?? 'hover:bg-emerald-50 hover:text-emerald-900';
+                                            @endphp
+                                            <td class="p-1 border-r border-slate-200 {{ $item?->is_conflict ? 'bg-rose-100/90 border-rose-400 font-bold text-rose-900' : '' }}">
+                                                @if($item)
+                                                    <button type="button" @click="openEdit({{ json_encode($item) }})"
+                                                            title="{{ $item->is_conflict ? $item->conflict_notes : ($item->teacher_name . ' (' . $item->subject_name . ')') }}"
+                                                            class="w-full py-1.5 px-1 rounded-lg text-center transition cursor-pointer flex flex-col items-center justify-center {{ $item->is_conflict ? 'bg-rose-600 text-white font-black ring-2 ring-rose-400 animate-pulse' : $gBtn }}">
+                                                        <span class="text-xs font-black">{{ $item->teacher_code ?: '-' }}</span>
+                                                        @if($item->is_conflict)
+                                                            <span class="text-[9px] uppercase tracking-tighter">BENTROK</span>
+                                                        @endif
+                                                    </button>
+                                                @else
+                                                    <span class="text-slate-300">-</span>
+                                                @endif
+                                            </td>
+                                        @endforeach
+                                    </tr>
+                                @endif
+                            @empty
+                                <tr>
+                                    <td colspan="{{ 2 + $secColCount }}" class="p-8 text-center text-slate-400">
+                                        {{ $sec['empty_text'] }}
                                     </td>
                                 </tr>
-                            @else
-                                <tr class="hover:bg-slate-50/60 transition">
-                                    <td class="p-2 border-r border-slate-200 font-bold text-slate-600 bg-slate-50/40">{{ $slot['period_order'] }}</td>
-                                    <td class="p-2 border-r border-slate-200 font-semibold text-slate-600 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-
-                                    {{-- Kolom 7A-7G --}}
-                                    @foreach(['7A','7B','7C','7D','7E','7F','7G'] as $c)
-                                        @php
-                                            $item = $slot['classes'][$c] ?? null;
-                                        @endphp
-                                        <td class="p-1 border-r border-slate-200 {{ $item?->is_conflict ? 'bg-rose-100/90 border-rose-400 font-bold text-rose-900' : '' }}">
-                                            @if($item)
-                                                <button type="button" @click="openEdit({{ json_encode($item) }})"
-                                                        title="{{ $item->is_conflict ? $item->conflict_notes : ($item->teacher_name . ' (' . $item->subject_name . ')') }}"
-                                                        class="w-full py-1.5 px-1 rounded-lg text-center transition cursor-pointer flex flex-col items-center justify-center {{ $item->is_conflict ? 'bg-rose-600 text-white font-black ring-2 ring-rose-400 animate-pulse' : 'hover:bg-emerald-50 hover:text-emerald-900' }}">
-                                                    <span class="text-xs font-black">{{ $item->teacher_code ?: '-' }}</span>
-                                                    @if($item->is_conflict)
-                                                        <span class="text-[9px] uppercase tracking-tighter">BENTROK</span>
-                                                    @endif
-                                                </button>
-                                            @else
-                                                <span class="text-slate-300">-</span>
-                                            @endif
-                                        </td>
-                                    @endforeach
-
-                                    {{-- Kolom 9A-9G --}}
-                                    @foreach(['9A','9B','9C','9D','9E','9F','9G'] as $c)
-                                        @php
-                                            $item = $slot['classes'][$c] ?? null;
-                                        @endphp
-                                        <td class="p-1 border-r border-slate-200 {{ $item?->is_conflict ? 'bg-rose-100/90 border-rose-400 font-bold text-rose-900' : '' }}">
-                                            @if($item)
-                                                <button type="button" @click="openEdit({{ json_encode($item) }})"
-                                                        title="{{ $item->is_conflict ? $item->conflict_notes : ($item->teacher_name . ' (' . $item->subject_name . ')') }}"
-                                                        class="w-full py-1.5 px-1 rounded-lg text-center transition cursor-pointer flex flex-col items-center justify-center {{ $item->is_conflict ? 'bg-rose-600 text-white font-black ring-2 ring-rose-400 animate-pulse' : 'hover:bg-blue-50 hover:text-blue-900' }}">
-                                                    <span class="text-xs font-black">{{ $item->teacher_code ?: '-' }}</span>
-                                                    @if($item->is_conflict)
-                                                        <span class="text-[9px] uppercase tracking-tighter">BENTROK</span>
-                                                    @endif
-                                                </button>
-                                            @else
-                                                <span class="text-slate-300">-</span>
-                                            @endif
-                                        </td>
-                                    @endforeach
-                                </tr>
-                            @endif
-                        @empty
-                            <tr>
-                                <td colspan="16" class="p-8 text-center text-slate-400">
-                                    Belum ada data jadwal untuk Shift Pagi. Klik <strong>"Buat Jadwal Baru dari Awal"</strong>.
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        {{-- 2. SHIFT SIANG: KELAS VIII --}}
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div class="p-4 bg-gradient-to-r from-amber-950 via-slate-900 to-slate-900 text-white flex flex-wrap items-center justify-between gap-3">
-                <div class="flex items-center gap-3">
-                    <span class="w-3 h-3 rounded-full bg-amber-400"></span>
-                    <h3 class="text-sm font-extrabold uppercase tracking-wide">
-                        Shift Siang: Kelas VIII (8A–8G)
-                    </h3>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
-                <span class="text-xs text-slate-300 font-medium">Jam Belajar: 12.00 – 16.25 WIB</span>
             </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-xs text-center border-collapse">
-                    <thead>
-                        <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-extrabold">
-                            <th class="p-2 border-r border-slate-200 w-12">Jam</th>
-                            <th class="p-2 border-r border-slate-200 w-28 whitespace-nowrap">Waktu</th>
-                            {{-- Header Kelas VIII --}}
-                            @foreach(['8A','8B','8C','8D','8E','8F','8G'] as $c)
-                                <th class="p-2 border-r border-slate-200 bg-amber-50 text-amber-900 min-w-[70px]">{{ $c }}</th>
-                            @endforeach
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 font-medium text-slate-800">
-                        @forelse($siangSlots as $slot)
-                            @if($slot['is_activity'])
-                                <tr class="bg-amber-50/80 font-bold text-amber-900">
-                                    <td class="p-2 border-r border-slate-200 text-slate-500 font-semibold">{{ $slot['period_order'] ?: '-' }}</td>
-                                    <td class="p-2 border-r border-slate-200 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-                                    <td colspan="7" class="p-2 text-center uppercase tracking-widest text-amber-800">
-                                        {{ $slot['activity_name'] }}
-                                    </td>
-                                </tr>
-                            @else
-                                <tr class="hover:bg-slate-50/60 transition">
-                                    <td class="p-2 border-r border-slate-200 font-bold text-slate-600 bg-slate-50/40">{{ $slot['period_order'] }}</td>
-                                    <td class="p-2 border-r border-slate-200 font-semibold text-slate-600 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-
-                                    {{-- Kolom 8A-8G --}}
-                                    @foreach(['8A','8B','8C','8D','8E','8F','8G'] as $c)
-                                        @php
-                                            $item = $slot['classes'][$c] ?? null;
-                                        @endphp
-                                        <td class="p-1 border-r border-slate-200 {{ $item?->is_conflict ? 'bg-rose-100/90 border-rose-400 font-bold text-rose-900' : '' }}">
-                                            @if($item)
-                                                <button type="button" @click="openEdit({{ json_encode($item) }})"
-                                                        title="{{ $item->is_conflict ? $item->conflict_notes : ($item->teacher_name . ' (' . $item->subject_name . ')') }}"
-                                                        class="w-full py-1.5 px-1 rounded-lg text-center transition cursor-pointer flex flex-col items-center justify-center {{ $item->is_conflict ? 'bg-rose-600 text-white font-black ring-2 ring-rose-400 animate-pulse' : 'hover:bg-amber-50 hover:text-amber-900' }}">
-                                                    <span class="text-xs font-black">{{ $item->teacher_code ?: '-' }}</span>
-                                                    @if($item->is_conflict)
-                                                        <span class="text-[9px] uppercase tracking-tighter">BENTROK</span>
-                                                    @endif
-                                                </button>
-                                            @else
-                                                <span class="text-slate-300">-</span>
-                                            @endif
-                                        </td>
-                                    @endforeach
-                                </tr>
-                            @endif
-                        @empty
-                            <tr>
-                                <td colspan="9" class="p-8 text-center text-slate-400">
-                                    Belum ada data jadwal untuk Shift Siang.
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
+        @endforeach
     </div>
 
     {{-- MODAL GERBANG PILIHAN: BUAT JADWAL BARU DARI AWAL (IMPORT EXCEL VS 6 TAHAPAN WIZARD) --}}

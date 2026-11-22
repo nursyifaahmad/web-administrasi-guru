@@ -31,6 +31,19 @@ class SchoolScheduleService
     }
 
     /**
+     * Normalisasi potongan jam tunggal (mis. "7.40" atau "07:40") menjadi format "HH:MM".
+     */
+    protected static function normalizeClockToken(string $token, string $fallback = ''): string
+    {
+        $clean = str_replace('.', ':', trim($token));
+        if (preg_match('/^(\d{1,2}):(\d{2})$/', $clean, $m)) {
+            return sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
+        }
+
+        return $clean !== '' ? $clean : $fallback;
+    }
+
+    /**
      * Konversi string waktu seperti "07.40 - 08.10" menjadi format jam mulai "07:40"
      * untuk keperluan pengurutan kronologis
      */
@@ -40,12 +53,21 @@ class SchoolScheduleService
             return '99:99';
         }
         $parts = explode('-', $timeRange);
-        $start = trim($parts[0] ?? '');
-        $start = str_replace('.', ':', $start);
-        if (preg_match('/^(\d{1,2}):(\d{2})$/', $start, $m)) {
-            return sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
+
+        return self::normalizeClockToken((string) ($parts[0] ?? ''), '99:99');
+    }
+
+    /**
+     * Konversi string waktu seperti "07.40 - 08.10" menjadi format jam selesai "08:10".
+     */
+    public static function extractEndTime(?string $timeRange): string
+    {
+        if (empty($timeRange)) {
+            return '';
         }
-        return $start;
+        $parts = explode('-', $timeRange);
+
+        return self::normalizeClockToken((string) ($parts[1] ?? ($parts[0] ?? '')));
     }
 
     /**
@@ -2877,6 +2899,30 @@ CSV;
             }
         }
 
+        $shiftClassPairs = SchoolScheduleItem::query()
+            ->where('academic_year_id', $academicYear->id)
+            ->select(['shift', 'class_name'])
+            ->distinct()
+            ->get();
+
+        $pagiRawClasses = $shiftClassPairs->where('shift', 'pagi')->pluck('class_name')->filter()->values()->all();
+        $siangRawClasses = $shiftClassPairs->where('shift', 'siang')->pluck('class_name')->filter()->values()->all();
+
+        if ($shiftClassPairs->isEmpty()) {
+            $fallbackClasses = $this->resolveNormalizedTemplateClassCodes($academicYear);
+            $siangRawClasses = array_values(array_filter($fallbackClasses, fn (string $c) => str_starts_with($c, '8')));
+            $pagiRawClasses = array_values(array_diff($fallbackClasses, $siangRawClasses));
+            if (empty($pagiRawClasses)) {
+                $pagiRawClasses = ['7A', '7B', '7C', '7D', '7E', '7F', '7G', '9A', '9B', '9C', '9D', '9E', '9F', '9G'];
+                $siangRawClasses = ['8A', '8B', '8C', '8D', '8E', '8F', '8G'];
+            }
+        }
+
+        $shift1Groups = $this->groupNormalizedClasses($pagiRawClasses);
+        $shift2Groups = $this->groupNormalizedClasses($siangRawClasses);
+        $isTwoShift = count($shift2Groups['flat_classes']) > 0;
+        $totalClasses = count(array_unique(array_merge($shift1Groups['flat_classes'], $shift2Groups['flat_classes'])));
+
         $teachers = $this->getMasterTeacherDirectory($academicYear)->keyBy('code');
 
         $days = $dayOfWeek ? [$dayOfWeek] : [1, 2, 3, 4, 5, 6];
@@ -2885,41 +2931,16 @@ CSV;
         foreach ($days as $d) {
             $dayItems = $items->where('day_of_week', $d);
 
-            // Shift Pagi (Kelas 7 & 9)
-            $pagiItems = $dayItems->where('shift', 'pagi');
-            $pagiSlots = $pagiItems->groupBy('time_range')->map(function ($slotItems) {
-                $first = $slotItems->first();
-                $byClass = $slotItems->keyBy('class_name');
-                return [
-                    'period_order' => $first->period_order,
-                    'time_range' => $first->time_range,
-                    'start_time' => self::extractStartTime($first->time_range),
-                    'is_activity' => $first->isCommonActivity(),
-                    'activity_name' => $first->isCommonActivity() ? $first->teacher_code : null,
-                    'classes' => $byClass,
-                ];
-            })->sortBy('start_time')->values();
-
-            // Shift Siang (Kelas 8)
-            $siangItems = $dayItems->where('shift', 'siang');
-            $siangSlots = $siangItems->groupBy('time_range')->map(function ($slotItems) {
-                $first = $slotItems->first();
-                $byClass = $slotItems->keyBy('class_name');
-                return [
-                    'period_order' => $first->period_order,
-                    'time_range' => $first->time_range,
-                    'start_time' => self::extractStartTime($first->time_range),
-                    'is_activity' => $first->isCommonActivity(),
-                    'activity_name' => $first->isCommonActivity() ? $first->teacher_code : null,
-                    'classes' => $byClass,
-                ];
-            })->sortBy('start_time')->values();
+            $pagiSlots = $this->buildMasterMatrixSlots($dayItems->where('shift', 'pagi'));
+            $siangSlots = $this->buildMasterMatrixSlots($dayItems->where('shift', 'siang'));
 
             $matrixByDay[$d] = [
                 'day_num' => $d,
                 'day_name' => self::DAYS_MAP[$d] ?? 'Hari ' . $d,
                 'pagi_slots' => $pagiSlots,
                 'siang_slots' => $siangSlots,
+                'pagi_time_range' => $this->summarizeShiftTimeSpan($pagiSlots, '07.00 – 13.55 WIB'),
+                'siang_time_range' => $this->summarizeShiftTimeSpan($siangSlots, '12.00 – 16.25 WIB'),
                 'conflicts_count' => $dayItems->where('is_conflict', true)->count(),
             ];
         }
@@ -2929,7 +2950,117 @@ CSV;
             'teachers' => $teachers,
             'total_items' => $items->count(),
             'total_conflicts' => $items->where('is_conflict', true)->count(),
+            'is_two_shift' => $isTwoShift,
+            'shift_count' => $isTwoShift ? 2 : 1,
+            'total_classes' => $totalClasses > 0 ? $totalClasses : 21,
+            'shift1_meta' => [
+                'key' => 'pagi',
+                'title' => $this->formatMatrixShiftTitle($shift1Groups, 'pagi', $isTwoShift),
+                'groups' => $shift1Groups['groups'],
+                'flat_classes' => $shift1Groups['flat_classes'],
+            ],
+            'shift2_meta' => [
+                'key' => 'siang',
+                'title' => $this->formatMatrixShiftTitle($shift2Groups, 'siang', $isTwoShift),
+                'groups' => $shift2Groups['groups'],
+                'flat_classes' => $shift2Groups['flat_classes'],
+            ],
         ];
+    }
+
+    /**
+     * Kelompokkan item satu hari per slot waktu menjadi baris matriks yang terurut kronologis.
+     */
+    protected function buildMasterMatrixSlots(Collection $shiftItems): Collection
+    {
+        return $shiftItems->groupBy('time_range')->map(function (Collection $slotItems) {
+            $first = $slotItems->first();
+            $byClass = $slotItems->keyBy('class_name');
+            $hasActivity = $slotItems->contains(fn ($i) => $i->isCommonActivity());
+            $hasRegularTeacher = $slotItems->contains(
+                fn ($i) => ! $i->isCommonActivity() && trim((string) $i->teacher_code) !== ''
+            );
+            $isActivity = $hasActivity && ! $hasRegularTeacher;
+
+            $activityName = null;
+            if ($isActivity) {
+                $activityNames = $slotItems
+                    ->filter(fn ($i) => $i->isCommonActivity())
+                    ->pluck('teacher_code')
+                    ->map(fn ($v) => trim((string) $v))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+                $activityName = ! empty($activityNames) ? implode(' / ', $activityNames) : $first->teacher_code;
+            }
+
+            return [
+                'period_order' => $first->period_order,
+                'time_range' => $first->time_range,
+                'start_time' => self::extractStartTime($first->time_range),
+                'is_activity' => $isActivity,
+                'activity_name' => $activityName,
+                'classes' => $byClass,
+            ];
+        })->sortBy([
+            ['start_time', 'asc'],
+            ['period_order', 'asc'],
+        ])->values();
+    }
+
+    /**
+     * Hitung rentang jam belajar aktual pada satu shift (mis. "07.00 – 13.55 WIB").
+     */
+    protected function summarizeShiftTimeSpan(Collection $slots, string $fallback = '-'): string
+    {
+        $starts = $slots
+            ->map(fn (array $s) => self::extractStartTime($s['time_range'] ?? ''))
+            ->filter(fn (string $t) => $t !== '' && $t !== '99:99')
+            ->sort()
+            ->values();
+        $ends = $slots
+            ->map(fn (array $s) => self::extractEndTime($s['time_range'] ?? ''))
+            ->filter(fn (string $t) => $t !== '')
+            ->sort()
+            ->values();
+
+        if ($starts->isEmpty() || $ends->isEmpty()) {
+            return $fallback;
+        }
+
+        return str_replace(':', '.', $starts->first()) . ' – ' . str_replace(':', '.', $ends->last()) . ' WIB';
+    }
+
+    /**
+     * Susun judul blok shift matriks secara dinamis berdasarkan daftar rombel aktual.
+     */
+    protected function formatMatrixShiftTitle(array $groupInfo, string $shiftKey, bool $isTwoShift): string
+    {
+        $parts = [];
+        foreach ($groupInfo['groups'] ?? [] as $grp) {
+            $classes = $grp['classes'] ?? [];
+            if (empty($classes)) {
+                continue;
+            }
+            $firstCode = $classes[0]['code'];
+            $lastCode = $classes[count($classes) - 1]['code'];
+            $range = $firstCode === $lastCode ? $firstCode : "{$firstCode}–{$lastCode}";
+            $parts[] = ucwords(strtolower($grp['grade_label'])) . " ({$range})";
+        }
+
+        $classDesc = match (count($parts)) {
+            0 => 'Semua Rombel',
+            1 => $parts[0],
+            2 => implode(' & ', $parts),
+            default => implode(', ', $parts),
+        };
+
+        if (! $isTwoShift && $shiftKey === 'pagi') {
+            return 'Jadwal 1 Shift: ' . $classDesc;
+        }
+
+        return ($shiftKey === 'siang' ? 'Shift Siang: ' : 'Shift Pagi: ') . $classDesc;
     }
 
     /**

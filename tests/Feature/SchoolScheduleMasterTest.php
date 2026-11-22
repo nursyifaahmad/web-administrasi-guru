@@ -1570,4 +1570,114 @@ class SchoolScheduleMasterTest extends TestCase
             @unlink($tmpDouble);
         }
     }
+
+    public function test_importing_single_shift_excel_replaces_two_shift_ui_matrix_and_shows_class_viii_together(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+        $bin = Subject::query()->create(['code' => 'BIN', 'name' => 'Bahasa Indonesia', 'default_kktp' => 76, 'is_active' => true]);
+        $ips = Subject::query()->create(['code' => 'IPS', 'name' => 'Ilmu Pengetahuan Sosial', 'default_kktp' => 76, 'is_active' => true]);
+
+        // Seed jadwal 2 shift sebelumnya agar teruji terganti penuh menjadi 1 shift
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'pagi',
+            'period_order' => 1,
+            'time_range' => '07.40 - 08.10',
+            'class_name' => '7A',
+            'teacher_code' => '2',
+            'teacher_name' => 'Guru 2',
+            'subject_name' => $bin->name,
+        ]);
+        SchoolScheduleItem::query()->create([
+            'academic_year_id' => $year->id,
+            'day_of_week' => 1,
+            'shift' => 'siang',
+            'period_order' => 1,
+            'time_range' => '12.00 - 12.30',
+            'class_name' => '8A',
+            'teacher_code' => '11',
+            'teacher_name' => 'Guru 11',
+            'subject_name' => $ips->name,
+        ]);
+
+        // Buat file Excel 1 Shift berisi Kelas VII, VIII, IX dalam satu tabel
+        $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sh = $ss->getActiveSheet();
+        $sh->setCellValue('A1', 'HARI')->setCellValue('B1', 'JP KE')->setCellValue('C1', 'WAKTU')
+            ->setCellValue('D1', 'KELAS VII')->setCellValue('E1', 'KELAS VIII')->setCellValue('F1', 'KELAS IX');
+        $sh->setCellValue('D2', 'A')->setCellValue('E2', 'A')->setCellValue('F2', 'A');
+        $sh->setCellValue('A3', 'SENIN')->setCellValue('B3', '0')->setCellValue('C3', '07.00 - 08.00')
+            ->setCellValue('D3', 'UPACARA BENDERA');
+        $sh->mergeCells('D3:F3');
+        $sh->setCellValue('B4', '1')->setCellValue('C4', '08.20 - 09.00')
+            ->setCellValue('D4', '2')->setCellValue('E4', '14A')->setCellValue('F4', '16');
+        $sh->setCellValue('B5', '7')->setCellValue('C5', '13.15 - 13.55')
+            ->setCellValue('D5', '2')->setCellValue('E5', '14A')->setCellValue('F5', '16');
+
+        $sh->setCellValue('H1', 'Kode')->setCellValue('I1', 'Nama Guru')->setCellValue('J1', 'Mata Pelajaran');
+        $sh->setCellValue('H2', '2')->setCellValue('I2', 'Guru Dua, S.Pd')->setCellValue('J2', 'Bahasa Indonesia');
+        $sh->setCellValue('H3', '14A')->setCellValue('I3', 'Guru Empat Belas, S.Pd')->setCellValue('J3', 'Ilmu Pengetahuan Sosial');
+        $sh->setCellValue('H4', '16')->setCellValue('I4', 'Guru Enam Belas, S.Pd')->setCellValue('J4', 'Bahasa Indonesia');
+
+        $tmp = tempnam(sys_get_temp_dir(), 'single_shift_') . '.xlsx';
+        try {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($ss))->save($tmp);
+
+            $postResp = $this->actingAs($admin)->followingRedirects()->post(route('admin.schedules.master.import'), [
+                'academic_year_id' => $year->id,
+                'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('jadwal_1_shift.xlsx', (string) file_get_contents($tmp)),
+            ]);
+
+            $postResp->assertOk();
+            $postResp->assertSee('Impor Master Jadwal berhasil!');
+            $postResp->assertSee('(1 shift)');
+            $postResp->assertSee('3 Rombel');
+            $postResp->assertSee('1 Shift (Semua Rombel)');
+            $postResp->assertSee('Jadwal 1 Shift:');
+            $postResp->assertSee('07.00 – 13.55 WIB');
+            $postResp->assertSee('8A');
+            $postResp->assertSee('14A');
+            $postResp->assertDontSee('Shift Siang:');
+            $postResp->assertDontSee('Belum ada data jadwal untuk Shift Siang');
+
+            $this->assertSame(0, SchoolScheduleItem::query()->where('academic_year_id', $year->id)->where('shift', 'siang')->count());
+            $this->assertSame(9, SchoolScheduleItem::query()->where('academic_year_id', $year->id)->where('shift', 'pagi')->count());
+
+            $mainResp = $this->actingAs($admin)->get(route('schedules.main.index', [
+                'tab' => 'school_matrix',
+                'day' => 1,
+            ]));
+            $mainResp->assertOk();
+            $mainResp->assertSee('Matriks 3 Rombel Sekolah');
+            $mainResp->assertSee('Jadwal 1 Shift:');
+            $mainResp->assertSee('8A');
+            $mainResp->assertDontSee('Shift Siang:');
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    public function test_failed_schedule_import_renders_visible_error_flash_banner_on_redirect(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $ss->getActiveSheet()->setCellValue('A1', 'KOLOM TIDAK VALID');
+        $tmp = tempnam(sys_get_temp_dir(), 'bad_layout_') . '.xlsx';
+
+        try {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($ss))->save($tmp);
+
+            $resp = $this->actingAs($admin)->followingRedirects()->post(route('admin.schedules.master.import'), [
+                'academic_year_id' => $year->id,
+                'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('bad_layout.xlsx', (string) file_get_contents($tmp)),
+            ]);
+
+            $resp->assertOk();
+            $resp->assertSee('Gagal mengimpor file Master Jadwal:');
+        } finally {
+            @unlink($tmp);
+        }
+    }
 }

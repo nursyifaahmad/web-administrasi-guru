@@ -2,7 +2,7 @@
 
 @section('title', 'Jadwal Utama Sekolah')
 @section('page_title', 'Jadwal Utama Sekolah')
-@section('page_subtitle', 'Tinjau jadwal mengajar pribadi Anda dan matriks lengkap 21 rombel sekolah.')
+@section('page_subtitle', 'Tinjau jadwal mengajar pribadi Anda dan matriks lengkap ' . ($matrixData['total_classes'] ?? 21) . ' rombel sekolah.')
 
 @section('content')
 <div class="space-y-6"
@@ -68,7 +68,7 @@
             <button type="button" @click="tab = 'school_matrix'"
                     :class="tab === 'school_matrix' ? 'bg-white text-emerald-800 shadow-xs font-extrabold' : 'text-slate-600 hover:text-slate-900 font-semibold'"
                     class="flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs transition">
-                Matriks 21 Rombel Sekolah
+                Matriks {{ $matrixData['total_classes'] ?? 21 }} Rombel Sekolah
             </button>
             <button type="button" @click="tab = 'piket'"
                     :class="tab === 'piket' ? 'bg-white text-emerald-800 shadow-xs font-extrabold' : 'text-slate-600 hover:text-slate-900 font-semibold'"
@@ -84,10 +84,10 @@
             <div class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex flex-wrap items-center justify-between gap-3 shadow-2xs">
                 <div class="flex items-center gap-2.5">
                     <svg class="w-5 h-5 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <span>Akun Anda berstatus <strong>Administrator Sekolah / Wakasek</strong> (tidak memiliki jadwal KBM mengajar pribadi di kelas). Silakan buka tab <strong>Matriks 21 Rombel Sekolah</strong> untuk memantau dan mengelola seluruh jadwal rombel.</span>
+                    <span>Akun Anda berstatus <strong>Administrator Sekolah / Wakasek</strong> (tidak memiliki jadwal KBM mengajar pribadi di kelas). Silakan buka tab <strong>Matriks {{ $matrixData['total_classes'] ?? 21 }} Rombel Sekolah</strong> untuk memantau dan mengelola seluruh jadwal rombel.</span>
                 </div>
                 <button type="button" @click="tab = 'school_matrix'" class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition cursor-pointer">
-                    Buka Matriks 21 Rombel &rarr;
+                    Buka Matriks {{ $matrixData['total_classes'] ?? 21 }} Rombel &rarr;
                 </button>
             </div>
         @endif
@@ -181,6 +181,9 @@
             $dayMatrix = $matrixData['matrix_by_day'][$activeDay] ?? null;
             $pagiSlots = $dayMatrix['pagi_slots'] ?? collect();
             $siangSlots = $dayMatrix['siang_slots'] ?? collect();
+            $isTwoShift = (bool) ($matrixData['is_two_shift'] ?? false);
+            $shift1Meta = $matrixData['shift1_meta'] ?? [];
+            $shift2Meta = $matrixData['shift2_meta'] ?? [];
 
             $teacherLookup = [];
             foreach ($allTeachers as $t) {
@@ -191,166 +194,119 @@
                     'piket' => $t->piket_day ? 'Piket Hari ' . $t->piket_day : '-',
                 ];
             }
+
+            $gradeHeaderThemes = [
+                '7' => ['th' => 'bg-emerald-50 text-emerald-900', 'myCell' => 'bg-emerald-50 ring-2 ring-emerald-500 rounded-sm', 'myBtn' => 'bg-emerald-600 text-white shadow-xs'],
+                '8' => ['th' => 'bg-amber-50 text-amber-900',     'myCell' => 'bg-amber-50 ring-2 ring-amber-500 rounded-sm',     'myBtn' => 'bg-amber-600 text-white shadow-xs'],
+                '9' => ['th' => 'bg-blue-50 text-blue-900',       'myCell' => 'bg-blue-50 ring-2 ring-blue-500 rounded-sm',       'myBtn' => 'bg-blue-600 text-white shadow-xs'],
+            ];
+
+            $shiftSections = [
+                [
+                    'title' => ($shift1Meta['title'] ?? 'Jadwal 1 Shift: Semua Rombel') . ' (' . ($dayMatrix['pagi_time_range'] ?? '-') . ')',
+                    'banner_bg' => 'from-emerald-950 via-slate-900 to-slate-900',
+                    'classes' => $shift1Meta['flat_classes'] ?? ['7A','7B','7C','7D','7E','7F','7G','8A','8B','8C','8D','8E','8F','8G','9A','9B','9C','9D','9E','9F','9G'],
+                    'slots' => $pagiSlots,
+                ],
+            ];
+
+            if ($isTwoShift || count($siangSlots) > 0) {
+                $shiftSections[] = [
+                    'title' => ($shift2Meta['title'] ?? 'Shift Siang: Kelas VIII') . ' (' . ($dayMatrix['siang_time_range'] ?? '-') . ')',
+                    'banner_bg' => 'from-amber-950 via-slate-900 to-slate-900',
+                    'classes' => $shift2Meta['flat_classes'] ?? ['8A','8B','8C','8D','8E','8F','8G'],
+                    'slots' => $siangSlots,
+                ];
+            }
         @endphp
 
-        {{-- Shift Pagi --}}
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div class="p-3.5 bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 text-white flex items-center justify-between">
-                <h4 class="text-xs font-extrabold uppercase tracking-wide">Shift Pagi: Kelas VII &amp; IX (07.00 – 11.55 WIB)</h4>
-                <span class="text-[11px] text-slate-300 font-medium">Hari {{ \App\Services\SchoolScheduleService::DAYS_MAP[$activeDay] ?? '' }} &bull; Klik/Tap kode guru untuk melihat detail</span>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-xs text-center border-collapse">
-                    <thead>
-                        <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-extrabold">
-                            <th class="p-2 border-r border-slate-200 w-12">Jam</th>
-                            <th class="p-2 border-r border-slate-200 w-28 whitespace-nowrap">Waktu</th>
-                            @foreach(['7A','7B','7C','7D','7E','7F','7G'] as $c)
-                                <th class="p-2 border-r border-slate-200 bg-emerald-50 text-emerald-900 min-w-[50px]">{{ $c }}</th>
+        @foreach($shiftSections as $sec)
+            @php
+                $secClasses = $sec['classes'];
+                $secColCount = max(1, count($secClasses));
+            @endphp
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+                <div class="p-3.5 bg-gradient-to-r {{ $sec['banner_bg'] }} text-white flex flex-wrap items-center justify-between gap-2">
+                    <h4 class="text-xs font-extrabold uppercase tracking-wide">{{ $sec['title'] }}</h4>
+                    <span class="text-[11px] text-slate-300 font-medium">Hari {{ \App\Services\SchoolScheduleService::DAYS_MAP[$activeDay] ?? '' }} &bull; Klik/Tap kode guru untuk melihat detail</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-center border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-extrabold">
+                                <th class="p-2 border-r border-slate-200 w-12">Jam</th>
+                                <th class="p-2 border-r border-slate-200 w-28 whitespace-nowrap">Waktu</th>
+                                @foreach($secClasses as $c)
+                                    @php
+                                        $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
+                                        $gTh = $gradeHeaderThemes[$gKey]['th'] ?? 'bg-slate-50 text-slate-900';
+                                    @endphp
+                                    <th class="p-2 border-r border-slate-200 {{ $gTh }} min-w-[48px]">{{ $c }}</th>
+                                @endforeach
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 font-medium">
+                            @foreach($sec['slots'] as $slot)
+                                @if($slot['is_activity'])
+                                    <tr class="bg-amber-50/70 font-bold text-amber-900">
+                                        <td class="p-2 border-r border-slate-200 text-slate-500 font-semibold">{{ $slot['period_order'] ?: '-' }}</td>
+                                        <td class="p-2 border-r border-slate-200 whitespace-nowrap">{{ $slot['time_range'] }}</td>
+                                        <td colspan="{{ $secColCount }}" class="p-2 text-center uppercase tracking-wider text-amber-900 font-black">{{ $slot['activity_name'] }}</td>
+                                    </tr>
+                                @else
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="p-2 border-r border-slate-200 font-bold text-slate-600 bg-slate-50/50">{{ $slot['period_order'] }}</td>
+                                        <td class="p-2 border-r border-slate-200 text-slate-600 whitespace-nowrap">{{ $slot['time_range'] }}</td>
+                                        @foreach($secClasses as $c)
+                                            @php
+                                                $item = $slot['classes'][$c] ?? null;
+                                                $isMySlot = $item && $item->user_id === $user->id;
+                                                $gKey = preg_match('/^(\d+)/', $c, $gm) ? $gm[1] : '';
+                                                $theme = $gradeHeaderThemes[$gKey] ?? $gradeHeaderThemes['7'];
+                                            @endphp
+                                            <td class="p-1 border-r border-slate-200 {{ $isMySlot ? $theme['myCell'] : '' }}">
+                                                @if($item && $item->teacher_code && $item->teacher_code !== '-')
+                                                    @php
+                                                        $tMeta = $teacherLookup[$item->teacher_code] ?? null;
+                                                        $tName = $item->teacher_name ?: ($tMeta['name'] ?? 'Guru Kode ' . $item->teacher_code);
+                                                        $tSubj = $item->subject_name ?: ($tMeta['subject'] ?? '-');
+                                                        $tHome = $tMeta['homeroom'] ?? '-';
+                                                        $tPiket = $tMeta['piket'] ?? '-';
+                                                    @endphp
+                                                    <button type="button"
+                                                            @click="openTeacherDetail({
+                                                                code: '{{ $item->teacher_code }}',
+                                                                name: '{{ addslashes($tName) }}',
+                                                                subject: '{{ addslashes($tSubj) }}',
+                                                                className: '{{ $c }}',
+                                                                periodOrder: '{{ $slot['period_order'] }}',
+                                                                timeRange: '{{ $slot['time_range'] }}',
+                                                                dayName: '{{ \App\Services\SchoolScheduleService::DAYS_MAP[$activeDay] ?? '' }}',
+                                                                isConflict: {{ $item->is_conflict ? 'true' : 'false' }},
+                                                                conflictNotes: '{{ addslashes($item->conflict_notes ?: '') }}',
+                                                                homeroom: '{{ addslashes($tHome) }}',
+                                                                piket: '{{ addslashes($tPiket) }}'
+                                                            })"
+                                                            title="{{ $tName }} ({{ $tSubj }})"
+                                                            class="w-full py-1.5 px-0.5 rounded-lg text-center transition cursor-pointer flex flex-col items-center justify-center font-extrabold text-xs active:scale-95 {{ $item->is_conflict ? 'bg-rose-600 text-white animate-pulse' : ($isMySlot ? $theme['myBtn'] : 'hover:bg-slate-200 hover:text-slate-900 text-slate-800') }}">
+                                                        <span>{{ $item->teacher_code }}</span>
+                                                        @if($item->is_conflict)
+                                                            <span class="text-[8px] uppercase tracking-tighter">BENTROK</span>
+                                                        @endif
+                                                    </button>
+                                                @else
+                                                    <span class="text-slate-300 font-normal">-</span>
+                                                @endif
+                                            </td>
+                                        @endforeach
+                                    </tr>
+                                @endif
                             @endforeach
-                            @foreach(['9A','9B','9C','9D','9E','9F','9G'] as $c)
-                                <th class="p-2 border-r border-slate-200 bg-blue-50 text-blue-900 min-w-[50px]">{{ $c }}</th>
-                            @endforeach
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 font-medium">
-                        @foreach($pagiSlots as $slot)
-                            @if($slot['is_activity'])
-                                <tr class="bg-amber-50/70 font-bold text-amber-900">
-                                    <td class="p-2 border-r border-slate-200 text-slate-500 font-semibold">{{ $slot['period_order'] ?: '-' }}</td>
-                                    <td class="p-2 border-r border-slate-200 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-                                    <td colspan="14" class="p-2 text-center uppercase tracking-wider text-amber-900 font-black">{{ $slot['activity_name'] }}</td>
-                                </tr>
-                            @else
-                                <tr class="hover:bg-slate-50">
-                                    <td class="p-2 border-r border-slate-200 font-bold text-slate-600 bg-slate-50/50">{{ $slot['period_order'] }}</td>
-                                    <td class="p-2 border-r border-slate-200 text-slate-600 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-                                    @foreach(['7A','7B','7C','7D','7E','7F','7G','9A','9B','9C','9D','9E','9F','9G'] as $c)
-                                        @php
-                                            $item = $slot['classes'][$c] ?? null;
-                                            $isMySlot = $item && $item->user_id === $user->id;
-                                        @endphp
-                                        <td class="p-1 border-r border-slate-200 {{ $isMySlot ? 'bg-emerald-50 ring-2 ring-emerald-500 rounded-sm' : '' }}">
-                                            @if($item && $item->teacher_code && $item->teacher_code !== '-')
-                                                @php
-                                                    $tMeta = $teacherLookup[$item->teacher_code] ?? null;
-                                                    $tName = $item->teacher_name ?: ($tMeta['name'] ?? 'Guru Kode ' . $item->teacher_code);
-                                                    $tSubj = $item->subject_name ?: ($tMeta['subject'] ?? '-');
-                                                    $tHome = $tMeta['homeroom'] ?? '-';
-                                                    $tPiket = $tMeta['piket'] ?? '-';
-                                                @endphp
-                                                <button type="button"
-                                                        @click="openTeacherDetail({
-                                                            code: '{{ $item->teacher_code }}',
-                                                            name: '{{ addslashes($tName) }}',
-                                                            subject: '{{ addslashes($tSubj) }}',
-                                                            className: '{{ $c }}',
-                                                            periodOrder: '{{ $slot['period_order'] }}',
-                                                            timeRange: '{{ $slot['time_range'] }}',
-                                                            dayName: '{{ \App\Services\SchoolScheduleService::DAYS_MAP[$activeDay] ?? '' }}',
-                                                            isConflict: {{ $item->is_conflict ? 'true' : 'false' }},
-                                                            conflictNotes: '{{ addslashes($item->conflict_notes ?: '') }}',
-                                                            homeroom: '{{ addslashes($tHome) }}',
-                                                            piket: '{{ addslashes($tPiket) }}'
-                                                        })"
-                                                        title="{{ $tName }} ({{ $tSubj }})"
-                                                        class="w-full py-1.5 px-0.5 rounded-lg text-center transition cursor-pointer flex flex-col items-center justify-center font-extrabold text-xs active:scale-95 {{ $item->is_conflict ? 'bg-rose-600 text-white animate-pulse' : ($isMySlot ? 'bg-emerald-600 text-white shadow-xs' : 'hover:bg-slate-200 hover:text-slate-900 text-slate-800') }}">
-                                                    <span>{{ $item->teacher_code }}</span>
-                                                    @if($item->is_conflict)
-                                                        <span class="text-[8px] uppercase tracking-tighter">BENTROK</span>
-                                                    @endif
-                                                </button>
-                                            @else
-                                                <span class="text-slate-300 font-normal">-</span>
-                                            @endif
-                                        </td>
-                                    @endforeach
-                                </tr>
-                            @endif
-                        @endforeach
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
-
-        {{-- Shift Siang --}}
-        @if(count($siangSlots) > 0)
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div class="p-3.5 bg-gradient-to-r from-amber-950 via-slate-900 to-slate-900 text-white flex items-center justify-between">
-                <h4 class="text-xs font-extrabold uppercase tracking-wide">Shift Siang: Kelas VIII (12.00 – 16.25 WIB)</h4>
-                <span class="text-[11px] text-slate-300 font-medium">Hari {{ \App\Services\SchoolScheduleService::DAYS_MAP[$activeDay] ?? '' }} &bull; Klik/Tap kode guru untuk melihat detail</span>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-xs text-center border-collapse">
-                    <thead>
-                        <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-extrabold">
-                            <th class="p-2 border-r border-slate-200 w-12">Jam</th>
-                            <th class="p-2 border-r border-slate-200 w-28 whitespace-nowrap">Waktu</th>
-                            @foreach(['8A','8B','8C','8D','8E','8F','8G'] as $c)
-                                <th class="p-2 border-r border-slate-200 bg-amber-50 text-amber-900 min-w-[65px]">{{ $c }}</th>
-                            @endforeach
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 font-medium">
-                        @foreach($siangSlots as $slot)
-                            @if($slot['is_activity'])
-                                <tr class="bg-amber-50/70 font-bold text-amber-900">
-                                    <td class="p-2 border-r border-slate-200 text-slate-500 font-semibold">{{ $slot['period_order'] ?: '-' }}</td>
-                                    <td class="p-2 border-r border-slate-200 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-                                    <td colspan="7" class="p-2 text-center uppercase tracking-wider text-amber-900 font-black">{{ $slot['activity_name'] }}</td>
-                                </tr>
-                            @else
-                                <tr class="hover:bg-slate-50">
-                                    <td class="p-2 border-r border-slate-200 font-bold text-slate-600 bg-slate-50/50">{{ $slot['period_order'] }}</td>
-                                    <td class="p-2 border-r border-slate-200 text-slate-600 whitespace-nowrap">{{ $slot['time_range'] }}</td>
-                                    @foreach(['8A','8B','8C','8D','8E','8F','8G'] as $c)
-                                        @php
-                                            $item = $slot['classes'][$c] ?? null;
-                                            $isMySlot = $item && $item->user_id === $user->id;
-                                        @endphp
-                                        <td class="p-1 border-r border-slate-200 {{ $isMySlot ? 'bg-amber-50 ring-2 ring-amber-500 rounded-sm' : '' }}">
-                                            @if($item && $item->teacher_code && $item->teacher_code !== '-')
-                                                @php
-                                                    $tMeta = $teacherLookup[$item->teacher_code] ?? null;
-                                                    $tName = $item->teacher_name ?: ($tMeta['name'] ?? 'Guru Kode ' . $item->teacher_code);
-                                                    $tSubj = $item->subject_name ?: ($tMeta['subject'] ?? '-');
-                                                    $tHome = $tMeta['homeroom'] ?? '-';
-                                                    $tPiket = $tMeta['piket'] ?? '-';
-                                                @endphp
-                                                <button type="button"
-                                                        @click="openTeacherDetail({
-                                                            code: '{{ $item->teacher_code }}',
-                                                            name: '{{ addslashes($tName) }}',
-                                                            subject: '{{ addslashes($tSubj) }}',
-                                                            className: '{{ $c }}',
-                                                            periodOrder: '{{ $slot['period_order'] }}',
-                                                            timeRange: '{{ $slot['time_range'] }}',
-                                                            dayName: '{{ \App\Services\SchoolScheduleService::DAYS_MAP[$activeDay] ?? '' }}',
-                                                            isConflict: {{ $item->is_conflict ? 'true' : 'false' }},
-                                                            conflictNotes: '{{ addslashes($item->conflict_notes ?: '') }}',
-                                                            homeroom: '{{ addslashes($tHome) }}',
-                                                            piket: '{{ addslashes($tPiket) }}'
-                                                        })"
-                                                        title="{{ $tName }} ({{ $tSubj }})"
-                                                        class="w-full py-1.5 px-0.5 rounded-lg text-center transition cursor-pointer flex flex-col items-center justify-center font-extrabold text-xs active:scale-95 {{ $item->is_conflict ? 'bg-rose-600 text-white animate-pulse' : ($isMySlot ? 'bg-amber-600 text-white shadow-xs' : 'hover:bg-slate-200 hover:text-slate-900 text-slate-800') }}">
-                                                    <span>{{ $item->teacher_code }}</span>
-                                                    @if($item->is_conflict)
-                                                        <span class="text-[8px] uppercase tracking-tighter">BENTROK</span>
-                                                    @endif
-                                                </button>
-                                            @else
-                                                <span class="text-slate-300 font-normal">-</span>
-                                            @endif
-                                        </td>
-                                    @endforeach
-                                </tr>
-                            @endif
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        @endif
+        @endforeach
     </div>
 
     {{-- TAB 3: GURU PIKET & WALI KELAS --}}
