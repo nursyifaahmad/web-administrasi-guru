@@ -1711,6 +1711,8 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertSee('Mode Tukar Cepat Semua Sel');
         $response->assertSee('onCellClick');
         $response->assertSee('onCellPointerDown');
+        $response->assertSee('overflow-x-auto lg:overflow-x-visible no-scrollbar', false);
+        $response->assertDontSee('max-h-[75vh]', false);
         $response->assertViewHas('activeDay', 'all');
 
         // Saat ?day=2 tetap memuat semua 6 hari untuk drag & drop lintas hari

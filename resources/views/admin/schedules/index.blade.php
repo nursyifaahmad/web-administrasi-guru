@@ -488,10 +488,9 @@
 
                     const containers = document.querySelectorAll('[data-matrix-scroll]');
                     containers.forEach((box) => {
+                        if (box.scrollWidth <= box.clientWidth) return;
                         const rect = box.getBoundingClientRect();
                         if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
-                        if (y - rect.top < 54) box.scrollTop -= 14;
-                        else if (rect.bottom - y < 54) box.scrollTop += 14;
                         if (x - rect.left < 72) box.scrollLeft -= 14;
                         else if (rect.right - x < 72) box.scrollLeft += 14;
                     });
@@ -1080,8 +1079,8 @@
                 $secSlotKey = $sec['slot_key'];
                 $hasAnyRowInSection = collect($matrixByDay)->contains(fn ($d) => count($d[$secSlotKey] ?? []) > 0);
             @endphp
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-                <div class="p-4 bg-gradient-to-r {{ $sec['banner_bg'] }} text-white flex flex-wrap items-center justify-between gap-3">
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-visible">
+                <div class="p-4 rounded-t-2xl bg-gradient-to-r {{ $sec['banner_bg'] }} text-white flex flex-wrap items-center justify-between gap-3">
                     <div class="flex items-center gap-3">
                         <span class="w-3 h-3 rounded-full {{ $sec['dot_bg'] }}"></span>
                         <h3 class="text-sm font-extrabold uppercase tracking-wide">
@@ -1091,9 +1090,9 @@
                     <span class="text-xs text-slate-300 font-medium">Senin s.d. Sabtu &bull; Jam Belajar: {{ $sec['time_range'] }}</span>
                 </div>
 
-                <div data-matrix-scroll class="overflow-auto max-h-[75vh] relative">
+                <div data-matrix-scroll class="overflow-x-auto lg:overflow-x-visible no-scrollbar rounded-b-2xl relative">
                     <table class="w-full text-xs text-center border-collapse">
-                        <thead class="sticky top-0 z-20 shadow-2xs">
+                        <thead class="sticky top-0 lg:top-[60px] z-20 shadow-2xs">
                             <tr class="bg-slate-100 border-b-2 border-slate-300 text-slate-700 font-extrabold">
                                 <th class="p-1 border-r border-slate-200 bg-slate-100 text-[10px] w-[54px] min-w-[54px] sticky left-0 z-30">Hari</th>
                                 <th class="p-1 border-r border-slate-200 bg-slate-100 text-[10px] w-[32px] min-w-[32px] sticky left-[54px] z-30">Jam</th>
