@@ -58,6 +58,11 @@ class SchoolScheduleMasterTest extends TestCase
         $response->assertSee('Master Jadwal Pelajaran Sekolah');
         $response->assertSee('Buat Jadwal Baru dari Awal');
         $response->assertDontSee('+ Buat Jadwal Baru dari Awal', false);
+        $response->assertSee('createChoiceModal');
+        $response->assertSee('Buat Jadwal Baru dengan Import File Excel');
+        $response->assertSee('Susun Lewat 6 Tahapan Wizard');
+        $response->assertSee(route('admin.schedules.master.builder'));
+        $response->assertSee('1 Shift (Semua Rombel)');
 
         $this->actingAs($admin)->get(route('admin.teachers.index'))
             ->assertOk()
@@ -1509,5 +1514,56 @@ class SchoolScheduleMasterTest extends TestCase
         $this->assertSame('Pendidikan Jasmani , Olahraga, dan Kesehatan', $rudiPjk->fresh()->default_subject);
         $this->assertDatabaseHas('teaching_classes', ['subject_id' => $bd->id, 'class_name' => 'VII-A']);
         $this->assertDatabaseHas('teaching_classes', ['subject_id' => $pjok->id, 'class_name' => 'VII-B']);
+    }
+
+    public function test_admin_can_download_blank_template_in_explicit_single_and_double_shift_modes(): void
+    {
+        [$admin, $guru, $year] = $this->createEnvironment();
+
+        SchoolClass::query()->create(['academic_year_id' => $year->id, 'grade_level' => 'VII', 'name' => 'VII-A', 'homeroom_teacher_name' => '-']);
+        SchoolClass::query()->create(['academic_year_id' => $year->id, 'grade_level' => 'VIII', 'name' => 'VIII-A', 'homeroom_teacher_name' => '-']);
+        SchoolClass::query()->create(['academic_year_id' => $year->id, 'grade_level' => 'IX', 'name' => 'IX-A', 'homeroom_teacher_name' => '-']);
+
+        // 1. Database belum punya slot jadwal -> tetap bisa download template 1 Shift & 2 Shift sesuai pilihan
+        $singleResp = $this->actingAs($admin)->get(route('admin.schedules.master.template', [
+            'academic_year_id' => $year->id,
+            'shift_mode' => 'single',
+        ]));
+        $singleResp->assertOk();
+        $this->assertStringContainsString('Template_Master_Jadwal_1_Shift', (string) $singleResp->headers->get('content-disposition'));
+
+        $doubleResp = $this->actingAs($admin)->get(route('admin.schedules.master.template', [
+            'academic_year_id' => $year->id,
+            'shift_mode' => 'double',
+        ]));
+        $doubleResp->assertOk();
+        $this->assertStringContainsString('Template_Master_Jadwal_2_Shift', (string) $doubleResp->headers->get('content-disposition'));
+
+        $tmpSingle = tempnam(sys_get_temp_dir(), 'tpl_s_') . '.xlsx';
+        $tmpDouble = tempnam(sys_get_temp_dir(), 'tpl_d_') . '.xlsx';
+        file_put_contents($tmpSingle, $singleResp->streamedContent());
+        file_put_contents($tmpDouble, $doubleResp->streamedContent());
+
+        try {
+            $sheetSingle = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpSingle)->getActiveSheet();
+            $this->assertSame(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_PORTRAIT, $sheetSingle->getPageSetup()->getOrientation());
+            $flatSingle = implode('|', array_map(fn ($r) => implode('|', array_map('strval', $r)), $sheetSingle->toArray()));
+            $this->assertStringContainsString('KELAS VII', $flatSingle);
+            $this->assertStringContainsString('KELAS VIII', $flatSingle);
+            $this->assertStringContainsString('KELAS IX', $flatSingle);
+            $this->assertStringNotContainsString('SHIFT 2 (SIANG)', $flatSingle);
+
+            $sheetDouble = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpDouble)->getActiveSheet();
+            $this->assertSame(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE, $sheetDouble->getPageSetup()->getOrientation());
+            $flatDouble = implode('|', array_map(fn ($r) => implode('|', array_map('strval', $r)), $sheetDouble->toArray()));
+            $this->assertStringContainsString('SHIFT 1 (PAGI)', $flatDouble);
+            $this->assertStringContainsString('SHIFT 2 (SIANG)', $flatDouble);
+            $this->assertStringContainsString('KELAS VII', $flatDouble);
+            $this->assertStringContainsString('KELAS VIII', $flatDouble);
+            $this->assertStringContainsString('KELAS IX', $flatDouble);
+        } finally {
+            @unlink($tmpSingle);
+            @unlink($tmpDouble);
+        }
     }
 }

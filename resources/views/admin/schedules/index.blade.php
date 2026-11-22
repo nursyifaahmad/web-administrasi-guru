@@ -7,7 +7,8 @@
 @section('content')
 <div class="space-y-6"
      x-data="{
-        wizardModal: false,
+        createChoiceModal: false,
+        createChoiceStep: 'choose',
         editModal: false,
         swapModal: false,
         importScheduleModal: false,
@@ -95,12 +96,13 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-            {{-- Tombol Utama: Buat Jadwal Baru dari Awal --}}
-            <a href="{{ route('admin.schedules.master.builder') }}"
-               class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition">
+            {{-- Tombol Utama: Buat Jadwal Baru dari Awal (Pop-up Pilihan: Import Excel vs 6 Tahapan Wizard) --}}
+            <button type="button"
+                    @click="createChoiceStep = 'choose'; createChoiceModal = true"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4"/></svg>
                 <span>Buat Jadwal Baru dari Awal</span>
-            </a>
+            </button>
 
             {{-- Tombol Sinkronkan ke Kelas Guru --}}
             <form method="POST" action="{{ route('admin.schedules.master.sync-classes') }}"
@@ -525,83 +527,96 @@
 
     </div>
 
-    {{-- MODAL WIZARD: BUAT JADWAL BARU DARI AWAL --}}
-    <div x-show="wizardModal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;"
+    {{-- MODAL GERBANG PILIHAN: BUAT JADWAL BARU DARI AWAL (IMPORT EXCEL VS 6 TAHAPAN WIZARD) --}}
+    <div x-show="createChoiceModal" x-cloak
+         @keydown.escape.window="createChoiceModal = false"
+         class="fixed inset-0 z-50 overflow-y-auto"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100">
-        <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-xs" @click="wizardModal = false"></div>
+        <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-xs" @click="createChoiceModal = false"></div>
         <div class="min-h-full flex items-center justify-center p-4">
-            <div class="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-7 overflow-hidden border border-slate-100"
+            <div class="relative bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 sm:p-7 overflow-hidden border border-slate-100"
                  @click.stop>
                 <div class="flex items-start justify-between pb-4 border-b border-slate-100 mb-5">
                     <div>
                         <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-extrabold mb-1.5">
-                            Wizard Setup Wakasek
+                            Langkah Awal Penyusunan Jadwal
                         </div>
-                        <h3 class="text-lg font-extrabold text-slate-900">Buat Jadwal Baru dari Awal</h3>
-                        <p class="text-xs text-slate-500">Konfigurasi struktur matriks jadwal pelajaran sekolah untuk semester aktif.</p>
+                        <h3 class="text-lg font-extrabold text-slate-900"
+                            x-text="createChoiceStep === 'import' ? 'Buat Jadwal Baru dengan Import File Excel' : 'Buat Jadwal Baru dari Awal'"></h3>
+                        <p class="text-xs text-slate-500"
+                           x-text="createChoiceStep === 'import' ? 'Unduh template 1/2 Shift lalu unggah file Excel jadwal untuk langsung diterapkan.' : 'Pilih cara pembuatan jadwal baru untuk semester {{ $academicYear?->full_label ?? '-' }} sebelum masuk ke 6 tahapan wizard.'"></p>
                     </div>
-                    <button type="button" @click="wizardModal = false" class="text-slate-400 hover:text-slate-600 p-1">
+                    <button type="button" @click="createChoiceModal = false" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
 
-                <form method="POST" action="{{ route('admin.schedules.master.scratch') }}" class="space-y-4">
-                    @csrf
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Tahun Ajaran & Semester</label>
-                        <input type="text" readonly value="{{ $academicYear->full_label }}"
-                               class="w-full rounded-xl bg-slate-100 border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-700">
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Model Shift Belajar Sekolah</label>
-                        <select name="shift_mode" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-bold focus:ring-emerald-500 focus:border-emerald-500">
-                            <option value="double" selected>2 Shift (Pagi: Kelas 7 & 9, Siang: Kelas 8) — Masa Renovasi / Perbaikan</option>
-                            <option value="single">1 Shift Reguler (Semua Kelas Masuk Pagi) — Kondisi Normal</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Jumlah Hari Belajar per Minggu</label>
-                        <select name="days_count" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-bold focus:ring-emerald-500 focus:border-emerald-500">
-                            <option value="6" selected>6 Hari Kerja (Senin s.d. Sabtu) [Standar SMPN 2 Lemahabang]</option>
-                            <option value="5">5 Hari Kerja (Senin s.d. Jumat)</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Pilihan Permulaan Matriks</label>
-                        <div class="space-y-2">
-                            <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 hover:border-emerald-500 cursor-pointer transition">
-                                <input type="radio" name="source_mode" value="wakasek_template" checked class="mt-0.5 text-emerald-600 focus:ring-emerald-500">
-                                <div>
-                                    <div class="text-xs font-extrabold text-slate-900">Muat Template Resmi Wakasek SMPN 2 Lemahabang</div>
-                                    <div class="text-[11px] text-slate-500">Langsung memuat 21 rombel, 36 kode guru, dan slot KBM lengkap untuk disesuaikan.</div>
+                {{-- Pilihan Metode Awal --}}
+                <div x-show="createChoiceStep === 'choose'" class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {{-- Pilihan 1: Buat via Import File Excel --}}
+                        <button type="button"
+                                @click="createChoiceStep = 'import'"
+                                class="text-left p-5 rounded-2xl border-2 border-indigo-200 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50 transition group cursor-pointer flex flex-col justify-between gap-4">
+                            <div class="space-y-2.5">
+                                <div class="flex items-center justify-between">
+                                    <span class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                    </span>
+                                    <span class="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-extrabold uppercase">Cepat dari Excel</span>
                                 </div>
-                            </label>
-                            <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 hover:border-emerald-500 cursor-pointer transition">
-                                <input type="radio" name="source_mode" value="empty" class="mt-0.5 text-emerald-600 focus:ring-emerald-500">
-                                <div>
-                                    <div class="text-xs font-extrabold text-slate-900">Matriks Kosong Bersih (Mulai dari Nol)</div>
-                                    <div class="text-[11px] text-slate-500">Menghasilkan tabel kerangka kosong, Wakasek mengisi guru & jam satu per satu.</div>
+                                <h4 class="text-sm font-extrabold text-slate-900">Import File Excel (.xlsx / .csv)</h4>
+                                <p class="text-xs text-slate-600 leading-relaxed">
+                                    Sudah punya susunan jadwal atau ingin mengisi lewat Excel? Pilih template <strong>1 Shift / 2 Shift</strong> lalu unggah file untuk langsung membuat jadwal baru.
+                                </p>
+                            </div>
+                            <span class="inline-flex items-center gap-1 text-xs font-extrabold text-indigo-700 group-hover:translate-x-0.5 transition">
+                                <span>Buat dengan Import Excel</span>
+                                <span>&rarr;</span>
+                            </span>
+                        </button>
+
+                        {{-- Pilihan 2: Lanjut ke 6 Tahapan Wizard --}}
+                        <a href="{{ route('admin.schedules.master.builder') }}"
+                           class="text-left p-5 rounded-2xl border-2 border-emerald-200 hover:border-emerald-500 bg-emerald-50/40 hover:bg-emerald-50 transition group flex flex-col justify-between gap-4">
+                            <div class="space-y-2.5">
+                                <div class="flex items-center justify-between">
+                                    <span class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                    </span>
+                                    <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase">6 Tahapan Wizard</span>
                                 </div>
-                            </label>
-                        </div>
+                                <h4 class="text-sm font-extrabold text-slate-900">Susun Lewat 6 Tahapan Wizard</h4>
+                                <p class="text-xs text-slate-600 leading-relaxed">
+                                    Atur model shift (1/2 shift), durasi JP, kegiatan non-KBM, beban mengajar guru, dan generate jadwal otomatis anti-bentrok (*Smart Timetable Builder*).
+                                </p>
+                            </div>
+                            <span class="inline-flex items-center gap-1 text-xs font-extrabold text-emerald-700 group-hover:translate-x-0.5 transition">
+                                <span>Lanjut ke 6 Tahapan</span>
+                                <span>&rarr;</span>
+                            </span>
+                        </a>
                     </div>
 
-                    <div class="pt-4 flex items-center justify-end gap-2.5 border-t border-slate-100">
-                        <button type="button" @click="wizardModal = false"
-                                class="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                    <div class="pt-3 flex justify-end border-t border-slate-100">
+                        <button type="button" @click="createChoiceModal = false"
+                                class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">
                             Batal
                         </button>
-                        <button type="submit"
-                                class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs">
-                            Proses & Buat Jadwal
-                        </button>
                     </div>
-                </form>
+                </div>
+
+                {{-- Form Import File Excel di dalam Modal Pilihan Awal --}}
+                <div x-show="createChoiceStep === 'import'" x-cloak>
+                    @include('admin.schedules.partials.import-schedule-form', [
+                        'academicYear' => $academicYear,
+                        'cancelClick' => "createChoiceStep = 'choose'",
+                        'cancelLabel' => '← Kembali ke Pilihan Metode',
+                        'submitLabel' => 'Buat Jadwal Baru dari File Excel',
+                    ])
+                </div>
             </div>
         </div>
     </div>
@@ -872,55 +887,14 @@
                 </button>
             </div>
 
-            <form method="POST" action="{{ route('admin.schedules.master.import') }}" enctype="multipart/form-data" class="p-5 space-y-4">
-                @csrf
-                <input type="hidden" name="academic_year_id" value="{{ $academicYear?->id }}">
-
-                <div class="rounded-xl bg-indigo-50/80 border border-indigo-200 p-3.5 text-xs text-indigo-900 space-y-2">
-                    <p class="font-semibold">Panduan Singkat:</p>
-                    <ul class="list-disc pl-4 space-y-1 text-indigo-800">
-                        <li>Gunakan file hasil <strong>Export Excel</strong> yang sudah diedit, <strong>Template Kosong (.xlsx)</strong>, atau file <strong>CSV</strong> format Wakasek.</li>
-                        <li>Jika sheet memiliki 2 blok tabel (kolom <code>HARI</code> &amp; <code>WAKTU</code> berdampingan), sistem otomatis mengenali <strong>Shift 1 (Pagi)</strong> &amp; <strong>Shift 2 (Siang)</strong>.</li>
-                    </ul>
-                    <div class="pt-1">
-                        <a href="{{ route('admin.schedules.master.template', ['academic_year_id' => $academicYear?->id]) }}"
-                           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-300 transition">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                            <span>Download Template Excel (.xlsx)</span>
-                        </a>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Pilih File Jadwal (.xlsx, .xls, .csv)</label>
-                    <input type="file" name="file" accept=".xlsx,.xls,.csv" required
-                           class="block w-full text-xs text-slate-700 file:mr-3 file:py-2 file:px-3.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 border border-slate-300 rounded-xl p-1.5 cursor-pointer">
-                </div>
-
-                <label class="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-                    <input type="checkbox" name="sync_to_classes" value="1"
-                           class="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
-                    <span class="text-xs text-slate-700 leading-relaxed">
-                        <strong class="block text-slate-800">Sekaligus sinkronkan jadwal &amp; hari mengajar ke Buku Kelas Guru</strong>
-                        Membuat/memperbarui buku kelas guru sesuai pembagian kelas dan hari pada file impor.
-                    </span>
-                </label>
-
-                <div class="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-                    <strong>Perhatian:</strong> Impor akan mengganti seluruh isi slot Master Jadwal pada tahun pelajaran aktif (<strong>{{ $academicYear?->full_label ?? '-' }}</strong>) dan menjalankan deteksi bentrok otomatis.
-                </div>
-
-                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                    <button type="button" @click="importScheduleModal = false"
-                            class="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition">
-                        Batal
-                    </button>
-                    <button type="submit"
-                            class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-xs font-bold text-white shadow-sm transition">
-                        Mulai Import Jadwal
-                    </button>
-                </div>
-            </form>
+            <div class="p-5">
+                @include('admin.schedules.partials.import-schedule-form', [
+                    'academicYear' => $academicYear,
+                    'cancelClick' => 'importScheduleModal = false',
+                    'cancelLabel' => 'Batal',
+                    'submitLabel' => 'Mulai Import Jadwal',
+                ])
+            </div>
         </div>
     </div>
 

@@ -605,8 +605,12 @@ class SchoolScheduleController extends Controller
     public function downloadTemplate(Request $request, ExcelExportImportService $excelService): StreamedResponse
     {
         $academicYear = $this->resolveActiveAcademicYear($request);
+        $rawShiftMode = strtolower(trim((string) $request->query('shift_mode', '')));
+        $shiftMode = in_array($rawShiftMode, ['single', 'double'], true) ? $rawShiftMode : null;
 
-        return $excelService->exportMasterScheduleExcel($academicYear, $this->scheduleService, true);
+        return $excelService->exportMasterScheduleExcel($academicYear, $this->scheduleService, true, [
+            'shift_mode' => $shiftMode,
+        ]);
     }
 
     public function importExcel(Request $request): RedirectResponse

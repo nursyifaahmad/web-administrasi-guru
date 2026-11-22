@@ -1421,7 +1421,10 @@ class ExcelExportImportService
         array $options = []
     ): StreamedResponse {
         $scheduleService ??= app(\App\Services\SchoolScheduleService::class);
-        $exportData = $scheduleService->getMasterExportData($academicYear, null, $blankTemplate);
+        $templateShiftMode = in_array(($options['shift_mode'] ?? null), ['single', 'double'], true)
+            ? $options['shift_mode']
+            : null;
+        $exportData = $scheduleService->getMasterExportData($academicYear, null, $blankTemplate, $templateShiftMode);
         $school = \App\Models\SchoolSetting::current();
 
         $shift1 = $exportData['shift1'];
@@ -1540,7 +1543,11 @@ class ExcelExportImportService
         $sheet->getPageSetup()->setPrintArea($this->range(1, 1, $totalCols, $maxContentRow));
         $sheet->getPageMargins()->setTop(0.25)->setBottom(0.25)->setLeft(0.25)->setRight(0.25);
 
-        $prefix = $blankTemplate ? 'Template_Master_Jadwal_' : 'Master_Jadwal_Pelajaran_';
+        $prefix = $blankTemplate
+            ? ($templateShiftMode === 'single'
+                ? 'Template_Master_Jadwal_1_Shift_'
+                : ($templateShiftMode === 'double' ? 'Template_Master_Jadwal_2_Shift_' : 'Template_Master_Jadwal_'))
+            : 'Master_Jadwal_Pelajaran_';
         $filename = $prefix . \Illuminate\Support\Str::slug(($academicYear->year_name ?: '') . '_' . ($academicYear->semester ?: 'semester'), '_') . '.xlsx';
 
         return $this->streamSpreadsheet($spreadsheet, $filename);

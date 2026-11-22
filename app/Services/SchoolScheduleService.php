@@ -3117,16 +3117,50 @@ CSV;
      * yang otomatis mendukung mode 1 Shift maupun 2 Shift berdampingan,
      * bersumber 100% dari Master Guru & Master Rombel tunggal.
      */
-    public function getMasterExportData(AcademicYear $academicYear, ?array $conflicts = null, bool $forTemplate = false): array
-    {
+    public function getMasterExportData(
+        AcademicYear $academicYear,
+        ?array $conflicts = null,
+        bool $forTemplate = false,
+        ?string $templateShiftMode = null
+    ): array {
         $matrixData = $this->getMasterMatrix($academicYear, null, $conflicts);
         $matrixByDay = $matrixData['matrix_by_day'] ?? [];
 
         $shift1 = $this->buildShiftExportData($matrixByDay, 'pagi');
         $shift2 = $this->buildShiftExportData($matrixByDay, 'siang');
 
-        if ($forTemplate && count($shift1['flat_classes']) === 0) {
-            $shift1 = $this->buildDefaultTemplateShiftData($academicYear);
+        if ($forTemplate) {
+            if ($templateShiftMode === 'single') {
+                $shift2SlotTotalCurrent = collect($shift2['days'])->sum(fn (array $d) => count($d['slots']));
+                if (count($shift1['flat_classes']) === 0 || $shift2SlotTotalCurrent > 0) {
+                    $shift1 = $this->buildDefaultTemplateShiftData($academicYear, 'pagi');
+                }
+                $shift2 = [
+                    'shift_key' => 'siang',
+                    'groups' => [],
+                    'flat_classes' => [],
+                    'total_class_cols' => 0,
+                    'days' => [],
+                ];
+            } elseif ($templateShiftMode === 'double') {
+                $shift2SlotTotalCurrent = collect($shift2['days'])->sum(fn (array $d) => count($d['slots']));
+                if (count($shift2['flat_classes']) === 0 || $shift2SlotTotalCurrent === 0) {
+                    $allClasses = $this->resolveNormalizedTemplateClassCodes($academicYear);
+                    $afternoonClasses = array_values(array_filter($allClasses, fn (string $c) => str_starts_with($c, '8')));
+                    $morningClasses = array_values(array_filter($allClasses, fn (string $c) => ! str_starts_with($c, '8')));
+
+                    if (empty($afternoonClasses) && count($allClasses) >= 2) {
+                        $half = (int) ceil(count($allClasses) / 2);
+                        $morningClasses = array_slice($allClasses, 0, $half);
+                        $afternoonClasses = array_slice($allClasses, $half);
+                    }
+
+                    $shift1 = $this->buildDefaultTemplateShiftData($academicYear, 'pagi', $morningClasses);
+                    $shift2 = $this->buildDefaultTemplateShiftData($academicYear, 'siang', $afternoonClasses);
+                }
+            } elseif (count($shift1['flat_classes']) === 0) {
+                $shift1 = $this->buildDefaultTemplateShiftData($academicYear, 'pagi');
+            }
         }
 
         $shift2SlotTotal = collect($shift2['days'])->sum(fn (array $d) => count($d['slots']));
@@ -3343,7 +3377,12 @@ CSV;
             || str_contains($upper, 'SABSIH');
     }
 
-    protected function buildDefaultTemplateShiftData(AcademicYear $academicYear): array
+    /**
+     * Ambil daftar kode rombel ternormalisasi untuk kebutuhan kerangka template Excel.
+     *
+     * @return list<string>
+     */
+    protected function resolveNormalizedTemplateClassCodes(AcademicYear $academicYear): array
     {
         $schoolClassCodes = SchoolClass::query()
             ->where('academic_year_id', $academicYear->id)
@@ -3352,6 +3391,7 @@ CSV;
             ->pluck('name')
             ->map(fn ($name) => self::normalizeClassName((string) $name))
             ->filter()
+            ->unique()
             ->values()
             ->all();
 
@@ -3363,14 +3403,30 @@ CSV;
             ];
         }
 
+        return $schoolClassCodes;
+    }
+
+    /**
+     * @param  ?list<string>  $explicitClassCodes
+     */
+    protected function buildDefaultTemplateShiftData(
+        AcademicYear $academicYear,
+        string $shiftKey = 'pagi',
+        ?array $explicitClassCodes = null
+    ): array {
+        $schoolClassCodes = $explicitClassCodes !== null && ! empty($explicitClassCodes)
+            ? array_values($explicitClassCodes)
+            : $this->resolveNormalizedTemplateClassCodes($academicYear);
+
         $groupInfo = $this->groupNormalizedClasses($schoolClassCodes);
         $timeGrid = $this->calculateTimeGrid($this->getDefaultTimeGridConfig());
+        $slotSourceKey = $shiftKey === 'siang' ? 'slots_siang' : 'slots';
         $days = [];
 
         foreach ($timeGrid as $dNum => $dData) {
             $dayUpper = $dNum === 5 ? "JUM'AT" : strtoupper(self::DAYS_MAP[$dNum] ?? ('HARI ' . $dNum));
             $slots = [];
-            foreach ($dData['slots'] ?? [] as $slot) {
+            foreach ($dData[$slotSourceKey] ?? [] as $slot) {
                 $isAct = (bool) ($slot['is_activity'] ?? false);
                 $actName = trim((string) ($slot['activity'] ?? ''));
                 $period = (int) ($slot['period_order'] ?? 0);
@@ -3404,7 +3460,7 @@ CSV;
         }
 
         return [
-            'shift_key' => 'pagi',
+            'shift_key' => $shiftKey,
             'groups' => $groupInfo['groups'],
             'flat_classes' => $groupInfo['flat_classes'],
             'total_class_cols' => count($groupInfo['flat_classes']),
