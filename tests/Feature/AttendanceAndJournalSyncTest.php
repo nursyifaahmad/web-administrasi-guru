@@ -439,7 +439,12 @@ class AttendanceAndJournalSyncTest extends TestCase
         $monthlyRes->assertOk()
             ->assertSee('spreadsheet-scroll spreadsheet-freeze', false)
             ->assertSee('<thead class="sticky top-0 z-20 sticky-thead-shadow">', false)
-            ->assertSee('sticky left-0 z-30 bg-slate-100', false);
+            ->assertSee('sticky left-0 z-30 bg-slate-100', false)
+            ->assertSee('spreadsheet-table-zoomable', false)
+            ->assertSee('zoomOut()', false)
+            ->assertSee('zoomIn()', false)
+            ->assertSee('resetZoom()', false)
+            ->assertSee('ag_attendance_zoom', false);
 
         $recapRes = $this->actingAs($guru)->get(route('attendances.index', [
             'teachingClass' => $tClass->id,
@@ -448,6 +453,10 @@ class AttendanceAndJournalSyncTest extends TestCase
         $recapRes->assertOk()
             ->assertSee('spreadsheet-scroll spreadsheet-freeze', false)
             ->assertSee('sticky top-0 z-20 sticky-thead-shadow', false)
-            ->assertSee('sticky left-10 z-30 bg-slate-100', false);
+            ->assertSee('sticky left-10 z-30 bg-slate-100', false)
+            ->assertSee('spreadsheet-table-zoomable sz-no-fixed', false)
+            ->assertSee('zoomOut()', false)
+            ->assertSee('zoomIn()', false)
+            ->assertSee('resetZoom()', false);
     }
 }

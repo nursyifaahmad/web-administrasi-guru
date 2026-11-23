@@ -446,13 +446,20 @@
 
     {{-- Tabel Spreadsheet Buku Nilai Dinamis --}}
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div class="spreadsheet-scroll spreadsheet-freeze">
-            <table class="w-full text-xs border-collapse">
+        <div class="px-3.5 sm:px-4 py-2.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <div class="text-xs font-bold text-slate-800 flex items-center gap-2">
+                <span>Tabel Daftar Nilai ({{ count($alpineRows) }} Siswa)</span>
+                <span class="hidden sm:inline text-[11px] font-medium text-slate-500">&bull; Gunakan kontrol Zoom di kanan untuk memperkecil/memperbesar tabel</span>
+            </div>
+            @include('partials.spreadsheet-zoom-controls')
+        </div>
+        <div class="spreadsheet-scroll spreadsheet-freeze" :style="`--sz: ${tableZoomScale}`">
+            <table class="w-full text-xs border-collapse spreadsheet-table-zoomable">
                 <thead class="sticky top-0 z-20 sticky-thead-shadow">
                     <tr class="bg-slate-100 text-slate-800 uppercase text-[11px] border-b border-slate-300">
-                        <th rowspan="2" class="sticky left-0 z-30 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10">No</th>
-                        <th rowspan="2" class="sticky left-9 sm:left-10 z-30 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[195px] sticky-col-shadow">Nama Lengkap</th>
-                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-slate-100 w-12">L/P</th>
+                        <th rowspan="2" class="sticky left-0 z-30 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10 sz-col-no">No</th>
+                        <th rowspan="2" class="sticky left-9 sm:left-10 z-30 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[195px] sticky-col-shadow sz-col-name sz-name-grade">Nama Lengkap</th>
+                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-slate-100 w-12 sz-col-lp-md">L/P</th>
 
                         @if($phColumns->count() > 0)
                             <th colspan="{{ $phColumns->count() }}" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-sky-100 text-sky-950">
@@ -460,7 +467,7 @@
                             </th>
                         @endif
 
-                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 w-28">
+                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 w-28 sz-col-att-score">
                             Nilai Kehadiran<br>
                             <span class="text-[10px] font-normal text-emerald-700">({{ rtrim(rtrim(number_format($w->weight_attendance, 2), '0'), '.') }}%)</span>
                             @if($isAutoAtt)
@@ -476,25 +483,25 @@
                             </th>
                         @endif
 
-                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50 text-amber-950 w-20">
+                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50 text-amber-950 w-20 sz-col-exam">
                             Nilai STS<br>
                             <span class="text-[10px] font-normal">({{ rtrim(rtrim(number_format($w->weight_sts, 2), '0'), '.') }}%)</span>
                         </th>
-                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50 text-amber-950 w-20">
+                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50 text-amber-950 w-20 sz-col-exam">
                             Nilai SAS<br>
                             <span class="text-[10px] font-normal">({{ rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.') }}%)</span>
                         </th>
-                        <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-300 bg-slate-200 text-slate-900 w-20 font-extrabold">
+                        <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-300 bg-slate-200 text-slate-900 w-20 font-extrabold sz-col-exam">
                             NA<br>
                             <span class="text-[10px] font-normal">(Akhir)</span>
                         </th>
-                        <th rowspan="2" class="px-3 py-2.5 text-center bg-slate-100 text-slate-800 w-28">
+                        <th rowspan="2" class="px-3 py-2.5 text-center bg-slate-100 text-slate-800 w-28 sz-col-status">
                             Status KKTP ({{ $kktp }})
                         </th>
                     </tr>
                     <tr class="bg-slate-50 text-slate-700 text-[11px] border-b border-slate-300">
                         @foreach($phColumns as $col)
-                            <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-sky-50 min-w-[78px]">
+                            <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-sky-50 min-w-[78px] sz-col-ph">
                                 @if(! $isAdminReadOnly)
                                     <button type="button"
                                             @click="openEditCol(@js([
@@ -549,7 +556,7 @@
                         @endforeach
 
                         @foreach($ntColumns as $col)
-                            <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-purple-50 min-w-[68px]">
+                            <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-purple-50 min-w-[68px] sz-col-nt">
                                 @if(! $isAdminReadOnly)
                                     <button type="button"
                                             @click="openEditCol(@js([
@@ -590,10 +597,10 @@
                     </template>
                     <template x-for="(row, rIdx) in rows" :key="row.student_id">
                         <tr :class="activeStudentId === row.student_id ? 'bg-purple-50/35' : 'hover:bg-slate-50/80'">
-                            <td class="sticky left-0 z-10 px-2 py-1.5 text-center font-bold border-r border-slate-200 transition-colors"
+                            <td class="sticky left-0 z-10 px-2 py-1.5 text-center font-bold border-r border-slate-200 transition-colors sz-col-no"
                                 :class="activeStudentId === row.student_id ? 'bg-purple-50 text-purple-900' : 'bg-white text-slate-600'"
                                 x-text="row.no"></td>
-                            <td class="sticky left-9 sm:left-10 z-10 px-2.5 sm:px-3 py-1.5 font-bold border-r border-slate-200 truncate max-w-[135px] sm:max-w-[220px] sticky-col-shadow transition-colors"
+                            <td class="sticky left-9 sm:left-10 z-10 px-2.5 sm:px-3 py-1.5 font-bold border-r border-slate-200 truncate max-w-[135px] sm:max-w-[220px] sticky-col-shadow transition-colors sz-col-name sz-name-grade"
                                 :class="activeStudentId === row.student_id ? 'name-cell-active' : 'bg-white text-slate-900'"
                                 x-text="row.full_name"></td>
                             <td class="px-2 py-1.5 text-center font-semibold text-slate-700 border-r border-slate-200" x-text="row.gender"></td>
@@ -612,7 +619,7 @@
                                            @keydown="handleGradeKey($event, rIdx, `ph-${colId}`)"
                                            @paste="handleCellPaste($event, rIdx, `ph-${colId}`)"
                                            placeholder="0"
-                                           class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500 focus:placeholder:text-transparent transition-colors"
+                                           class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                            :class="[
                                                pastedKeys[`${rIdx}-ph-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
@@ -624,7 +631,7 @@
                             {{-- Nilai Kehadiran (Mode Otomatis Bertoleransi atau Input Manual) --}}
                             <td class="p-0 border-r border-slate-200 relative group" :title="attendanceTooltip(row)">
                                 <template x-if="isAutoAttendance">
-                                    <div class="w-full min-h-8 px-1.5 py-1 flex flex-col items-center justify-center bg-emerald-50/60 select-none">
+                                    <div class="w-full min-h-8 px-1.5 py-1 flex flex-col items-center justify-center bg-emerald-50/60 select-none sz-grade-auto">
                                         <span class="text-xs font-extrabold"
                                               :class="row.attendance_score === null ? 'text-slate-400' : (Number(row.attendance_score) >= 100 ? 'text-emerald-800' : 'text-amber-900')"
                                               x-text="row.attendance_score !== null && row.attendance_score !== '' ? row.attendance_score : '-'"></span>
@@ -647,7 +654,7 @@
                                            @keydown="handleGradeKey($event, rIdx, 'att')"
                                            @paste="handleCellPaste($event, rIdx, 'att')"
                                            placeholder="0"
-                                           class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:placeholder:text-transparent transition-colors"
+                                           class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                            :class="[
                                                pastedKeys[`${rIdx}-att`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-emerald-50/40 select-none' : (!pastedKeys[`${rIdx}-att`] ? 'bg-emerald-50/25' : '')
@@ -669,7 +676,7 @@
                                            @keydown="handleGradeKey($event, rIdx, `nt-${colId}`)"
                                            @paste="handleCellPaste($event, rIdx, `nt-${colId}`)"
                                            placeholder="0"
-                                           class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 focus:placeholder:text-transparent transition-colors"
+                                           class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                            :class="[
                                                pastedKeys[`${rIdx}-nt-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
@@ -691,7 +698,7 @@
                                        @keydown="handleGradeKey($event, rIdx, 'sts')"
                                        @paste="handleCellPaste($event, rIdx, 'sts')"
                                        placeholder="0"
-                                       class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 focus:placeholder:text-transparent transition-colors"
+                                       class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                        :class="[
                                            pastedKeys[`${rIdx}-sts`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                            isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${rIdx}-sts`] ? 'bg-amber-50/15' : '')
@@ -709,7 +716,7 @@
                                        @keydown="handleGradeKey($event, rIdx, 'sas')"
                                        @paste="handleCellPaste($event, rIdx, 'sas')"
                                        placeholder="0"
-                                       class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 focus:placeholder:text-transparent transition-colors"
+                                       class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                        :class="[
                                            pastedKeys[`${rIdx}-sas`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                            isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${rIdx}-sas`] ? 'bg-amber-50/15' : '')
@@ -1420,6 +1427,7 @@
 <script>
 function gradebookSpreadsheet(cfg) {
     return {
+        ...window.createSpreadsheetZoom('ag_gradebook_zoom'),
         rows: cfg.rows,
         savedSnapshot: [],
         phColIds: cfg.phColIds,

@@ -115,17 +115,24 @@
     @if($tab === 'monthly')
         {{-- Spreadsheet Matriks Bulanan --}}
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div class="spreadsheet-scroll spreadsheet-freeze">
-                <table class="w-full text-xs border-collapse select-none">
+            <div class="px-3.5 sm:px-4 py-2.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                <div class="text-xs font-bold text-slate-800 flex items-center gap-2">
+                    <span>Matriks Presensi {{ $monthName }} {{ $year }}</span>
+                    <span class="hidden sm:inline text-[11px] font-medium text-slate-500">({{ count($alpineStudents) }} Siswa)</span>
+                </div>
+                @include('partials.spreadsheet-zoom-controls')
+            </div>
+            <div class="spreadsheet-scroll spreadsheet-freeze" :style="`--sz: ${tableZoomScale}`">
+                <table class="w-full text-xs border-collapse select-none spreadsheet-table-zoomable">
                     <thead class="sticky top-0 z-20 sticky-thead-shadow">
                         <tr class="bg-slate-100 text-slate-800 text-[11px] uppercase border-b border-slate-300">
-                            <th rowspan="2" class="sticky left-0 z-30 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10">No</th>
-                            <th rowspan="2" class="sticky left-9 sm:left-10 z-30 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[185px] sticky-col-shadow">Nama Lengkap</th>
-                            <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-slate-100 w-10">L/P</th>
+                            <th rowspan="2" class="sticky left-0 z-30 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10 sz-col-no">No</th>
+                            <th rowspan="2" class="sticky left-9 sm:left-10 z-30 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[185px] sticky-col-shadow sz-col-name sz-name-att">Nama Lengkap</th>
+                            <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-slate-100 w-10 sz-col-lp-sm">L/P</th>
                             <th :colspan="displayedDays.length" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-slate-200 font-extrabold">
                                 Bulan {{ $monthName }} {{ $year }} — Klik Angka Tanggal untuk Isi Cepat
                             </th>
-                            <th rowspan="2" class="px-2.5 py-2.5 text-center border-r border-slate-300 bg-emerald-50 text-emerald-900 min-w-[60px]" title="Jumlah Hadir = Hadir (.) + Dispen (d)">
+                            <th rowspan="2" class="px-2.5 py-2.5 text-center border-r border-slate-300 bg-emerald-50 text-emerald-900 min-w-[60px] sz-att-hadir" title="Jumlah Hadir = Hadir (.) + Dispen (d)">
                                 Jml Hadir
                             </th>
                             <th colspan="3" class="px-2 py-1.5 text-center border-b border-slate-300 bg-rose-50 text-rose-900">
@@ -134,7 +141,7 @@
                         </tr>
                         <tr class="bg-slate-50 text-slate-700 text-[10px] border-b border-slate-300">
                             <template x-for="d in displayedDays" :key="'hdr-'+d">
-                                <th class="p-0 border-r border-slate-200 w-7 min-w-[28px] text-center"
+                                <th class="p-0 border-r border-slate-200 w-7 min-w-[28px] text-center sz-att-col"
                                     :class="isHoliday(d) ? 'bg-rose-50 text-rose-700' : 'bg-slate-50'">
                                     <div class="relative" x-data="{ menu: false }">
                                         <button type="button" @click="if (!isAdmin) menu = !menu"
@@ -179,9 +186,9 @@
                                     </div>
                                 </th>
                             </template>
-                            <th class="px-2 py-1.5 text-center border-r border-slate-200 bg-amber-50 text-amber-900 w-9" title="Sakit (s)">S</th>
-                            <th class="px-2 py-1.5 text-center border-r border-slate-200 bg-purple-50 text-purple-900 w-9" title="Izin (i)">I</th>
-                            <th class="px-2 py-1.5 text-center bg-rose-50 text-rose-900 w-9" title="Alfa (a)">A</th>
+                            <th class="px-2 py-1.5 text-center border-r border-slate-200 bg-amber-50 text-amber-900 w-9 sz-att-kia" title="Sakit (s)">S</th>
+                            <th class="px-2 py-1.5 text-center border-r border-slate-200 bg-purple-50 text-purple-900 w-9 sz-att-kia" title="Izin (i)">I</th>
+                            <th class="px-2 py-1.5 text-center bg-rose-50 text-rose-900 w-9 sz-att-kia" title="Alfa (a)">A</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200" @focusout="handleTableFocusOut($event, $el)">
@@ -194,10 +201,10 @@
                         </template>
                         <template x-for="(st, rIdx) in students" :key="st.id">
                             <tr :class="activeStudentId === st.id ? 'bg-purple-50/35' : 'hover:bg-slate-50/80'">
-                                <td class="sticky left-0 z-10 px-2 py-1.5 text-center font-bold border-r border-slate-200 transition-colors"
+                                <td class="sticky left-0 z-10 px-2 py-1.5 text-center font-bold border-r border-slate-200 transition-colors sz-col-no"
                                     :class="activeStudentId === st.id ? 'bg-purple-50 text-purple-900' : 'bg-white text-slate-600'"
                                     x-text="st.no"></td>
-                                <td class="sticky left-9 sm:left-10 z-10 px-2.5 sm:px-3 py-1.5 font-bold border-r border-slate-200 truncate max-w-[135px] sm:max-w-[210px] sticky-col-shadow transition-colors"
+                                <td class="sticky left-9 sm:left-10 z-10 px-2.5 sm:px-3 py-1.5 font-bold border-r border-slate-200 truncate max-w-[135px] sm:max-w-[210px] sticky-col-shadow transition-colors sz-col-name sz-name-att"
                                     :class="activeStudentId === st.id ? 'name-cell-active' : 'bg-white text-slate-900'"
                                     x-text="st.full_name"></td>
                                 <td class="px-2 py-1.5 text-center font-semibold text-slate-700 border-r border-slate-200" x-text="st.gender"></td>
@@ -220,7 +227,7 @@
                                                @click="if(!isAdmin) onCellTap(st.id, d)"
                                                @keydown="handleKey($event, st.id, rIdx, d)"
                                                @input="handleInput($event, st.id, d)"
-                                               class="w-7 h-9 sm:h-7 text-center text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:z-20 relative placeholder:text-rose-300 placeholder:font-normal"
+                                               class="w-7 h-9 sm:h-7 text-center text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:z-20 relative placeholder:text-rose-300 placeholder:font-normal sz-att-input"
                                                :class="[cellColorClass(getCell(st.id, d), isHoliday(d)), isAdmin ? 'cursor-default pointer-events-none select-none' : 'cursor-pointer']">
                                     </td>
                                 </template>
@@ -326,18 +333,19 @@
     @else
         {{-- Tampilan Rekapitulasi 1 Semester Penuh --}}
         <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+            <div class="px-3.5 sm:px-5 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
                 <div class="text-xs font-bold text-slate-800">
                     Rekapitulasi Kehadiran Semester ({{ $recap['total_active_dates'] }} Hari Pertemuan Tercatat)
                 </div>
+                @include('partials.spreadsheet-zoom-controls')
             </div>
-            <div class="spreadsheet-scroll spreadsheet-freeze">
-                <table class="w-full text-xs text-left border-collapse">
+            <div class="spreadsheet-scroll spreadsheet-freeze" :style="`--sz: ${tableZoomScale}`">
+                <table class="w-full text-xs text-left border-collapse spreadsheet-table-zoomable sz-no-fixed">
                     <thead class="sticky top-0 z-20 sticky-thead-shadow bg-slate-100 text-slate-700 uppercase text-[11px] border-b border-slate-200">
                         <tr>
-                            <th rowspan="2" class="sticky left-0 z-30 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-200 w-10">No</th>
-                            <th rowspan="2" class="sticky left-10 z-30 bg-slate-100 px-3 sm:px-4 py-2.5 border-r border-slate-200 min-w-[150px] sm:min-w-[185px] sticky-col-shadow">Nama Lengkap</th>
-                            <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200 bg-slate-100 w-14">L/P</th>
+                            <th rowspan="2" class="sticky left-0 z-30 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-200 w-10 sz-col-no">No</th>
+                            <th rowspan="2" class="sticky left-10 z-30 bg-slate-100 px-3 sm:px-4 py-2.5 border-r border-slate-200 min-w-[150px] sm:min-w-[185px] sticky-col-shadow sz-col-name sz-name-recap">Nama Lengkap</th>
+                            <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-200 bg-slate-100 w-14 sz-col-lp-lg">L/P</th>
                             <th colspan="3" class="px-3 py-2 text-center border-b border-r border-slate-200 bg-emerald-50 text-emerald-900">Kehadiran</th>
                             <th colspan="4" class="px-3 py-2 text-center border-b border-r border-slate-200 bg-rose-50 text-rose-900">Ketidakhadiran</th>
                             <th rowspan="2" class="px-3 py-2.5 text-center bg-slate-100 w-24">% Hadir</th>
@@ -355,8 +363,8 @@
                     <tbody class="divide-y divide-slate-100">
                         @forelse($recap['rows'] as $r)
                             <tr class="hover:bg-slate-50/70">
-                                <td class="sticky left-0 z-10 bg-white px-2 py-2.5 text-center font-bold border-r border-slate-100">{{ $r['no'] }}</td>
-                                <td class="sticky left-10 z-10 bg-white px-3 sm:px-4 py-2.5 font-bold text-slate-900 border-r border-slate-100 sticky-col-shadow">{{ $r['student']->full_name }}</td>
+                                <td class="sticky left-0 z-10 bg-white px-2 py-2.5 text-center font-bold border-r border-slate-100 sz-col-no">{{ $r['no'] }}</td>
+                                <td class="sticky left-10 z-10 bg-white px-3 sm:px-4 py-2.5 font-bold text-slate-900 border-r border-slate-100 sticky-col-shadow sz-col-name sz-name-recap">{{ $r['student']->full_name }}</td>
                                 <td class="px-3 py-2.5 text-center font-semibold border-r border-slate-100">{{ $r['student']->gender }}</td>
                                 <td class="px-3 py-2.5 text-center border-r border-slate-100">{{ $r['dot'] }}</td>
                                 <td class="px-3 py-2.5 text-center font-semibold text-sky-700 border-r border-slate-100">{{ $r['dispen'] }}</td>
@@ -474,6 +482,7 @@
 <script>
 function attendanceSpreadsheet(cfg) {
     return {
+        ...window.createSpreadsheetZoom('ag_attendance_zoom'),
         students: cfg.students,
         cells: cfg.initialCells,
         savedSnapshot: {},

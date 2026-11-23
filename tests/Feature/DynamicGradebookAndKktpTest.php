@@ -542,13 +542,23 @@ class DynamicGradebookAndKktpTest extends TestCase
         $response->assertSee('bg-sky-100 text-sky-950', false);
         $response->assertSee('h-9 sm:h-8', false);
         $response->assertSee('focus:placeholder:text-transparent', false);
+        $response->assertSee('spreadsheet-table-zoomable', false);
+        $response->assertSee('zoomOut()', false);
+        $response->assertSee('zoomIn()', false);
+        $response->assertSee('resetZoom()', false);
+        $response->assertSee('ag_gradebook_zoom', false);
 
         $appCss = file_get_contents(resource_path('css/app.css'));
         $this->assertNotFalse($appCss);
         $this->assertStringContainsString('@media screen and (max-width: 767px), screen and (hover: none) and (pointer: coarse)', $appCss);
         $this->assertStringContainsString('font-size: 16px !important;', $appCss);
+        $this->assertStringContainsString('max(16px, calc(16px * var(--sz, 1)))', $appCss);
         $this->assertStringContainsString('touch-action: manipulation;', $appCss);
         $this->assertStringNotContainsString('font-size: 12px !important;', $appCss);
+
+        $appJs = file_get_contents(resource_path('js/app.js'));
+        $this->assertNotFalse($appJs);
+        $this->assertStringContainsString('window.createSpreadsheetZoom', $appJs);
     }
 
     public function test_ph_assessment_date_absent_dispen_confirmation_data_and_null_preservation(): void

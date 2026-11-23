@@ -71,5 +71,43 @@ window.initSignatureCanvas = function (canvas, onUpdateCallback) {
     };
 };
 
+window.createSpreadsheetZoom = function (storageKey = 'ag_spreadsheet_zoom') {
+    const MIN_ZOOM = 70;
+    const MAX_ZOOM = 150;
+    const STEP = 10;
+    let initial = 100;
+
+    try {
+        const saved = parseInt(localStorage.getItem(storageKey) || '100', 10);
+        if (!Number.isNaN(saved) && saved >= MIN_ZOOM && saved <= MAX_ZOOM) {
+            initial = Math.round(saved / STEP) * STEP;
+        }
+    } catch (_) {}
+
+    return {
+        tableZoom: initial,
+        tableZoomScale: (initial / 100).toFixed(2),
+        tableZoomMin: MIN_ZOOM,
+        tableZoomMax: MAX_ZOOM,
+        setTableZoom(val) {
+            const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(Number(val) / STEP) * STEP));
+            this.tableZoom = clamped;
+            this.tableZoomScale = (clamped / 100).toFixed(2);
+            try {
+                localStorage.setItem(storageKey, String(clamped));
+            } catch (_) {}
+        },
+        zoomOut() {
+            this.setTableZoom(this.tableZoom - STEP);
+        },
+        zoomIn() {
+            this.setTableZoom(this.tableZoom + STEP);
+        },
+        resetZoom() {
+            this.setTableZoom(100);
+        },
+    };
+};
+
 window.Alpine = Alpine;
 Alpine.start();

@@ -53,16 +53,124 @@ input.no-spinner[type=number] {
 .spreadsheet-freeze {
     max-height: 70vh;
     overflow: auto;
-    scroll-padding-top: 6.75rem;
-    scroll-padding-left: 11rem;
+    scroll-padding-top: calc(6.75rem * var(--sz, 1));
+    scroll-padding-left: calc(11rem * var(--sz, 1));
 }
 
 @media (min-width: 640px) {
     .spreadsheet-freeze {
         max-height: 72vh;
-        scroll-padding-top: 7.25rem;
-        scroll-padding-left: 15.5rem;
+        scroll-padding-top: calc(7.25rem * var(--sz, 1));
+        scroll-padding-left: calc(15.5rem * var(--sz, 1));
     }
+}
+
+/* Proportional zoom scaling for Attendance & Gradebook spreadsheet tables via --sz CSS variable */
+.spreadsheet-table-zoomable {
+    --sz-no-base: 2.25rem;
+    --sz-no-w: calc(var(--sz-no-base) * var(--sz, 1));
+    font-size: calc(0.75rem * var(--sz, 1));
+    line-height: calc(1rem * var(--sz, 1));
+}
+
+@media (min-width: 640px) {
+    .spreadsheet-table-zoomable {
+        --sz-no-base: 2.5rem;
+    }
+}
+
+.spreadsheet-table-zoomable.sz-no-fixed {
+    --sz-no-base: 2.5rem;
+}
+
+.spreadsheet-table-zoomable .text-xs {
+    font-size: calc(0.75rem * var(--sz, 1));
+    line-height: calc(1rem * var(--sz, 1));
+}
+
+.spreadsheet-table-zoomable .text-\[11px\] {
+    font-size: calc(11px * var(--sz, 1));
+    line-height: calc(15px * var(--sz, 1));
+}
+
+.spreadsheet-table-zoomable .text-\[10px\] {
+    font-size: calc(10px * var(--sz, 1));
+    line-height: calc(14px * var(--sz, 1));
+}
+
+.spreadsheet-table-zoomable .text-\[9px\] {
+    font-size: calc(9px * var(--sz, 1));
+    line-height: calc(12px * var(--sz, 1));
+}
+
+.spreadsheet-table-zoomable .text-\[8\.5px\] {
+    font-size: calc(8.5px * var(--sz, 1));
+    line-height: calc(11px * var(--sz, 1));
+}
+
+.spreadsheet-table-zoomable .px-1\.5 { padding-left: calc(0.375rem * var(--sz, 1)); padding-right: calc(0.375rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .px-2 { padding-left: calc(0.5rem * var(--sz, 1)); padding-right: calc(0.5rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .px-2\.5 { padding-left: calc(0.625rem * var(--sz, 1)); padding-right: calc(0.625rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .px-3 { padding-left: calc(0.75rem * var(--sz, 1)); padding-right: calc(0.75rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .px-4 { padding-left: calc(1rem * var(--sz, 1)); padding-right: calc(1rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .py-0\.5 { padding-top: calc(0.125rem * var(--sz, 1)); padding-bottom: calc(0.125rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .py-1 { padding-top: calc(0.25rem * var(--sz, 1)); padding-bottom: calc(0.25rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .py-1\.5 { padding-top: calc(0.375rem * var(--sz, 1)); padding-bottom: calc(0.375rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .py-2 { padding-top: calc(0.5rem * var(--sz, 1)); padding-bottom: calc(0.5rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .py-2\.5 { padding-top: calc(0.625rem * var(--sz, 1)); padding-bottom: calc(0.625rem * var(--sz, 1)); }
+
+@media (min-width: 640px) {
+    .spreadsheet-table-zoomable .sm\:px-3 { padding-left: calc(0.75rem * var(--sz, 1)); padding-right: calc(0.75rem * var(--sz, 1)); }
+    .spreadsheet-table-zoomable .sm\:px-4 { padding-left: calc(1rem * var(--sz, 1)); padding-right: calc(1rem * var(--sz, 1)); }
+}
+
+.spreadsheet-table-zoomable .sz-col-no {
+    width: var(--sz-no-w);
+    min-width: var(--sz-no-w);
+    max-width: var(--sz-no-w);
+}
+
+.spreadsheet-table-zoomable .sz-col-name {
+    left: var(--sz-no-w);
+}
+
+.spreadsheet-table-zoomable .sz-name-att { min-width: calc(130px * var(--sz, 1)); max-width: calc(135px * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-name-recap { min-width: calc(150px * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-name-grade { min-width: calc(130px * var(--sz, 1)); max-width: calc(135px * var(--sz, 1)); }
+
+@media (min-width: 640px) {
+    .spreadsheet-table-zoomable .sz-name-att { min-width: calc(185px * var(--sz, 1)); max-width: calc(210px * var(--sz, 1)); }
+    .spreadsheet-table-zoomable .sz-name-recap { min-width: calc(185px * var(--sz, 1)); }
+    .spreadsheet-table-zoomable .sz-name-grade { min-width: calc(195px * var(--sz, 1)); max-width: calc(220px * var(--sz, 1)); }
+}
+
+.spreadsheet-table-zoomable .sz-col-lp-sm { width: calc(2.5rem * var(--sz, 1)); min-width: calc(2.5rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-col-lp-md { width: calc(3rem * var(--sz, 1)); min-width: calc(3rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-col-lp-lg { width: calc(3.5rem * var(--sz, 1)); min-width: calc(3.5rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-att-col { width: calc(1.75rem * var(--sz, 1)); min-width: calc(1.75rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-att-hadir { min-width: calc(60px * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-att-kia { width: calc(2.25rem * var(--sz, 1)); min-width: calc(2.25rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-att-input {
+    width: 100%;
+    min-width: calc(1.75rem * var(--sz, 1));
+    height: calc(2.25rem * var(--sz, 1));
+}
+
+.spreadsheet-table-zoomable .sz-col-ph { min-width: calc(78px * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-col-nt { min-width: calc(68px * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-col-att-score,
+.spreadsheet-table-zoomable .sz-col-status { width: calc(7rem * var(--sz, 1)); min-width: calc(7rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-col-exam { width: calc(5rem * var(--sz, 1)); min-width: calc(5rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-grade-input { height: calc(2.25rem * var(--sz, 1)); }
+.spreadsheet-table-zoomable .sz-grade-auto { min-height: calc(2rem * var(--sz, 1)); }
+
+@media (min-width: 640px) {
+    .spreadsheet-table-zoomable .sz-att-input { height: calc(1.75rem * var(--sz, 1)); }
+    .spreadsheet-table-zoomable .sz-grade-input { height: calc(2rem * var(--sz, 1)); }
+}
+
+.spreadsheet-table-zoomable input {
+    font-size: calc(0.75rem * var(--sz, 1));
 }
 
 /* Crisp bottom divider + elevation for frozen 2-row table headers */
@@ -87,6 +195,15 @@ input.no-spinner[type=number] {
     select,
     textarea {
         font-size: 16px !important;
+    }
+
+    .spreadsheet-table-zoomable input:not([readonly]):not([disabled]) {
+        font-size: max(16px, calc(16px * var(--sz, 1))) !important;
+    }
+
+    .spreadsheet-table-zoomable input[readonly],
+    .spreadsheet-table-zoomable input[disabled] {
+        font-size: calc(16px * var(--sz, 1)) !important;
     }
 
     button,
