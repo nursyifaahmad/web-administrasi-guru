@@ -220,7 +220,7 @@
                                                @click="if(!isAdmin) onCellTap(st.id, d)"
                                                @keydown="handleKey($event, st.id, rIdx, d)"
                                                @input="handleInput($event, st.id, d)"
-                                               class="w-7 h-8 sm:h-7 text-center text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:z-20 relative placeholder:text-rose-300 placeholder:font-normal"
+                                               class="w-7 h-9 sm:h-7 text-center text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:z-20 relative placeholder:text-rose-300 placeholder:font-normal"
                                                :class="[cellColorClass(getCell(st.id, d), isHoliday(d)), isAdmin ? 'cursor-default pointer-events-none select-none' : 'cursor-pointer']">
                                     </td>
                                 </template>

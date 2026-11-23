@@ -81,16 +81,20 @@ input.no-spinner[type=number] {
     z-index: 15;
 }
 
-/* Mobile optimizations: prevent iOS Safari auto-zoom on input focus */
-@media (max-width: 640px) {
-    input:not([type="checkbox"]):not([type="radio"]):not(.no-spinner):not([maxlength="1"]),
+/* Mobile & touch optimizations: prevent iOS Safari focus auto-zoom (<16px) and accidental double-tap zoom */
+@media screen and (max-width: 767px), screen and (hover: none) and (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
     select,
     textarea {
-        font-size: 16px;
+        font-size: 16px !important;
     }
 
-    table input.no-spinner,
-    table input[maxlength="1"] {
-        font-size: 12px !important;
+    button,
+    a,
+    input,
+    select,
+    textarea,
+    .spreadsheet-freeze td {
+        touch-action: manipulation;
     }
 }

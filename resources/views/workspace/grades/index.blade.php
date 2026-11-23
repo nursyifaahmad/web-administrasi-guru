@@ -612,7 +612,7 @@
                                            @keydown="handleGradeKey($event, rIdx, `ph-${colId}`)"
                                            @paste="handleCellPaste($event, rIdx, `ph-${colId}`)"
                                            placeholder="0"
-                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500 transition-colors"
+                                           class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500 focus:placeholder:text-transparent transition-colors"
                                            :class="[
                                                pastedKeys[`${rIdx}-ph-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
@@ -647,7 +647,7 @@
                                            @keydown="handleGradeKey($event, rIdx, 'att')"
                                            @paste="handleCellPaste($event, rIdx, 'att')"
                                            placeholder="0"
-                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
+                                           class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:placeholder:text-transparent transition-colors"
                                            :class="[
                                                pastedKeys[`${rIdx}-att`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-emerald-50/40 select-none' : (!pastedKeys[`${rIdx}-att`] ? 'bg-emerald-50/25' : '')
@@ -669,7 +669,7 @@
                                            @keydown="handleGradeKey($event, rIdx, `nt-${colId}`)"
                                            @paste="handleCellPaste($event, rIdx, `nt-${colId}`)"
                                            placeholder="0"
-                                           class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
+                                           class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 focus:placeholder:text-transparent transition-colors"
                                            :class="[
                                                pastedKeys[`${rIdx}-nt-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
@@ -691,7 +691,7 @@
                                        @keydown="handleGradeKey($event, rIdx, 'sts')"
                                        @paste="handleCellPaste($event, rIdx, 'sts')"
                                        placeholder="0"
-                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors"
+                                       class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 focus:placeholder:text-transparent transition-colors"
                                        :class="[
                                            pastedKeys[`${rIdx}-sts`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                            isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${rIdx}-sts`] ? 'bg-amber-50/15' : '')
@@ -709,7 +709,7 @@
                                        @keydown="handleGradeKey($event, rIdx, 'sas')"
                                        @paste="handleCellPaste($event, rIdx, 'sas')"
                                        placeholder="0"
-                                       class="no-spinner w-full h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors"
+                                       class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 focus:placeholder:text-transparent transition-colors"
                                        :class="[
                                            pastedKeys[`${rIdx}-sas`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                            isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${rIdx}-sas`] ? 'bg-amber-50/15' : '')
