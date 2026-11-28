@@ -948,4 +948,80 @@ class DynamicGradebookAndKktpTest extends TestCase
             ->assertSee('modalPhDateSelect', false)
             ->assertSee('modalPhDateInput', false);
     }
+
+    public function test_gradebook_renders_column_sorting_and_max_min_average_summary_footer(): void
+    {
+        SchoolSetting::current();
+
+        $admin = User::query()->create([
+            'name' => 'Admin Supervisi Sort',
+            'email' => 'adminsort@test.sch.id',
+            'role' => 'admin',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $guru = User::query()->create([
+            'name' => 'Guru Informatika Sort',
+            'email' => 'gurusort@test.sch.id',
+            'role' => 'guru',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'INF',
+            'name' => 'Informatika',
+            'default_kktp' => 80,
+        ]);
+
+        $class = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-E',
+            'homeroom_teacher_name' => 'Wali VII-E',
+            'is_grade_shared_with_admin' => true,
+        ]);
+        $class->ensureDefaultsInitialized();
+
+        ClassStudent::query()->create([
+            'teaching_class_id' => $class->id,
+            'order_number' => 1,
+            'full_name' => 'Abid Aditia Pratama',
+            'gender' => 'L',
+            'is_active' => true,
+        ]);
+
+        $guruPage = $this->actingAs($guru)->get(route('grades.index', $class));
+        $guruPage->assertOk()
+            ->assertSee('displayedRows()', false)
+            ->assertSee('getSortOptions()', false)
+            ->assertSee('toggleSort(', false)
+            ->assertSee('resetSort()', false)
+            ->assertSee("toggleSort('no')", false)
+            ->assertSee("toggleSort('full_name')", false)
+            ->assertSee("toggleSort('na')", false)
+            ->assertSee("toggleSort('status')", false)
+            ->assertSee('Nilai Tertinggi (MAX)', false)
+            ->assertSee('Nilai Terendah (MIN)', false)
+            ->assertSee('Rata-rata (AVERAGE)', false)
+            ->assertSee('columnStat(', false)
+            ->assertSee('getColumnNumericValues', false);
+
+        // Mode Supervisi Admin Read-Only juga memperoleh kontrol sorting dan baris ringkasan MAX/MIN/AVERAGE
+        $adminPage = $this->actingAs($admin)->get(route('grades.index', $class));
+        $adminPage->assertOk()
+            ->assertSee('displayedRows()', false)
+            ->assertSee('Nilai Tertinggi (MAX)', false)
+            ->assertSee('Nilai Terendah (MIN)', false)
+            ->assertSee('Rata-rata (AVERAGE)', false);
+    }
 }

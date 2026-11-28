@@ -456,19 +456,63 @@
     {{-- Tabel Spreadsheet Buku Nilai Dinamis --}}
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         <div class="px-3.5 sm:px-4 py-2.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
-            <div class="text-xs font-bold text-slate-800 flex items-center gap-2">
+            <div class="text-xs font-bold text-slate-800 flex flex-wrap items-center gap-2">
                 <span>Tabel Daftar Nilai ({{ count($alpineRows) }} Siswa)</span>
-                <span class="hidden sm:inline text-[11px] font-medium text-slate-500">&bull; Gunakan kontrol Zoom di kanan untuk memperkecil/memperbesar tabel</span>
+                <span class="hidden lg:inline text-[11px] font-medium text-slate-500">&bull; Klik panah di judul kolom atau pilih urutan di samping</span>
             </div>
-            @include('partials.spreadsheet-zoom-controls')
+            <div class="flex flex-wrap items-center gap-2 ml-auto">
+                <div class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 text-xs">
+                    <span class="pl-1.5 text-[11px] font-bold text-slate-600 hidden sm:inline">Urutkan:</span>
+                    <select :value="sortKey"
+                            @change="setSortFromSelect($event.target.value)"
+                            aria-label="Urutkan tabel nilai"
+                            class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <template x-for="opt in getSortOptions()" :key="opt.key">
+                            <option :value="opt.key" x-text="opt.label"></option>
+                        </template>
+                    </select>
+                    <button type="button"
+                            x-show="sortKey !== 'default'"
+                            x-cloak
+                            @click="toggleSortDir()"
+                            :title="sortDir === 'desc' ? 'Saat ini: Tertinggi/Z ke Terendah/A. Klik untuk balik urutan' : 'Saat ini: Terendah/A ke Tertinggi/Z. Klik untuk balik urutan'"
+                            class="px-2 py-1 rounded-lg bg-indigo-600 text-white font-bold text-[11px] hover:bg-indigo-700 transition cursor-pointer inline-flex items-center gap-1">
+                        <span x-text="sortDir === 'desc' ? '↓ Turun' : '↑ Naik'"></span>
+                    </button>
+                    <button type="button"
+                            x-show="sortKey !== 'default'"
+                            x-cloak
+                            @click="resetSort()"
+                            title="Kembalikan urutan sesuai nomor absen"
+                            class="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold text-[11px] transition cursor-pointer">
+                        Reset
+                    </button>
+                </div>
+                @include('partials.spreadsheet-zoom-controls')
+            </div>
         </div>
         <div class="spreadsheet-scroll spreadsheet-freeze" :style="`--sz: ${tableZoomScale}`">
             <table class="w-full text-xs border-collapse spreadsheet-table-zoomable">
                 <thead class="sticky top-0 z-20 sticky-thead-shadow">
                     <tr class="bg-slate-100 text-slate-800 uppercase text-[11px] border-b border-slate-300">
-                        <th rowspan="2" class="sticky left-0 z-30 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10 sz-col-no">No</th>
-                        <th rowspan="2" class="sticky left-9 sm:left-10 z-30 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[195px] sticky-col-shadow sz-col-name sz-name-grade">Nama Lengkap</th>
-                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-slate-100 w-12 sz-col-lp-md">L/P</th>
+                        <th rowspan="2" class="sticky left-0 z-30 bg-slate-100 px-2 py-2.5 text-center border-r border-slate-300 w-9 sm:w-10 sz-col-no">
+                            <button type="button" @click="toggleSort('no')" class="w-full inline-flex items-center justify-center gap-0.5 hover:text-indigo-700 cursor-pointer uppercase" title="Urutkan berdasarkan Nomor Absen">
+                                <span>No</span>
+                                <span class="text-[10px]" :class="sortKey === 'no' ? 'text-indigo-700 font-black' : 'text-slate-400'" x-text="sortArrowIcon('no')"></span>
+                            </button>
+                        </th>
+                        <th rowspan="2" class="sticky left-9 sm:left-10 z-30 bg-slate-100 px-2.5 sm:px-3 py-2.5 text-left border-r border-slate-300 min-w-[130px] sm:min-w-[195px] sticky-col-shadow sz-col-name sz-name-grade">
+                            <button type="button" @click="toggleSort('full_name')" class="w-full flex items-center justify-between gap-1 hover:text-indigo-700 cursor-pointer uppercase text-left" title="Urutkan berdasarkan Nama Lengkap (A-Z / Z-A)">
+                                <span>Nama Lengkap</span>
+                                <span class="text-[10px] shrink-0" :class="sortKey === 'full_name' ? 'text-indigo-700 font-black' : 'text-slate-400'" x-text="sortArrowIcon('full_name')"></span>
+                            </button>
+                        </th>
+                        <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-slate-100 w-12 sz-col-lp-md">
+                            <button type="button" @click="toggleSort('gender')" class="w-full inline-flex items-center justify-center gap-0.5 hover:text-indigo-700 cursor-pointer uppercase" title="Urutkan berdasarkan Jenis Kelamin">
+                                <span>L/P</span>
+                                <span class="text-[10px]" :class="sortKey === 'gender' ? 'text-indigo-700 font-black' : 'text-slate-400'" x-text="sortArrowIcon('gender')"></span>
+                            </button>
+                        </th>
 
                         @if($phColumns->count() > 0)
                             <th colspan="{{ $phColumns->count() }}" class="px-2 py-1.5 text-center border-b border-r border-slate-300 bg-sky-100 text-sky-950">
@@ -477,7 +521,13 @@
                         @endif
 
                         <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-emerald-50 text-emerald-950 w-28 sz-col-att-score">
-                            Nilai Kehadiran<br>
+                            <button type="button" @click="toggleSort('att')" class="w-full cursor-pointer hover:text-emerald-700" title="Urutkan berdasarkan Nilai Kehadiran">
+                                <span class="inline-flex items-center justify-center gap-0.5">
+                                    <span>Nilai Kehadiran</span>
+                                    <span class="text-[10px]" :class="sortKey === 'att' ? 'text-emerald-700 font-black' : 'text-emerald-400'" x-text="sortArrowIcon('att')"></span>
+                                </span>
+                            </button>
+                            <br>
                             <span class="text-[10px] font-normal text-emerald-700">({{ rtrim(rtrim(number_format($w->weight_attendance, 2), '0'), '.') }}%)</span>
                             @if($isAutoAtt)
                                 <div class="mt-0.5 text-[9px] font-extrabold text-emerald-800 bg-emerald-100 rounded px-1 py-0.25 inline-block normal-case">
@@ -493,45 +543,74 @@
                         @endif
 
                         <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50 text-amber-950 w-20 sz-col-exam">
-                            Nilai STS<br>
+                            <button type="button" @click="toggleSort('sts')" class="w-full cursor-pointer hover:text-amber-800" title="Urutkan berdasarkan Nilai STS">
+                                <span class="inline-flex items-center justify-center gap-0.5">
+                                    <span>Nilai STS</span>
+                                    <span class="text-[10px]" :class="sortKey === 'sts' ? 'text-amber-800 font-black' : 'text-amber-400'" x-text="sortArrowIcon('sts')"></span>
+                                </span>
+                            </button>
+                            <br>
                             <span class="text-[10px] font-normal">({{ rtrim(rtrim(number_format($w->weight_sts, 2), '0'), '.') }}%)</span>
                         </th>
                         <th rowspan="2" class="px-2 py-2.5 text-center border-r border-slate-300 bg-amber-50 text-amber-950 w-20 sz-col-exam">
-                            Nilai SAS<br>
+                            <button type="button" @click="toggleSort('sas')" class="w-full cursor-pointer hover:text-amber-800" title="Urutkan berdasarkan Nilai SAS">
+                                <span class="inline-flex items-center justify-center gap-0.5">
+                                    <span>Nilai SAS</span>
+                                    <span class="text-[10px]" :class="sortKey === 'sas' ? 'text-amber-800 font-black' : 'text-amber-400'" x-text="sortArrowIcon('sas')"></span>
+                                </span>
+                            </button>
+                            <br>
                             <span class="text-[10px] font-normal">({{ rtrim(rtrim(number_format($w->weight_sas, 2), '0'), '.') }}%)</span>
                         </th>
                         <th rowspan="2" class="px-3 py-2.5 text-center border-r border-slate-300 bg-slate-200 text-slate-900 w-20 font-extrabold sz-col-exam">
-                            NA<br>
+                            <button type="button" @click="toggleSort('na')" class="w-full cursor-pointer hover:text-indigo-700 font-extrabold" title="Urutkan berdasarkan Nilai Akhir (NA)">
+                                <span class="inline-flex items-center justify-center gap-0.5">
+                                    <span>NA</span>
+                                    <span class="text-[10px]" :class="sortKey === 'na' ? 'text-indigo-700 font-black' : 'text-slate-500'" x-text="sortArrowIcon('na')"></span>
+                                </span>
+                            </button>
+                            <br>
                             <span class="text-[10px] font-normal">(Akhir)</span>
                         </th>
                         <th rowspan="2" class="px-3 py-2.5 text-center bg-slate-100 text-slate-800 w-28 sz-col-status">
-                            Status KKTP ({{ $kktp }})
+                            <button type="button" @click="toggleSort('status')" class="w-full inline-flex items-center justify-center gap-0.5 hover:text-indigo-700 cursor-pointer uppercase" title="Urutkan berdasarkan Status Ketuntasan KKTP">
+                                <span>Status KKTP ({{ $kktp }})</span>
+                                <span class="text-[10px]" :class="sortKey === 'status' ? 'text-indigo-700 font-black' : 'text-slate-400'" x-text="sortArrowIcon('status')"></span>
+                            </button>
                         </th>
                     </tr>
                     <tr class="bg-slate-50 text-slate-700 text-[11px] border-b border-slate-300">
                         @foreach($phColumns as $col)
                             <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-sky-50 min-w-[78px] sz-col-ph">
                                 @if(! $isAdminReadOnly)
-                                    <button type="button"
-                                            @click="openEditCol(@js([
-                                                'id' => (string) $col->id,
-                                                'label' => $col->label,
-                                                'topic_note' => $col->topic_note,
-                                                'assessment_date' => $col->assessment_date?->toDateString() ?? '',
-                                                'assessment_date_label' => $col->assessment_date_label ?? '',
-                                                'type' => 'PH',
-                                                'update_url' => route('grades.columns.update', [$teachingClass, $col]),
-                                                'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
-                                            ]))"
-                                            class="w-full hover:text-sky-700 group cursor-pointer" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
-                                        <div class="font-extrabold flex items-center justify-center gap-0.5">
-                                            <span>{{ $col->label }}</span>
-                                            <span class="text-[10px] text-slate-400 group-hover:text-sky-600">&#9998;</span>
-                                        </div>
-                                        @if($col->topic_note)
-                                            <div class="text-[9px] font-normal text-slate-500 truncate max-w-[78px] mx-auto">{{ $col->topic_note }}</div>
-                                        @endif
-                                    </button>
+                                    <div class="flex items-start justify-center gap-1">
+                                        <button type="button"
+                                                @click="openEditCol(@js([
+                                                    'id' => (string) $col->id,
+                                                    'label' => $col->label,
+                                                    'topic_note' => $col->topic_note,
+                                                    'assessment_date' => $col->assessment_date?->toDateString() ?? '',
+                                                    'assessment_date_label' => $col->assessment_date_label ?? '',
+                                                    'type' => 'PH',
+                                                    'update_url' => route('grades.columns.update', [$teachingClass, $col]),
+                                                    'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
+                                                ]))"
+                                                class="hover:text-sky-700 group cursor-pointer" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
+                                            <div class="font-extrabold flex items-center justify-center gap-0.5">
+                                                <span>{{ $col->label }}</span>
+                                                <span class="text-[10px] text-slate-400 group-hover:text-sky-600">&#9998;</span>
+                                            </div>
+                                            @if($col->topic_note)
+                                                <div class="text-[9px] font-normal text-slate-500 truncate max-w-[72px] mx-auto">{{ $col->topic_note }}</div>
+                                            @endif
+                                        </button>
+                                        <button type="button"
+                                                @click.stop="toggleSort('ph-{{ $col->id }}')"
+                                                :class="sortKey === 'ph-{{ $col->id }}' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-200 hover:text-sky-700 hover:border-sky-300'"
+                                                class="mt-0.5 px-1 py-0.25 rounded border text-[9px] font-black leading-none transition cursor-pointer shrink-0"
+                                                title="Urutkan berdasarkan {{ $col->label }}"
+                                                x-text="sortArrowIcon('ph-{{ $col->id }}')"></button>
+                                    </div>
                                     @php
                                         $colDateStr = $col->assessment_date?->toDateString();
                                         $colAbsentInfo = $colDateStr ? ($phAbsentMap[$colDateStr] ?? null) : null;
@@ -552,7 +631,15 @@
                                     </button>
                                 @else
                                     <div class="w-full py-0.5" title="{{ $col->topic_note ?: $col->label }}">
-                                        <div class="font-extrabold text-slate-800">{{ $col->label }}</div>
+                                        <div class="flex items-center justify-center gap-1">
+                                            <span class="font-extrabold text-slate-800">{{ $col->label }}</span>
+                                            <button type="button"
+                                                    @click.stop="toggleSort('ph-{{ $col->id }}')"
+                                                    :class="sortKey === 'ph-{{ $col->id }}' ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-500 border-slate-200 hover:text-sky-700'"
+                                                    class="px-1 py-0.25 rounded border text-[9px] font-black leading-none transition cursor-pointer"
+                                                    title="Urutkan berdasarkan {{ $col->label }}"
+                                                    x-text="sortArrowIcon('ph-{{ $col->id }}')"></button>
+                                        </div>
                                         @if($col->topic_note)
                                             <div class="text-[9px] font-normal text-slate-500 truncate max-w-[78px] mx-auto">{{ $col->topic_note }}</div>
                                         @endif
@@ -567,26 +654,42 @@
                         @foreach($ntColumns as $col)
                             <th class="px-1.5 py-1.5 text-center border-r border-slate-200 bg-purple-50 min-w-[68px] sz-col-nt">
                                 @if(! $isAdminReadOnly)
-                                    <button type="button"
-                                            @click="openEditCol(@js([
-                                                'label' => $col->label,
-                                                'topic_note' => $col->topic_note,
-                                                'type' => 'NT',
-                                                'update_url' => route('grades.columns.update', [$teachingClass, $col]),
-                                                'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
-                                            ]))"
-                                            class="w-full hover:text-purple-700 group cursor-pointer" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
-                                        <div class="font-extrabold flex items-center justify-center gap-0.5">
-                                            <span>{{ $col->label }}</span>
-                                            <span class="text-[10px] text-slate-400 group-hover:text-purple-600">&#9998;</span>
-                                        </div>
-                                        @if($col->topic_note)
-                                            <div class="text-[9px] font-normal text-slate-500 truncate max-w-[72px] mx-auto">{{ $col->topic_note }}</div>
-                                        @endif
-                                    </button>
+                                    <div class="flex items-start justify-center gap-1">
+                                        <button type="button"
+                                                @click="openEditCol(@js([
+                                                    'label' => $col->label,
+                                                    'topic_note' => $col->topic_note,
+                                                    'type' => 'NT',
+                                                    'update_url' => route('grades.columns.update', [$teachingClass, $col]),
+                                                    'delete_url' => route('grades.columns.destroy', [$teachingClass, $col]),
+                                                ]))"
+                                                class="hover:text-purple-700 group cursor-pointer" title="{{ $col->topic_note ?: 'Klik untuk ubah / hapus kolom' }}">
+                                            <div class="font-extrabold flex items-center justify-center gap-0.5">
+                                                <span>{{ $col->label }}</span>
+                                                <span class="text-[10px] text-slate-400 group-hover:text-purple-600">&#9998;</span>
+                                            </div>
+                                            @if($col->topic_note)
+                                                <div class="text-[9px] font-normal text-slate-500 truncate max-w-[66px] mx-auto">{{ $col->topic_note }}</div>
+                                            @endif
+                                        </button>
+                                        <button type="button"
+                                                @click.stop="toggleSort('nt-{{ $col->id }}')"
+                                                :class="sortKey === 'nt-{{ $col->id }}' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-slate-500 border-slate-200 hover:text-purple-700 hover:border-purple-300'"
+                                                class="mt-0.5 px-1 py-0.25 rounded border text-[9px] font-black leading-none transition cursor-pointer shrink-0"
+                                                title="Urutkan berdasarkan {{ $col->label }}"
+                                                x-text="sortArrowIcon('nt-{{ $col->id }}')"></button>
+                                    </div>
                                 @else
                                     <div class="w-full py-0.5" title="{{ $col->topic_note ?: $col->label }}">
-                                        <div class="font-extrabold text-slate-800">{{ $col->label }}</div>
+                                        <div class="flex items-center justify-center gap-1">
+                                            <span class="font-extrabold text-slate-800">{{ $col->label }}</span>
+                                            <button type="button"
+                                                    @click.stop="toggleSort('nt-{{ $col->id }}')"
+                                                    :class="sortKey === 'nt-{{ $col->id }}' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-slate-500 border-slate-200 hover:text-purple-700'"
+                                                    class="px-1 py-0.25 rounded border text-[9px] font-black leading-none transition cursor-pointer"
+                                                    title="Urutkan berdasarkan {{ $col->label }}"
+                                                    x-text="sortArrowIcon('nt-{{ $col->id }}')"></button>
+                                        </div>
                                         @if($col->topic_note)
                                             <div class="text-[9px] font-normal text-slate-500 truncate max-w-[72px] mx-auto">{{ $col->topic_note }}</div>
                                         @endif
@@ -604,7 +707,7 @@
                             </td>
                         </tr>
                     </template>
-                    <template x-for="(row, rIdx) in rows" :key="row.student_id">
+                    <template x-for="(row, rIdx) in displayedRows()" :key="row.student_id">
                         <tr :class="activeStudentId === row.student_id ? 'bg-purple-50/35' : 'hover:bg-slate-50/80'">
                             <td class="sticky left-0 z-10 px-2 py-1.5 text-center font-bold border-r border-slate-200 transition-colors sz-col-no"
                                 :class="activeStudentId === row.student_id ? 'bg-purple-50 text-purple-900' : 'bg-white text-slate-600'"
@@ -630,9 +733,9 @@
                                            placeholder="0"
                                            class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                            :class="[
-                                               pastedKeys[`${rIdx}-ph-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
+                                               pastedKeys[`${row.student_id}-ph-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
-                                               (!isAdminReadOnly && !pastedKeys[`${rIdx}-ph-${colId}`] && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly && !pastedKeys[`${rIdx}-ph-${colId}`] ? 'bg-white text-slate-900' : '')
+                                               (!isAdminReadOnly && !pastedKeys[`${row.student_id}-ph-${colId}`] && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly && !pastedKeys[`${row.student_id}-ph-${colId}`] ? 'bg-white text-slate-900' : '')
                                            ]">
                                 </td>
                             </template>
@@ -665,8 +768,8 @@
                                            placeholder="0"
                                            class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                            :class="[
-                                               pastedKeys[`${rIdx}-att`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
-                                               isAdminReadOnly ? 'pointer-events-none cursor-default bg-emerald-50/40 select-none' : (!pastedKeys[`${rIdx}-att`] ? 'bg-emerald-50/25' : '')
+                                               pastedKeys[`${row.student_id}-att`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
+                                               isAdminReadOnly ? 'pointer-events-none cursor-default bg-emerald-50/40 select-none' : (!pastedKeys[`${row.student_id}-att`] ? 'bg-emerald-50/25' : '')
                                            ]">
                                 </template>
                             </td>
@@ -687,9 +790,9 @@
                                            placeholder="0"
                                            class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                            :class="[
-                                               pastedKeys[`${rIdx}-nt-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
+                                               pastedKeys[`${row.student_id}-nt-${colId}`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
                                                isAdminReadOnly ? 'pointer-events-none cursor-default bg-slate-50/70 text-slate-700 select-none' : '',
-                                               (!isAdminReadOnly && !pastedKeys[`${rIdx}-nt-${colId}`] && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly && !pastedKeys[`${rIdx}-nt-${colId}`] ? 'bg-white text-slate-900' : '')
+                                               (!isAdminReadOnly && !pastedKeys[`${row.student_id}-nt-${colId}`] && (row.dynamic_scores[colId] === null || row.dynamic_scores[colId] === '')) ? 'bg-amber-50/35 text-slate-500' : (!isAdminReadOnly && !pastedKeys[`${row.student_id}-nt-${colId}`] ? 'bg-white text-slate-900' : '')
                                            ]">
                                 </td>
                             </template>
@@ -709,8 +812,8 @@
                                        placeholder="0"
                                        class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                        :class="[
-                                           pastedKeys[`${rIdx}-sts`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
-                                           isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${rIdx}-sts`] ? 'bg-amber-50/15' : '')
+                                           pastedKeys[`${row.student_id}-sts`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
+                                           isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${row.student_id}-sts`] ? 'bg-amber-50/15' : '')
                                        ]">
                             </td>
                             <td class="p-0 border-r border-slate-200">
@@ -727,8 +830,8 @@
                                        placeholder="0"
                                        class="no-spinner w-full h-9 sm:h-8 px-1.5 text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 focus:placeholder:text-transparent transition-colors sz-grade-input"
                                        :class="[
-                                           pastedKeys[`${rIdx}-sas`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
-                                           isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${rIdx}-sas`] ? 'bg-amber-50/15' : '')
+                                           pastedKeys[`${row.student_id}-sas`] ? 'bg-emerald-100 text-emerald-950 font-black ring-2 ring-emerald-500 z-10' : '',
+                                           isAdminReadOnly ? 'pointer-events-none cursor-default bg-amber-50/20 text-slate-700 select-none' : (!pastedKeys[`${row.student_id}-sas`] ? 'bg-amber-50/15' : '')
                                        ]">
                             </td>
 
@@ -747,6 +850,131 @@
                         </tr>
                     </template>
                 </tbody>
+                <tfoot x-show="rows.length > 0" class="border-t-2 border-slate-300 divide-y divide-slate-200 text-xs">
+                    {{-- Baris Ringkasan: Nilai Tertinggi (MAX) --}}
+                    <tr class="bg-emerald-50/70 text-emerald-950 font-bold">
+                        <td class="sticky left-0 z-10 bg-emerald-100 px-2 py-2 text-center font-extrabold text-emerald-800 border-r border-slate-200 sz-col-no">
+                            MAX
+                        </td>
+                        <td class="sticky left-9 sm:left-10 z-10 bg-emerald-50 px-2.5 sm:px-3 py-2 font-extrabold text-emerald-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[220px] sticky-col-shadow sz-col-name sz-name-grade">
+                            Nilai Tertinggi (MAX)
+                        </td>
+                        <td class="px-2 py-2 text-center text-slate-400 border-r border-slate-200">&mdash;</td>
+
+                        <template x-for="colId in phColIds" :key="'max-ph-' + colId">
+                            <td class="px-1.5 py-2 text-center font-extrabold text-emerald-800 border-r border-slate-200"
+                                :title="columnStatTitle(`ph-${colId}`, getColumnLabel(`ph-${colId}`))"
+                                x-text="columnStat(`ph-${colId}`, 'max')"></td>
+                        </template>
+
+                        <td class="px-1.5 py-2 text-center font-extrabold text-emerald-800 border-r border-slate-200"
+                            :title="columnStatTitle('att', 'Nilai Kehadiran')"
+                            x-text="columnStat('att', 'max')"></td>
+
+                        <template x-for="colId in ntColIds" :key="'max-nt-' + colId">
+                            <td class="px-1.5 py-2 text-center font-extrabold text-emerald-800 border-r border-slate-200"
+                                :title="columnStatTitle(`nt-${colId}`, getColumnLabel(`nt-${colId}`))"
+                                x-text="columnStat(`nt-${colId}`, 'max')"></td>
+                        </template>
+
+                        <td class="px-1.5 py-2 text-center font-extrabold text-emerald-800 border-r border-slate-200"
+                            :title="columnStatTitle('sts', 'Nilai STS')"
+                            x-text="columnStat('sts', 'max')"></td>
+                        <td class="px-1.5 py-2 text-center font-extrabold text-emerald-800 border-r border-slate-200"
+                            :title="columnStatTitle('sas', 'Nilai SAS')"
+                            x-text="columnStat('sas', 'max')"></td>
+                        <td class="px-2 py-2 text-center font-black text-emerald-800 bg-emerald-100/70 border-r border-slate-200"
+                            :title="columnStatTitle('na', 'Nilai Akhir (NA)')"
+                            x-text="columnStat('na', 'max')"></td>
+                        <td class="px-2 py-2 text-center">
+                            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800"
+                                  x-text="`${summaryStats().tuntas} Tuntas`"></span>
+                        </td>
+                    </tr>
+
+                    {{-- Baris Ringkasan: Nilai Terendah (MIN) --}}
+                    <tr class="bg-rose-50/60 text-rose-950 font-bold">
+                        <td class="sticky left-0 z-10 bg-rose-100 px-2 py-2 text-center font-extrabold text-rose-800 border-r border-slate-200 sz-col-no">
+                            MIN
+                        </td>
+                        <td class="sticky left-9 sm:left-10 z-10 bg-rose-50 px-2.5 sm:px-3 py-2 font-extrabold text-rose-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[220px] sticky-col-shadow sz-col-name sz-name-grade">
+                            Nilai Terendah (MIN)
+                        </td>
+                        <td class="px-2 py-2 text-center text-slate-400 border-r border-slate-200">&mdash;</td>
+
+                        <template x-for="colId in phColIds" :key="'min-ph-' + colId">
+                            <td class="px-1.5 py-2 text-center font-extrabold text-rose-800 border-r border-slate-200"
+                                :title="columnStatTitle(`ph-${colId}`, getColumnLabel(`ph-${colId}`))"
+                                x-text="columnStat(`ph-${colId}`, 'min')"></td>
+                        </template>
+
+                        <td class="px-1.5 py-2 text-center font-extrabold text-rose-800 border-r border-slate-200"
+                            :title="columnStatTitle('att', 'Nilai Kehadiran')"
+                            x-text="columnStat('att', 'min')"></td>
+
+                        <template x-for="colId in ntColIds" :key="'min-nt-' + colId">
+                            <td class="px-1.5 py-2 text-center font-extrabold text-rose-800 border-r border-slate-200"
+                                :title="columnStatTitle(`nt-${colId}`, getColumnLabel(`nt-${colId}`))"
+                                x-text="columnStat(`nt-${colId}`, 'min')"></td>
+                        </template>
+
+                        <td class="px-1.5 py-2 text-center font-extrabold text-rose-800 border-r border-slate-200"
+                            :title="columnStatTitle('sts', 'Nilai STS')"
+                            x-text="columnStat('sts', 'min')"></td>
+                        <td class="px-1.5 py-2 text-center font-extrabold text-rose-800 border-r border-slate-200"
+                            :title="columnStatTitle('sas', 'Nilai SAS')"
+                            x-text="columnStat('sas', 'min')"></td>
+                        <td class="px-2 py-2 text-center font-black text-rose-800 bg-rose-100/70 border-r border-slate-200"
+                            :title="columnStatTitle('na', 'Nilai Akhir (NA)')"
+                            x-text="columnStat('na', 'min')"></td>
+                        <td class="px-2 py-2 text-center">
+                            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800"
+                                  x-text="`${summaryStats().remedial} Remedial`"></span>
+                        </td>
+                    </tr>
+
+                    {{-- Baris Ringkasan: Rata-rata (AVERAGE) --}}
+                    <tr class="bg-slate-100/90 text-slate-900 font-bold">
+                        <td class="sticky left-0 z-10 bg-slate-200 px-2 py-2 text-center font-extrabold text-slate-800 border-r border-slate-200 sz-col-no">
+                            AVG
+                        </td>
+                        <td class="sticky left-9 sm:left-10 z-10 bg-slate-100 px-2.5 sm:px-3 py-2 font-extrabold text-slate-900 border-r border-slate-200 truncate max-w-[135px] sm:max-w-[220px] sticky-col-shadow sz-col-name sz-name-grade">
+                            Rata-rata (AVERAGE)
+                        </td>
+                        <td class="px-2 py-2 text-center text-[10px] text-slate-500 border-r border-slate-200"
+                            x-text="`${rows.length}`"></td>
+
+                        <template x-for="colId in phColIds" :key="'avg-ph-' + colId">
+                            <td class="px-1.5 py-2 text-center font-extrabold text-indigo-800 border-r border-slate-200"
+                                :title="columnStatTitle(`ph-${colId}`, getColumnLabel(`ph-${colId}`))"
+                                x-text="columnStat(`ph-${colId}`, 'avg')"></td>
+                        </template>
+
+                        <td class="px-1.5 py-2 text-center font-extrabold text-indigo-800 border-r border-slate-200"
+                            :title="columnStatTitle('att', 'Nilai Kehadiran')"
+                            x-text="columnStat('att', 'avg')"></td>
+
+                        <template x-for="colId in ntColIds" :key="'avg-nt-' + colId">
+                            <td class="px-1.5 py-2 text-center font-extrabold text-indigo-800 border-r border-slate-200"
+                                :title="columnStatTitle(`nt-${colId}`, getColumnLabel(`nt-${colId}`))"
+                                x-text="columnStat(`nt-${colId}`, 'avg')"></td>
+                        </template>
+
+                        <td class="px-1.5 py-2 text-center font-extrabold text-indigo-800 border-r border-slate-200"
+                            :title="columnStatTitle('sts', 'Nilai STS')"
+                            x-text="columnStat('sts', 'avg')"></td>
+                        <td class="px-1.5 py-2 text-center font-extrabold text-indigo-800 border-r border-slate-200"
+                            :title="columnStatTitle('sas', 'Nilai SAS')"
+                            x-text="columnStat('sas', 'avg')"></td>
+                        <td class="px-2 py-2 text-center font-black text-indigo-900 bg-slate-200 border-r border-slate-200"
+                            :title="columnStatTitle('na', 'Nilai Akhir (NA)')"
+                            x-text="columnStat('na', 'avg')"></td>
+                        <td class="px-2 py-2 text-center">
+                            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-800"
+                                  x-text="`${rows.length > 0 ? Math.round((summaryStats().tuntas / rows.length) * 100) : 0}% Tuntas`"></span>
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </div>
@@ -1514,6 +1742,8 @@ function gradebookSpreadsheet(cfg) {
         },
         _absen1InputTimer: null,
         activeStudentId: null,
+        sortKey: 'default',
+        sortDir: 'asc',
 
         init() {
             this.savedSnapshot = this.cloneRows(this.rows);
@@ -1733,9 +1963,13 @@ function gradebookSpreadsheet(cfg) {
                 this.pasteToast.show = false;
             }, 7000);
         },
-        setCellValue(rowIdx, colKey, val) {
-            if (rowIdx < 0 || rowIdx >= this.rows.length) return;
-            const row = this.rows[rowIdx];
+        setCellValue(rowIdx, colKey, val, targetRows = null) {
+            const list = targetRows || this.rows;
+            if (rowIdx < 0 || rowIdx >= list.length) return;
+            this.setCellValueForRow(list[rowIdx], colKey, val);
+        },
+        setCellValueForRow(row, colKey, val) {
+            if (!row) return;
             if (colKey.startsWith('ph-')) {
                 const colId = colKey.substring(3);
                 if (!row.dynamic_scores) row.dynamic_scores = {};
@@ -1759,6 +1993,7 @@ function gradebookSpreadsheet(cfg) {
             const rawText = clipData.getData('text');
             if (!rawText || rawText.trim() === '') return;
 
+            const dRows = this.displayedRows();
             const hasMultipleRows = /[\r\n]/.test(rawText.trim());
             const hasMultipleCols = /\t/.test(rawText);
 
@@ -1768,17 +2003,20 @@ function gradebookSpreadsheet(cfg) {
                 if (!isNaN(num)) {
                     e.preventDefault();
                     const cleanVal = Math.min(100, Math.max(0, Math.round(num * 100) / 100));
-                    this.setCellValue(startRowIdx, startColKey, cleanVal);
-                    this.markDirty();
-                    this.flashPastedCells([`${startRowIdx}-${startColKey}`]);
+                    const targetRow = dRows[startRowIdx];
+                    if (targetRow) {
+                        this.setCellValueForRow(targetRow, startColKey, cleanVal);
+                        this.markDirty();
+                        this.flashPastedCells([`${targetRow.student_id}-${startColKey}`]);
+                    }
                 }
                 return;
             }
 
             e.preventDefault();
-            this.processPastedText(rawText, startRowIdx, startColKey);
+            this.processPastedText(rawText, startRowIdx, startColKey, dRows);
         },
-        processPastedText(rawText, startRowIdx, startColKey) {
+        processPastedText(rawText, startRowIdx, startColKey, targetRows = null) {
             if (!rawText) return;
             const lines = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
             if (lines.length > 0 && lines[lines.length - 1].trim() === '') {
@@ -1790,6 +2028,7 @@ function gradebookSpreadsheet(cfg) {
             const startColIndex = editableCols.findIndex(c => c.key === startColKey);
             if (startColIndex === -1) return;
 
+            const list = targetRows || this.rows;
             let appliedCount = 0;
             let studentCount = 0;
             const affectedCellKeys = [];
@@ -1797,8 +2036,9 @@ function gradebookSpreadsheet(cfg) {
 
             for (let r = 0; r < lines.length; r++) {
                 const targetRowIdx = Number(startRowIdx) + r;
-                if (targetRowIdx >= this.rows.length) break;
+                if (targetRowIdx >= list.length) break;
 
+                const targetRow = list[targetRowIdx];
                 const line = lines[r];
                 const cells = line.split('\t');
                 let rowModified = false;
@@ -1811,8 +2051,8 @@ function gradebookSpreadsheet(cfg) {
                     let cellText = cells[c].trim().replace(',', '.');
 
                     if (cellText === '' || cellText === '-') {
-                        this.setCellValue(targetRowIdx, col.key, null);
-                        affectedCellKeys.push(`${targetRowIdx}-${col.key}`);
+                        this.setCellValueForRow(targetRow, col.key, null);
+                        affectedCellKeys.push(`${targetRow.student_id}-${col.key}`);
                         if (col.type === 'ph' && col.colId) touchedPhSet.add(String(col.colId));
                         appliedCount++;
                         rowModified = true;
@@ -1820,8 +2060,8 @@ function gradebookSpreadsheet(cfg) {
                         const num = parseFloat(cellText);
                         if (!isNaN(num)) {
                             const cleanVal = Math.min(100, Math.max(0, Math.round(num * 100) / 100));
-                            this.setCellValue(targetRowIdx, col.key, cleanVal);
-                            affectedCellKeys.push(`${targetRowIdx}-${col.key}`);
+                            this.setCellValueForRow(targetRow, col.key, cleanVal);
+                            affectedCellKeys.push(`${targetRow.student_id}-${col.key}`);
                             if (col.type === 'ph' && col.colId) touchedPhSet.add(String(col.colId));
                             appliedCount++;
                             rowModified = true;
@@ -1870,7 +2110,7 @@ function gradebookSpreadsheet(cfg) {
             this.quickPasteModal = false;
             this.quickPasteText = '';
             this.quickPastePreviewCount = 0;
-            this.processPastedText(pasteText, startRow, targetCol);
+            this.processPastedText(pasteText, startRow, targetCol, this.rows);
         },
         setActiveStudent(studentId) {
             if (this.isAdminReadOnly) return;
@@ -1895,8 +2135,9 @@ function gradebookSpreadsheet(cfg) {
             }
         },
         focusGradeCell(rIdx, colKey) {
-            if (rIdx < 0 || rIdx >= this.rows.length) return;
-            const row = this.rows[rIdx];
+            const dRows = this.displayedRows();
+            if (rIdx < 0 || rIdx >= dRows.length) return;
+            const row = dRows[rIdx];
             if (row) {
                 this.setActiveStudent(row.student_id);
             }
@@ -1916,7 +2157,9 @@ function gradebookSpreadsheet(cfg) {
                 e.preventDefault();
                 e.stopPropagation();
                 clearTimeout(this._absen1InputTimer);
-                if (Number(rIdx) === 0 && !this.isAdminReadOnly && this.rows.length > 1) {
+                const dRows = this.displayedRows();
+                const targetRow = dRows[rIdx];
+                if (this.sortKey === 'default' && targetRow && Number(targetRow.no) === 1 && !this.isAdminReadOnly && this.rows.length > 1) {
                     const rawVal = e.target ? e.target.value : null;
                     if (rawVal !== null && rawVal !== undefined && String(rawVal).trim() !== '') {
                         const num = parseFloat(String(rawVal).trim().replace(',', '.'));
@@ -1936,7 +2179,9 @@ function gradebookSpreadsheet(cfg) {
             }
         },
         checkAbsen1Input(rIdx, colKey, val) {
-            if (this.isAdminReadOnly || Number(rIdx) !== 0 || this.rows.length <= 1) return;
+            const dRows = this.displayedRows();
+            const targetRow = dRows[rIdx];
+            if (this.isAdminReadOnly || this.sortKey !== 'default' || !targetRow || Number(targetRow.no) !== 1 || this.rows.length <= 1) return;
             if (val === null || val === undefined || String(val).trim() === '') return;
 
             clearTimeout(this._absen1InputTimer);
@@ -1948,7 +2193,9 @@ function gradebookSpreadsheet(cfg) {
             }, 600);
         },
         handleAbsen1Change(rIdx, colKey, val) {
-            if (this.isAdminReadOnly || Number(rIdx) !== 0 || this.rows.length <= 1) return;
+            const dRows = this.displayedRows();
+            const targetRow = dRows[rIdx];
+            if (this.isAdminReadOnly || this.sortKey !== 'default' || !targetRow || Number(targetRow.no) !== 1 || this.rows.length <= 1) return;
             clearTimeout(this._absen1InputTimer);
             if (val === null || val === undefined || String(val).trim() === '') return;
 
@@ -1985,8 +2232,8 @@ function gradebookSpreadsheet(cfg) {
             const affectedKeys = [];
 
             for (let i = 0; i < this.rows.length; i++) {
-                this.setCellValue(i, colKey, score);
-                affectedKeys.push(`${i}-${colKey}`);
+                this.setCellValueForRow(this.rows[i], colKey, score);
+                affectedKeys.push(`${this.rows[i].student_id}-${colKey}`);
             }
 
             this.markDirty();
@@ -2074,6 +2321,159 @@ function gradebookSpreadsheet(cfg) {
                 tuntas,
                 remedial,
             };
+        },
+        isNumericSortKey(key) {
+            return String(key).startsWith('ph-')
+                || String(key).startsWith('nt-')
+                || ['att', 'sts', 'sas', 'na', 'status'].includes(String(key));
+        },
+        getSortOptions() {
+            const opts = [
+                { key: 'default', label: 'Urutan Absen (Default)' },
+                { key: 'full_name', label: 'Nama Lengkap' },
+                { key: 'gender', label: 'Jenis Kelamin (L/P)' },
+            ];
+            (this.phColIds || []).forEach((cid) => {
+                opts.push({ key: `ph-${cid}`, label: this.getColumnLabel(`ph-${cid}`) });
+            });
+            opts.push({ key: 'att', label: 'Nilai Kehadiran' });
+            (this.ntColIds || []).forEach((cid) => {
+                opts.push({ key: `nt-${cid}`, label: this.getColumnLabel(`nt-${cid}`) });
+            });
+            opts.push(
+                { key: 'sts', label: 'Nilai STS' },
+                { key: 'sas', label: 'Nilai SAS' },
+                { key: 'na', label: 'Nilai Akhir (NA)' },
+                { key: 'status', label: 'Status KKTP' }
+            );
+            return opts;
+        },
+        setSortFromSelect(key) {
+            const k = String(key || 'default');
+            if (k === 'default') {
+                this.resetSort();
+                return;
+            }
+            this.sortKey = k;
+            this.sortDir = this.isNumericSortKey(k) ? 'desc' : 'asc';
+        },
+        toggleSort(key) {
+            const k = String(key || 'default');
+            const defaultDir = this.isNumericSortKey(k) ? 'desc' : 'asc';
+            if (this.sortKey !== k) {
+                this.sortKey = k;
+                this.sortDir = defaultDir;
+            } else if (this.sortDir === defaultDir) {
+                this.sortDir = defaultDir === 'desc' ? 'asc' : 'desc';
+            } else {
+                this.resetSort();
+            }
+        },
+        toggleSortDir() {
+            if (this.sortKey === 'default') return;
+            this.sortDir = this.sortDir === 'desc' ? 'asc' : 'desc';
+        },
+        resetSort() {
+            this.sortKey = 'default';
+            this.sortDir = 'asc';
+        },
+        sortArrowIcon(key) {
+            if (this.sortKey !== String(key)) return '⇅';
+            return this.sortDir === 'desc' ? '↓' : '↑';
+        },
+        getRawCellNumber(row, colKey) {
+            if (!row) return null;
+            let raw = null;
+            if (colKey.startsWith('ph-') || colKey.startsWith('nt-')) {
+                const cid = colKey.substring(3);
+                raw = (row.dynamic_scores || {})[cid];
+            } else if (colKey === 'att') {
+                raw = row.attendance_score;
+            } else if (colKey === 'sts') {
+                raw = row.sts_score;
+            } else if (colKey === 'sas') {
+                raw = row.sas_score;
+            } else if (colKey === 'na') {
+                return Number(this.calculateNA(row));
+            }
+            if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+            const num = Number(raw);
+            return Number.isNaN(num) ? null : num;
+        },
+        displayedRows() {
+            const list = [...(this.rows || [])];
+            if (this.sortKey === 'default') {
+                return list;
+            }
+
+            const key = this.sortKey;
+            const factor = this.sortDir === 'desc' ? -1 : 1;
+
+            return list.sort((a, b) => {
+                const noDiff = Number(a.no || 0) - Number(b.no || 0);
+
+                if (key === 'no') {
+                    return noDiff * factor;
+                }
+                if (key === 'full_name') {
+                    const cmp = String(a.full_name || '').localeCompare(String(b.full_name || ''), 'id', { sensitivity: 'base' });
+                    return cmp !== 0 ? cmp * factor : noDiff;
+                }
+                if (key === 'gender') {
+                    const cmp = String(a.gender || '').localeCompare(String(b.gender || ''), 'id', { sensitivity: 'base' });
+                    return cmp !== 0 ? cmp * factor : noDiff;
+                }
+                if (key === 'status') {
+                    const naA = this.calculateNA(a);
+                    const naB = this.calculateNA(b);
+                    const passA = naA >= this.kktp ? 1 : 0;
+                    const passB = naB >= this.kktp ? 1 : 0;
+                    if (passA !== passB) return (passA - passB) * factor;
+                    if (naA !== naB) return (naA - naB) * factor;
+                    return noDiff;
+                }
+
+                const numA = this.getRawCellNumber(a, key);
+                const numB = this.getRawCellNumber(b, key);
+                if (numA === null && numB === null) return noDiff;
+                if (numA === null) return 1; // Sel kosong selalu di bawah agar terendah/tertinggi asli terlihat jelas
+                if (numB === null) return -1;
+                if (numA !== numB) return (numA - numB) * factor;
+                return noDiff;
+            });
+        },
+        getColumnNumericValues(colKey) {
+            const vals = [];
+            for (let i = 0; i < (this.rows || []).length; i++) {
+                const v = this.getRawCellNumber(this.rows[i], colKey);
+                if (v !== null) {
+                    vals.push(v);
+                }
+            }
+            return vals;
+        },
+        columnStat(colKey, metric) {
+            const vals = this.getColumnNumericValues(colKey);
+            if (vals.length === 0) return '-';
+
+            if (metric === 'max') {
+                const maxVal = Math.max(...vals);
+                return colKey === 'na' ? this.formatNA(maxVal) : String(Math.round(maxVal * 100) / 100);
+            }
+            if (metric === 'min') {
+                const minVal = Math.min(...vals);
+                return colKey === 'na' ? this.formatNA(minVal) : String(Math.round(minVal * 100) / 100);
+            }
+
+            const avgVal = vals.reduce((acc, n) => acc + n, 0) / vals.length;
+            return colKey === 'na' ? this.formatNA(avgVal) : avgVal.toFixed(2);
+        },
+        columnStatTitle(colKey, label) {
+            const vals = this.getColumnNumericValues(colKey);
+            if (vals.length === 0) {
+                return `${label} • Belum ada nilai yang terisi`;
+            }
+            return `${label} • Max: ${this.columnStat(colKey, 'max')} | Min: ${this.columnStat(colKey, 'min')} | Rata-rata: ${this.columnStat(colKey, 'avg')} (dari ${vals.length}/${this.rows.length} siswa)`;
         },
         getPhMeta(colId) {
             return (this.phColumnsMeta || []).find((c) => String(c.id) === String(colId)) || null;
@@ -2490,7 +2890,7 @@ function gradebookSpreadsheet(cfg) {
                 if (idx !== undefined) {
                     const cleanVal = this.normalizeModalScore(mr.new_score);
                     this.setCellValue(idx, `ph-${colId}`, cleanVal);
-                    affectedKeys.push(`${idx}-ph-${colId}`);
+                    affectedKeys.push(`${mr.student_id}-ph-${colId}`);
                     if (cleanVal === null) clearedCount++;
                     else filledCount++;
                 }
