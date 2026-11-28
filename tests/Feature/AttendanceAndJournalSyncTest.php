@@ -11,7 +11,9 @@ use App\Models\TeacherSubject;
 use App\Models\TeachingClass;
 use App\Models\User;
 use App\Services\AttendanceJournalSyncService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class AttendanceAndJournalSyncTest extends TestCase
@@ -458,5 +460,179 @@ class AttendanceAndJournalSyncTest extends TestCase
             ->assertSee('zoomOut()', false)
             ->assertSee('zoomIn()', false)
             ->assertSee('resetZoom()', false);
+    }
+
+    public function test_one_journal_per_day_enforced_on_store_update_and_database_level(): void
+    {
+        [$guru, $tClass] = $this->createClassWithFiveStudents();
+
+        $otherClass = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $tClass->academic_year_id,
+            'subject_id' => $tClass->subject_id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-B',
+            'homeroom_teacher_name' => 'Wali Kelas VII-B',
+        ]);
+
+        // 1. Jurnal pertama tanggal 2026-11-28 berhasil disimpan
+        $firstRes = $this->actingAs($guru)->post(route('journals.store', $tClass), [
+            'journal_date' => '2026-11-28',
+            'lesson_hours' => '4',
+            'activity_material' => 'Materi, latihan, dan tugas konversi desimal ke oktal',
+            'notes' => 'Periksa Tugas Desimal ke Biner dan Desimal ke Oktal',
+        ]);
+        $firstRes->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            1,
+            DailyJournal::query()
+                ->where('teaching_class_id', $tClass->id)
+                ->whereDate('journal_date', '2026-11-28')
+                ->count()
+        );
+
+        // 2. Percobaan menambah jurnal kedua pada tanggal sama di kelas sama ditolak
+        $dupStoreRes = $this->actingAs($guru)->post(route('journals.store', $tClass), [
+            'journal_date' => '2026-11-28',
+            'lesson_hours' => '4',
+            'activity_material' => 'a',
+        ]);
+        $dupStoreRes->assertSessionHasErrors('journal_date');
+        $this->assertSame(
+            1,
+            DailyJournal::query()
+                ->where('teaching_class_id', $tClass->id)
+                ->whereDate('journal_date', '2026-11-28')
+                ->count()
+        );
+
+        // 3. Kelas lain (VII-B) tetap boleh membuat jurnal pada tanggal 2026-11-28
+        $otherClassRes = $this->actingAs($guru)->post(route('journals.store', $otherClass), [
+            'journal_date' => '2026-11-28',
+            'lesson_hours' => '1 - 2',
+            'activity_material' => 'Konversi Bilangan di Kelas VII-B',
+        ]);
+        $otherClassRes->assertRedirect()->assertSessionHasNoErrors();
+
+        // 4. Mengedit jurnal yang sama di tanggal 2026-11-28 diperbolehkan
+        $journal28 = DailyJournal::query()
+            ->where('teaching_class_id', $tClass->id)
+            ->whereDate('journal_date', '2026-11-28')
+            ->firstOrFail();
+
+        $selfUpdateRes = $this->actingAs($guru)->put(route('journals.update', [$tClass, $journal28]), [
+            'journal_date' => '2026-11-28',
+            'lesson_hours' => '4 - 5',
+            'activity_material' => 'Materi konversi desimal ke oktal (diperbarui)',
+            'notes' => 'Selesai diperiksa',
+        ]);
+        $selfUpdateRes->assertRedirect()->assertSessionHasNoErrors();
+
+        // 5. Mengubah tanggal jurnal lain ke 2026-11-28 ditolak
+        $this->actingAs($guru)->post(route('journals.store', $tClass), [
+            'journal_date' => '2026-11-29',
+            'lesson_hours' => '1 - 2',
+            'activity_material' => 'Pertemuan Lanjutan',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $journal29 = DailyJournal::query()
+            ->where('teaching_class_id', $tClass->id)
+            ->whereDate('journal_date', '2026-11-29')
+            ->firstOrFail();
+
+        $collideUpdateRes = $this->actingAs($guru)->put(route('journals.update', [$tClass, $journal29]), [
+            'journal_date' => '2026-11-28',
+            'lesson_hours' => '1 - 2',
+            'activity_material' => 'Pindah ke tanggal terisi',
+        ]);
+        $collideUpdateRes->assertSessionHasErrors('journal_date');
+
+        // 6. UI & endpoint preview menyertakan info jurnal existing untuk peringatan modal & tombol Edit langsung
+        $indexRes = $this->actingAs($guru)->get(route('journals.index', $tClass));
+        $indexRes->assertOk()
+            ->assertViewHas('existingJournalsByDate', fn (array $map) => isset($map['2026-11-28']) && isset($map['2026-11-29']))
+            ->assertSee('duplicateJournalForSelectedDate', false)
+            ->assertSee('Buka &amp; Edit Jurnal Ini', false)
+            ->assertSee('handleFormSubmit', false);
+
+        $previewRes = $this->actingAs($guru)->getJson(route('journals.attendance-preview', [
+            'teachingClass' => $tClass->id,
+            'date' => '2026-11-28',
+        ]));
+        $previewRes->assertOk()
+            ->assertJsonPath('existing_journal.id', $journal28->id)
+            ->assertJsonPath('existing_journal.journal_date', '2026-11-28');
+
+        // 7. Database level unique constraint menolak sisipan langsung ganda
+        $this->expectException(UniqueConstraintViolationException::class);
+        DailyJournal::query()->create([
+            'teaching_class_id' => $tClass->id,
+            'journal_date' => '2026-11-28',
+            'lesson_hours' => '4',
+            'activity_material' => 'Sisipan ganda langsung',
+        ]);
+    }
+
+    public function test_enforce_unique_daily_journal_migration_deduplicates_existing_rows(): void
+    {
+        [$guru, $tClass] = $this->createClassWithFiveStudents();
+
+        $migration = require database_path('migrations/2026_11_28_000001_enforce_unique_daily_journal_per_class_date.php');
+        $migration->down();
+        $this->assertFalse(Schema::hasIndex('daily_journals', 'uniq_daily_journals_class_date'));
+
+        // Duplikat 1: entri lengkap + entri acak "a" (persis kasus tangkapan layar)
+        DailyJournal::query()->create([
+            'teaching_class_id' => $tClass->id,
+            'journal_date' => '2026-11-28',
+            'lesson_hours' => '4',
+            'activity_material' => 'Materi, latihan, dan tugas konversi desimal ke oktal',
+            'notes' => 'Periksa Tugas Desimal ke Biner dan Desimal ke Oktal',
+        ]);
+        DailyJournal::query()->create([
+            'teaching_class_id' => $tClass->id,
+            'journal_date' => '2026-11-28',
+            'lesson_hours' => '4',
+            'activity_material' => 'a',
+            'notes' => null,
+        ]);
+
+        // Duplikat 2: dua materi bermakna pada tanggal berbeda -> tergabung aman tanpa kehilangan catatan
+        DailyJournal::query()->create([
+            'teaching_class_id' => $tClass->id,
+            'journal_date' => '2026-11-21',
+            'lesson_hours' => '1 - 2',
+            'activity_material' => 'Sesi Pagi: Penjelasan Konsep',
+            'notes' => null,
+        ]);
+        DailyJournal::query()->create([
+            'teaching_class_id' => $tClass->id,
+            'journal_date' => '2026-11-21',
+            'lesson_hours' => '5 - 6',
+            'activity_material' => 'Sesi Siang: Praktik Lab',
+            'notes' => 'Tugas dikumpulkan',
+        ]);
+
+        $migration->up();
+
+        $this->assertTrue(Schema::hasIndex('daily_journals', 'uniq_daily_journals_class_date'));
+
+        $nov28Rows = DailyJournal::query()
+            ->where('teaching_class_id', $tClass->id)
+            ->whereDate('journal_date', '2026-11-28')
+            ->get();
+        $this->assertCount(1, $nov28Rows);
+        $this->assertSame('Materi, latihan, dan tugas konversi desimal ke oktal', $nov28Rows->first()->activity_material);
+        $this->assertSame('Periksa Tugas Desimal ke Biner dan Desimal ke Oktal', $nov28Rows->first()->notes);
+
+        $nov21Rows = DailyJournal::query()
+            ->where('teaching_class_id', $tClass->id)
+            ->whereDate('journal_date', '2026-11-21')
+            ->get();
+        $this->assertCount(1, $nov21Rows);
+        $this->assertStringContainsString('Sesi Pagi: Penjelasan Konsep', $nov21Rows->first()->activity_material);
+        $this->assertStringContainsString('Sesi Siang: Praktik Lab', $nov21Rows->first()->activity_material);
+        $this->assertSame('Tugas dikumpulkan', $nov21Rows->first()->notes);
     }
 }

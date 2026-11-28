@@ -37,6 +37,7 @@
         absentStudentsUrl: @js(route('journals.absent-students', $teachingClass)),
         todayDate: @js(now()->toDateString()),
         todaySchedule: @js($todaySchedule ?? null),
+        existingJournalsByDate: @js($existingJournalsByDate ?? []),
         hasProfileSig: @js(!empty($teachingClass->teacher?->signature_data) || !empty(auth()->user()->signature_data))
      })">
 
@@ -156,6 +157,7 @@
                                         </form>
                                         <button type="button"
                                                 @click="openEdit(@js([
+                                                    'id' => $journal->id,
                                                     'journal_date' => $journal->journal_date->toDateString(),
                                                     'lesson_hours' => $journal->lesson_hours,
                                                     'activity_material' => $journal->activity_material,
@@ -206,6 +208,7 @@
                 </div>
 
                 <form method="POST" :action="isEdit ? form.update_url : @js(route('journals.store', $teachingClass))"
+                      @submit="handleFormSubmit($event)"
                       class="p-5 space-y-3.5 text-xs overflow-y-auto">
                     @csrf
                     <template x-if="isEdit">
@@ -265,6 +268,28 @@
                             </template>
                         </div>
                     </div>
+
+                    {{-- Peringatan apabila tanggal terpilih sudah memiliki jurnal di kelas ini --}}
+                    <template x-if="duplicateJournalForSelectedDate()">
+                        <div class="rounded-xl bg-amber-50 border border-amber-300 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 text-xs">
+                            <div class="text-amber-950 space-y-0.5">
+                                <div class="font-extrabold flex items-center gap-1.5">
+                                    <svg class="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                    </svg>
+                                    <span x-text="`Jurnal tanggal ${duplicateJournalForSelectedDate().formatted_date || form.journal_date} sudah ada (Jam ${duplicateJournalForSelectedDate().lesson_hours}).`"></span>
+                                </div>
+                                <p class="text-[11px] text-amber-800">
+                                    Aturan sistem: 1 hari maksimal 1 entri jurnal per kelas. Pilih tanggal lain atau edit entri yang sudah ada.
+                                </p>
+                            </div>
+                            <button type="button"
+                                    @click="openEdit(duplicateJournalForSelectedDate())"
+                                    class="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shadow-2xs transition cursor-pointer">
+                                Buka &amp; Edit Jurnal Ini
+                            </button>
+                        </div>
+                    </template>
 
                     <div>
                         <label class="block font-bold text-slate-700 mb-1">Kegiatan / Materi Pembelajaran *</label>
@@ -354,8 +379,12 @@
                     </div>
 
                     <div class="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-slate-100 shrink-0">
-                        <button type="button" @click="formModal = false" class="w-full sm:w-auto px-4 py-2 rounded-xl border border-slate-300 font-semibold text-center">Batal</button>
-                        <button type="submit" class="w-full sm:w-auto px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 text-center">Simpan Jurnal</button>
+                        <button type="button" @click="formModal = false; submitting = false" class="w-full sm:w-auto px-4 py-2 rounded-xl border border-slate-300 font-semibold text-center cursor-pointer">Batal</button>
+                        <button type="submit"
+                                :disabled="submitting || Boolean(duplicateJournalForSelectedDate())"
+                                class="w-full sm:w-auto px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-45 disabled:cursor-not-allowed text-center transition cursor-pointer">
+                            <span x-text="submitting ? 'Menyimpan...' : 'Simpan Jurnal'">Simpan Jurnal</span>
+                        </button>
                     </div>
                 </form>
             </div>
@@ -529,13 +558,16 @@ function journalWorkspace(cfg) {
         absentLoading: false,
         absentData: null,
         absentCache: {},
+        existingJournalsByDate: cfg.existingJournalsByDate || {},
         isEdit: false,
+        submitting: false,
         pad: null,
         canvasData: '',
         syncedRecorded: 0,
         syncMessage: 'Memeriksa data Absensi pada tanggal terpilih...',
         scheduleInfo: cfg.todaySchedule || null,
         form: {
+            id: null,
             journal_date: cfg.todayDate,
             lesson_hours: (cfg.todaySchedule && cfg.todaySchedule.found && cfg.todaySchedule.lesson_hours)
                 ? cfg.todaySchedule.lesson_hours
@@ -548,6 +580,23 @@ function journalWorkspace(cfg) {
             signature_mode: 'profile',
             has_signature: false,
             update_url: '',
+        },
+        duplicateJournalForSelectedDate() {
+            const d = String(this.form.journal_date || '').trim();
+            if (!d) return null;
+            const existing = this.existingJournalsByDate ? this.existingJournalsByDate[d] : null;
+            if (!existing) return null;
+            if (this.isEdit && this.form.id !== null && Number(existing.id) === Number(this.form.id)) {
+                return null;
+            }
+            return existing;
+        },
+        handleFormSubmit(e) {
+            if (this.duplicateJournalForSelectedDate() || this.submitting) {
+                e.preventDefault();
+                return;
+            }
+            this.submitting = true;
         },
         async openAbsentDetail(date) {
             if (!date) return;
@@ -576,11 +625,14 @@ function journalWorkspace(cfg) {
         },
         openCreate() {
             this.isEdit = false;
+            this.submitting = false;
+            this.canvasData = '';
             const defaultHours = (cfg.todaySchedule && cfg.todaySchedule.found && cfg.todaySchedule.lesson_hours)
                 ? cfg.todaySchedule.lesson_hours
                 : '1 - 2';
 
             this.form = {
+                id: null,
                 journal_date: cfg.todayDate,
                 lesson_hours: defaultHours,
                 activity_material: '',
@@ -601,7 +653,10 @@ function journalWorkspace(cfg) {
         },
         openEdit(item) {
             this.isEdit = true;
+            this.submitting = false;
+            this.canvasData = '';
             this.form = {
+                id: item.id ?? null,
                 journal_date: item.journal_date,
                 lesson_hours: item.lesson_hours,
                 activity_material: item.activity_material,
@@ -638,9 +693,13 @@ function journalWorkspace(cfg) {
                 this.form.present_count = data.present_count || 0;
                 this.form.absent_count = data.absent_count || 0;
 
+                if (data.existing_journal && data.existing_journal.journal_date) {
+                    this.existingJournalsByDate[data.existing_journal.journal_date] = data.existing_journal;
+                }
+
                 if (data.schedule) {
                     this.scheduleInfo = data.schedule;
-                    if (!this.isEdit && data.schedule.found && data.schedule.lesson_hours) {
+                    if (!this.isEdit && !this.duplicateJournalForSelectedDate() && data.schedule.found && data.schedule.lesson_hours) {
                         this.form.lesson_hours = data.schedule.lesson_hours;
                     }
                 }

@@ -310,9 +310,9 @@ class DatabaseSeeder extends Seeder
                         [
                             'teaching_class_id' => $tClass->id,
                             'journal_date' => $m['date'],
-                            'lesson_hours' => $m['hours'],
                         ],
                         [
+                            'lesson_hours' => $m['hours'],
                             'activity_material' => $m['material'],
                             'notes' => $m['notes'],
                             'is_attendance_overridden' => false,
