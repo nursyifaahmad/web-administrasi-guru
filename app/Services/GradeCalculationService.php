@@ -2,12 +2,16 @@
 
 namespace App\Services;
 
+use App\Models\GradeColumn;
 use App\Models\GradeWeight;
 use App\Models\StudentGrade;
 use App\Models\TeachingClass;
 use App\Models\User;
+use App\Support\IndonesianDate;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class GradeCalculationService
 {
@@ -275,5 +279,148 @@ class GradeCalculationService
         }
 
         return $copied;
+    }
+
+    /**
+     * Pastikan tanggal PH belum memiliki nilai pada kolom PH lain di kelas yang sama.
+     */
+    public function assertPhDateHasNoExistingScores(
+        TeachingClass $teachingClass,
+        string $date,
+        ?int $ignoreColumnId = null
+    ): void {
+        $normalizedDate = Carbon::parse($date)->toDateString();
+
+        $otherPhColumns = GradeColumn::query()
+            ->where('teaching_class_id', $teachingClass->id)
+            ->where('type', 'PH')
+            ->whereDate('assessment_date', $normalizedDate)
+            ->when($ignoreColumnId !== null, fn ($q) => $q->where('id', '!=', $ignoreColumnId))
+            ->orderBy('sort_order')
+            ->get();
+
+        if ($otherPhColumns->isEmpty()) {
+            return;
+        }
+
+        $scoredSet = $this->getExistingScoredPhColumnIdSet($teachingClass, $otherPhColumns);
+
+        foreach ($otherPhColumns as $other) {
+            if (! empty($scoredSet[(string) $other->id])) {
+                $formattedDate = IndonesianDate::formatLong($normalizedDate);
+                throw ValidationException::withMessages([
+                    'assessment_date' => "Tanggal Penilaian Harian {$formattedDate} sudah memiliki nilai pada kolom {$other->label}. Tidak dapat menambahkan atau memindahkan nilai PH untuk tanggal yang sama.",
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Pastikan tidak ada 2 atau lebih kolom PH bernilai aktif pada tanggal yang sama saat simpan/impor nilai.
+     *
+     * @param array<int, array<string, float|null>> $payloadDynamicByStudent
+     */
+    public function assertNoDuplicateScoredPhDates(
+        TeachingClass $teachingClass,
+        Collection $phColumns,
+        array $payloadDynamicByStudent
+    ): void {
+        $groupsByDate = $phColumns
+            ->filter(fn ($col) => $col->assessment_date !== null)
+            ->groupBy(fn ($col) => $col->assessment_date->toDateString())
+            ->filter(fn (Collection $cols) => $cols->count() > 1);
+
+        if ($groupsByDate->isEmpty()) {
+            return;
+        }
+
+        $activeStudentIds = $teachingClass->activeStudents()->pluck('id');
+        if ($activeStudentIds->isEmpty()) {
+            return;
+        }
+
+        $existingGrades = StudentGrade::query()
+            ->where('teaching_class_id', $teachingClass->id)
+            ->whereIn('class_student_id', $activeStudentIds)
+            ->get(['class_student_id', 'dynamic_scores'])
+            ->keyBy('class_student_id');
+
+        foreach ($groupsByDate as $dateStr => $cols) {
+            $scoredLabels = [];
+
+            foreach ($cols->sortBy('sort_order') as $col) {
+                $cid = (string) $col->id;
+                $hasAnyScore = false;
+
+                foreach ($activeStudentIds as $sid) {
+                    if (array_key_exists($sid, $payloadDynamicByStudent) && array_key_exists($cid, $payloadDynamicByStudent[$sid])) {
+                        $val = $payloadDynamicByStudent[$sid][$cid];
+                    } else {
+                        $dbDyn = $existingGrades->get($sid)?->dynamic_scores ?? [];
+                        $val = $dbDyn[$cid] ?? $dbDyn[(int) $cid] ?? null;
+                    }
+
+                    if ($val !== null && $val !== '' && is_numeric($val)) {
+                        $hasAnyScore = true;
+                        break;
+                    }
+                }
+
+                if ($hasAnyScore) {
+                    $scoredLabels[] = $col->label;
+                }
+            }
+
+            if (count($scoredLabels) > 1) {
+                $formattedDate = IndonesianDate::formatLong($dateStr);
+                throw ValidationException::withMessages([
+                    'rows' => "Tanggal Penilaian Harian {$formattedDate} sudah memiliki nilai pada kolom {$scoredLabels[0]}. Tidak dapat menambahkan nilai lagi untuk tanggal yang sama ({$scoredLabels[1]}).",
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Kembalikan map [column_id => true] untuk kolom PH yang sudah memiliki >= 1 nilai tersimpan.
+     *
+     * @return array<string, bool>
+     */
+    protected function getExistingScoredPhColumnIdSet(TeachingClass $teachingClass, Collection $phColumns): array
+    {
+        if ($phColumns->isEmpty()) {
+            return [];
+        }
+
+        $activeStudentIds = $teachingClass->activeStudents()->pluck('id');
+        if ($activeStudentIds->isEmpty()) {
+            return [];
+        }
+
+        $colIds = $phColumns->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $scored = [];
+
+        $grades = StudentGrade::query()
+            ->where('teaching_class_id', $teachingClass->id)
+            ->whereIn('class_student_id', $activeStudentIds)
+            ->get(['class_student_id', 'dynamic_scores']);
+
+        foreach ($grades as $grade) {
+            $dyn = $grade->dynamic_scores ?? [];
+            foreach ($colIds as $cid) {
+                if (isset($scored[$cid])) {
+                    continue;
+                }
+                $raw = $dyn[$cid] ?? $dyn[(int) $cid] ?? null;
+                if ($raw !== null && $raw !== '' && is_numeric($raw)) {
+                    $scored[$cid] = true;
+                }
+            }
+
+            if (count($scored) === count($colIds)) {
+                break;
+            }
+        }
+
+        return $scored;
     }
 }

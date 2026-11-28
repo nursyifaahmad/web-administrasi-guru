@@ -444,6 +444,15 @@
         </div>
     </div>
 
+    {{-- Peringatan Bentrok Tanggal PH Bernilai Ganda --}}
+    <div x-show="findSavePhDateConflict() !== null" x-cloak
+         class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900 font-semibold flex items-start gap-2.5 shadow-2xs">
+        <svg class="w-4 h-4 text-rose-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <span x-text="findSavePhDateConflict() ? findSavePhDateConflict().message : ''"></span>
+    </div>
+
     {{-- Tabel Spreadsheet Buku Nilai Dinamis --}}
     <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         <div class="px-3.5 sm:px-4 py-2.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
@@ -802,7 +811,7 @@
                     <h3 class="text-sm font-bold">Pengaturan Kolom <span x-text="editCol.label"></span></h3>
                     <button type="button" @click="editCol = null" class="text-slate-400 hover:text-white text-xl">&times;</button>
                 </div>
-                <form method="POST" :action="editCol.update_url" class="p-5 space-y-3.5 text-xs">
+                <form method="POST" :action="editCol.update_url" @submit="if (editColDateConflict().hasConflict) { $event.preventDefault(); }" class="p-5 space-y-3.5 text-xs">
                     @csrf
                     @method('PUT')
                     <div>
@@ -832,15 +841,21 @@
                                         class="w-full rounded-xl border border-sky-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-800">
                                     <option value="">-- Pilih cepat tanggal dari Jurnal &amp; Absensi --</option>
                                     <template x-for="dOpt in classJournalDates" :key="dOpt.date">
-                                        <option :value="dOpt.date" x-text="dOpt.option_label"></option>
+                                        <option :value="dOpt.date"
+                                                :disabled="Boolean(getPhDateConflict(dOpt.date, editCol.id).hasConflict)"
+                                                x-text="getJournalDateOptionLabel(dOpt, editCol.id)"></option>
                                     </template>
                                 </select>
                             </template>
                             <input type="date" name="assessment_date" x-model="editCol.assessment_date"
                                    class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-semibold">
+                            <div x-show="editColDateConflict().hasConflict" x-cloak
+                                 class="text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5"
+                                 x-text="editColDateConflict().message"></div>
                             <div x-show="editCol.assessment_date" class="pt-1">
                                 <button type="button" @click="openAbsentFromEditCol()"
-                                        class="w-full px-3 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 font-bold text-[11px] transition cursor-pointer">
+                                        :disabled="editColDateConflict().hasConflict"
+                                        class="w-full px-3 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 font-bold text-[11px] disabled:opacity-45 disabled:cursor-not-allowed transition cursor-pointer">
                                     Konfirmasi Nilai Siswa S/I/A/D Tanggal Ini
                                 </button>
                             </div>
@@ -854,7 +869,7 @@
                         </button>
                         <div class="flex gap-2">
                             <button type="button" @click="editCol = null" class="px-4 py-2 rounded-xl border border-slate-300 font-semibold">Batal</button>
-                            <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700">Simpan</button>
+                            <button type="submit" :disabled="editColDateConflict().hasConflict" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-45 disabled:cursor-not-allowed">Simpan</button>
                         </div>
                     </div>
                 </form>
@@ -1206,18 +1221,22 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
                     <div class="sm:col-span-8" x-show="classJournalDates.length > 0">
-                        <select :value="absentConfirmModal.selectedDate || ''"
+                        <select x-ref="modalPhDateSelect"
+                                :value="absentConfirmModal.selectedDate || ''"
                                 :disabled="absentConfirmModal.savingDate || absentConfirmModal.loadingDate"
                                 @change="if ($event.target.value !== absentConfirmModal.selectedDate) onModalPhDateChange($event.target.value)"
                                 class="w-full rounded-xl border border-sky-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-800">
                             <option value="">-- Pilih tanggal dari Jurnal Harian &amp; Absensi kelas ini --</option>
                             <template x-for="dOpt in classJournalDates" :key="dOpt.date">
-                                <option :value="dOpt.date" x-text="dOpt.option_label"></option>
+                                <option :value="dOpt.date"
+                                        :disabled="Boolean(getPhDateConflict(dOpt.date, absentConfirmModal.colId).hasConflict)"
+                                        x-text="getJournalDateOptionLabel(dOpt, absentConfirmModal.colId)"></option>
                             </template>
                         </select>
                     </div>
                     <div :class="classJournalDates.length > 0 ? 'sm:col-span-4' : 'sm:col-span-12'">
-                        <input type="date"
+                        <input x-ref="modalPhDateInput"
+                               type="date"
                                :value="absentConfirmModal.selectedDate || ''"
                                :disabled="absentConfirmModal.savingDate || absentConfirmModal.loadingDate"
                                @change="if ($event.target.value !== absentConfirmModal.selectedDate) onModalPhDateChange($event.target.value)"
@@ -2059,6 +2078,86 @@ function gradebookSpreadsheet(cfg) {
         getPhMeta(colId) {
             return (this.phColumnsMeta || []).find((c) => String(c.id) === String(colId)) || null;
         },
+        columnHasAnyScore(colId) {
+            const cid = String(colId);
+            for (let i = 0; i < this.rows.length; i++) {
+                const dyn = this.rows[i]?.dynamic_scores || {};
+                const raw = dyn[cid];
+                if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+                    return true;
+                }
+            }
+            return false;
+        },
+        getPhDateConflict(date, currentColId = null) {
+            const cleanDate = String(date || '').trim();
+            if (!cleanDate) {
+                return { hasConflict: false, conflictCol: null, linkedEmptyCol: null, message: '' };
+            }
+            const selfId = currentColId ? String(currentColId) : '';
+            let linkedEmptyCol = null;
+
+            for (let i = 0; i < (this.phColumnsMeta || []).length; i++) {
+                const other = this.phColumnsMeta[i];
+                if (!other || String(other.id) === selfId) continue;
+                if (String(other.assessment_date || '') !== cleanDate) continue;
+
+                if (this.columnHasAnyScore(other.id)) {
+                    const dateText = other.assessment_date_label || cleanDate;
+                    return {
+                        hasConflict: true,
+                        conflictCol: other,
+                        linkedEmptyCol: null,
+                        message: `Tanggal ${dateText} sudah memiliki nilai pada kolom ${other.label}. Tidak dapat menambahkan nilai lagi untuk hari yang sama.`,
+                    };
+                }
+
+                if (!linkedEmptyCol) {
+                    linkedEmptyCol = other;
+                }
+            }
+
+            return { hasConflict: false, conflictCol: null, linkedEmptyCol, message: '' };
+        },
+        getJournalDateOptionLabel(dOpt, currentColId = null) {
+            if (!dOpt) return '';
+            const conflict = this.getPhDateConflict(dOpt.date, currentColId);
+            if (conflict.hasConflict && conflict.conflictCol) {
+                return `${dOpt.option_label} — Sudah ada nilai (${conflict.conflictCol.label})`;
+            }
+            if (conflict.linkedEmptyCol) {
+                return `${dOpt.option_label} (Tertaut ${conflict.linkedEmptyCol.label} - kosong)`;
+            }
+            return dOpt.option_label;
+        },
+        editColDateConflict() {
+            if (!this.editCol || this.editCol.type !== 'PH' || !this.editCol.assessment_date) {
+                return { hasConflict: false, message: '' };
+            }
+            return this.getPhDateConflict(this.editCol.assessment_date, this.editCol.id);
+        },
+        findSavePhDateConflict() {
+            const scoredByDate = {};
+            for (let i = 0; i < (this.phColumnsMeta || []).length; i++) {
+                const meta = this.phColumnsMeta[i];
+                if (!meta || !meta.assessment_date) continue;
+                if (!this.columnHasAnyScore(meta.id)) continue;
+
+                const d = String(meta.assessment_date);
+                if (scoredByDate[d]) {
+                    const first = scoredByDate[d];
+                    const dateText = meta.assessment_date_label || d;
+                    return {
+                        date: d,
+                        firstCol: first,
+                        secondCol: meta,
+                        message: `Tanggal Penilaian Harian ${dateText} sudah memiliki nilai pada kolom ${first.label}. Kosongkan salah satu atau ubah tanggal kolom ${meta.label} sebelum menyimpan.`,
+                    };
+                }
+                scoredByDate[d] = meta;
+            }
+            return null;
+        },
         getAbsentInfoForCol(colId) {
             const meta = this.getPhMeta(colId);
             if (!meta || !meta.assessment_date) return null;
@@ -2199,6 +2298,11 @@ function gradebookSpreadsheet(cfg) {
             if (this.isAdminReadOnly || !this.editCol || this.editCol.type !== 'PH' || !this.editCol.id) return;
             const colId = String(this.editCol.id);
             const targetDate = this.editCol.assessment_date || '';
+            const conflict = this.getPhDateConflict(targetDate, colId);
+            if (conflict.hasConflict) {
+                alert(conflict.message);
+                return;
+            }
             const overrides = {
                 label: this.editCol.label,
                 topic_note: this.editCol.topic_note || '',
@@ -2244,6 +2348,22 @@ function gradebookSpreadsheet(cfg) {
             const colId = this.absentConfirmModal.colId;
             if (!colId) return;
             this.absentConfirmModal.dateError = '';
+
+            if (newDate) {
+                const conflict = this.getPhDateConflict(newDate, colId);
+                if (conflict.hasConflict) {
+                    this.absentConfirmModal.dateError = conflict.message;
+                    const fallbackDate = this.absentConfirmModal.selectedDate || '';
+                    if (this.$refs.modalPhDateSelect) {
+                        this.$refs.modalPhDateSelect.value = fallbackDate;
+                    }
+                    if (this.$refs.modalPhDateInput) {
+                        this.$refs.modalPhDateInput.value = fallbackDate;
+                    }
+                    return;
+                }
+            }
+
             this.absentConfirmModal.savingDate = true;
             try {
                 await this.assignDateToPhColumn(colId, newDate || '');
@@ -2417,6 +2537,11 @@ function gradebookSpreadsheet(cfg) {
         },
         async saveScores() {
             if (this.isAdminReadOnly || this.saving) return false;
+            const phDateConflict = this.findSavePhDateConflict();
+            if (phDateConflict) {
+                alert(phDateConflict.message);
+                return false;
+            }
             const pendingCols = this.findUnconfirmedModifiedPhColumns();
             if (pendingCols.length > 0) {
                 if (this._savePromiseResolve) {

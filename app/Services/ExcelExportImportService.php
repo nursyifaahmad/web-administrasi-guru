@@ -1340,65 +1340,81 @@ class ExcelExportImportService
         $spreadsheet = IOFactory::load($filePath);
         $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
 
+        $preparedImports = [];
+        $payloadDynamicByStudent = [];
+
+        foreach ($rows as $idx => $row) {
+            if ($idx === 0) {
+                continue;
+            }
+
+            $rawId = isset($row[1]) && is_numeric($row[1]) ? (int) $row[1] : null;
+            $rawName = mb_strtolower(trim((string) ($row[2] ?? '')));
+
+            $student = ($rawId && $studentsById->has($rawId))
+                ? $studentsById->get($rawId)
+                : ($rawName !== '' ? $studentsByName->get($rawName) : null);
+
+            if (! $student) {
+                continue;
+            }
+
+            $cursor = 4;
+            $dyn = [];
+            foreach ($phCols as $col) {
+                $cellVal = $row[$cursor++] ?? null;
+                $dyn[(string) $col->id] = ($cellVal !== null && $cellVal !== '' && is_numeric($cellVal))
+                    ? max(0, min(100, (float) $cellVal))
+                    : null;
+            }
+
+            $rawAtt = $row[$cursor++] ?? null;
+            $attScore = ($rawAtt !== null && $rawAtt !== '' && is_numeric($rawAtt))
+                ? max(0, min(100, (float) $rawAtt))
+                : null;
+
+            foreach ($ntCols as $col) {
+                $cellVal = $row[$cursor++] ?? null;
+                $dyn[(string) $col->id] = ($cellVal !== null && $cellVal !== '' && is_numeric($cellVal))
+                    ? max(0, min(100, (float) $cellVal))
+                    : null;
+            }
+
+            $rawSts = $row[$cursor++] ?? null;
+            $stsScore = ($rawSts !== null && $rawSts !== '' && is_numeric($rawSts))
+                ? max(0, min(100, (float) $rawSts))
+                : null;
+
+            $rawSas = $row[$cursor++] ?? null;
+            $sasScore = ($rawSas !== null && $rawSas !== '' && is_numeric($rawSas))
+                ? max(0, min(100, (float) $rawSas))
+                : null;
+
+            $payloadDynamicByStudent[$student->id] = $dyn;
+            $preparedImports[] = [
+                'student_id' => $student->id,
+                'attendance_score' => $attScore,
+                'sts_score' => $stsScore,
+                'sas_score' => $sasScore,
+                'dynamic_scores' => $dyn,
+            ];
+        }
+
+        $this->gradeService->assertNoDuplicateScoredPhDates($teachingClass, $phCols, $payloadDynamicByStudent);
+
         $updated = 0;
-        DB::transaction(function () use ($teachingClass, $rows, $phCols, $ntCols, $studentsById, $studentsByName, &$updated) {
-            foreach ($rows as $idx => $row) {
-                if ($idx === 0) {
-                    continue;
-                }
-
-                $rawId = isset($row[1]) && is_numeric($row[1]) ? (int) $row[1] : null;
-                $rawName = mb_strtolower(trim((string) ($row[2] ?? '')));
-
-                $student = ($rawId && $studentsById->has($rawId))
-                    ? $studentsById->get($rawId)
-                    : ($rawName !== '' ? $studentsByName->get($rawName) : null);
-
-                if (! $student) {
-                    continue;
-                }
-
-                $cursor = 4;
-                $dyn = [];
-                foreach ($phCols as $col) {
-                    $cellVal = $row[$cursor++] ?? null;
-                    $dyn[(string) $col->id] = ($cellVal !== null && $cellVal !== '' && is_numeric($cellVal))
-                        ? max(0, min(100, (float) $cellVal))
-                        : null;
-                }
-
-                $rawAtt = $row[$cursor++] ?? null;
-                $attScore = ($rawAtt !== null && $rawAtt !== '' && is_numeric($rawAtt))
-                    ? max(0, min(100, (float) $rawAtt))
-                    : null;
-
-                foreach ($ntCols as $col) {
-                    $cellVal = $row[$cursor++] ?? null;
-                    $dyn[(string) $col->id] = ($cellVal !== null && $cellVal !== '' && is_numeric($cellVal))
-                        ? max(0, min(100, (float) $cellVal))
-                        : null;
-                }
-
-                $rawSts = $row[$cursor++] ?? null;
-                $stsScore = ($rawSts !== null && $rawSts !== '' && is_numeric($rawSts))
-                    ? max(0, min(100, (float) $rawSts))
-                    : null;
-
-                $rawSas = $row[$cursor++] ?? null;
-                $sasScore = ($rawSas !== null && $rawSas !== '' && is_numeric($rawSas))
-                    ? max(0, min(100, (float) $rawSas))
-                    : null;
-
+        DB::transaction(function () use ($teachingClass, $preparedImports, &$updated) {
+            foreach ($preparedImports as $item) {
                 StudentGrade::query()->updateOrCreate(
                     [
                         'teaching_class_id' => $teachingClass->id,
-                        'class_student_id' => $student->id,
+                        'class_student_id' => $item['student_id'],
                     ],
                     [
-                        'attendance_score' => $attScore,
-                        'sts_score' => $stsScore,
-                        'sas_score' => $sasScore,
-                        'dynamic_scores' => $dyn,
+                        'attendance_score' => $item['attendance_score'],
+                        'sts_score' => $item['sts_score'],
+                        'sas_score' => $item['sas_score'],
+                        'dynamic_scores' => $item['dynamic_scores'],
                     ]
                 );
                 $updated++;

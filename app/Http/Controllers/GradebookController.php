@@ -10,6 +10,7 @@ use App\Services\AttendanceJournalSyncService;
 use App\Services\ExcelExportImportService;
 use App\Services\GradeCalculationService;
 use App\Services\StudentGradeShareService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -160,67 +161,87 @@ class GradebookController extends Controller
         }
 
         $syncedAttendanceScores = [];
+        $preparedRows = [];
+        $payloadDynamicByStudent = [];
+
+        foreach ($validated['rows'] as $row) {
+            $sid = (int) $row['student_id'];
+            if (! $validStudentIds->has($sid)) {
+                continue;
+            }
+
+            $cleanDynamic = [];
+            foreach (($row['dynamic_scores'] ?? []) as $colId => $val) {
+                $key = (string) $colId;
+                if (! $allColumnIds->has($key)) {
+                    continue;
+                }
+                if ($val !== null && $val !== '' && is_numeric($val)) {
+                    $num = (float) $val;
+                    if ($num < 0 || $num > 100) {
+                        abort(422, 'Seluruh nilai harus berada pada rentang 0 sampai 100.');
+                    }
+                    $cleanDynamic[$key] = round($num, 2);
+                } else {
+                    $cleanDynamic[$key] = null;
+                }
+            }
+
+            if ($weight->isAutoAttendance()) {
+                $att = $autoAttendanceMap[$sid]['auto_score'] ?? null;
+            } else {
+                $attRaw = $row['attendance_score'] ?? null;
+                $att = ($attRaw !== null && $attRaw !== '') ? round((float) $attRaw, 2) : null;
+            }
+
+            $syncedAttendanceScores[(string) $sid] = $att;
+            $payloadDynamicByStudent[$sid] = $cleanDynamic;
+
+            $stsRaw = $row['sts_score'] ?? null;
+            $sasRaw = $row['sas_score'] ?? null;
+            $sts = ($stsRaw !== null && $stsRaw !== '') ? round((float) $stsRaw, 2) : null;
+            $sas = ($sasRaw !== null && $sasRaw !== '') ? round((float) $sasRaw, 2) : null;
+
+            $preparedRows[] = [
+                'student_id' => $sid,
+                'dynamic_scores' => $cleanDynamic,
+                'attendance_score' => $att,
+                'sts_score' => $sts,
+                'sas_score' => $sas,
+            ];
+        }
+
+        $gradeService->assertNoDuplicateScoredPhDates($teachingClass, $phColumns, $payloadDynamicByStudent);
 
         DB::transaction(function () use (
             $teachingClass,
-            $validated,
-            $validStudentIds,
-            $allColumnIds,
+            $preparedRows,
             $phColumns,
             $ntColumns,
             $weight,
-            $gradeService,
-            $autoAttendanceMap,
-            &$syncedAttendanceScores
+            $gradeService
         ) {
-            foreach ($validated['rows'] as $row) {
-                $sid = (int) $row['student_id'];
-                if (! $validStudentIds->has($sid)) {
-                    continue;
-                }
-
-                $cleanDynamic = [];
-                foreach (($row['dynamic_scores'] ?? []) as $colId => $val) {
-                    $key = (string) $colId;
-                    if (! $allColumnIds->has($key)) {
-                        continue;
-                    }
-                    if ($val !== null && $val !== '' && is_numeric($val)) {
-                        $num = (float) $val;
-                        if ($num < 0 || $num > 100) {
-                            abort(422, 'Seluruh nilai harus berada pada rentang 0 sampai 100.');
-                        }
-                        $cleanDynamic[$key] = round($num, 2);
-                    } else {
-                        $cleanDynamic[$key] = null;
-                    }
-                }
-
-                if ($weight->isAutoAttendance()) {
-                    $att = $autoAttendanceMap[$sid]['auto_score'] ?? null;
-                } else {
-                    $attRaw = $row['attendance_score'] ?? null;
-                    $att = ($attRaw !== null && $attRaw !== '') ? round((float) $attRaw, 2) : null;
-                }
-                $syncedAttendanceScores[(string) $sid] = $att;
-
-                $stsRaw = $row['sts_score'] ?? null;
-                $sasRaw = $row['sas_score'] ?? null;
-                $sts = ($stsRaw !== null && $stsRaw !== '') ? round((float) $stsRaw, 2) : null;
-                $sas = ($sasRaw !== null && $sasRaw !== '') ? round((float) $sasRaw, 2) : null;
-
-                $calc = $gradeService->calculateStudentRow($cleanDynamic, $att, $sts, $sas, $phColumns, $ntColumns, $weight);
+            foreach ($preparedRows as $prepared) {
+                $calc = $gradeService->calculateStudentRow(
+                    $prepared['dynamic_scores'],
+                    $prepared['attendance_score'],
+                    $prepared['sts_score'],
+                    $prepared['sas_score'],
+                    $phColumns,
+                    $ntColumns,
+                    $weight
+                );
 
                 StudentGrade::query()->updateOrCreate(
                     [
                         'teaching_class_id' => $teachingClass->id,
-                        'class_student_id' => $sid,
+                        'class_student_id' => $prepared['student_id'],
                     ],
                     [
-                        'attendance_score' => $att,
-                        'sts_score' => $sts,
-                        'sas_score' => $sas,
-                        'dynamic_scores' => $cleanDynamic,
+                        'attendance_score' => $prepared['attendance_score'],
+                        'sts_score' => $prepared['sts_score'],
+                        'sas_score' => $prepared['sas_score'],
+                        'dynamic_scores' => $prepared['dynamic_scores'],
                         'avg_ph' => $calc['avg_ph'],
                         'avg_nt' => $calc['avg_nt'],
                         'final_score' => $calc['final_score'],
@@ -258,6 +279,14 @@ class GradebookController extends Controller
         ]);
 
         $type = $validated['type'];
+        $normalizedAssessmentDate = ($type === 'PH' && ! empty($validated['assessment_date']))
+            ? Carbon::parse($validated['assessment_date'])->toDateString()
+            : null;
+
+        if ($normalizedAssessmentDate !== null) {
+            $gradeService->assertPhDateHasNoExistingScores($teachingClass, $normalizedAssessmentDate);
+        }
+
         $existingCount = $teachingClass->gradeColumns()->where('type', $type)->count();
         $nextOrder = ((int) $teachingClass->gradeColumns()->where('type', $type)->max('sort_order')) + 1;
         $defaultLabel = $type . ' ' . ($existingCount + 1);
@@ -266,7 +295,7 @@ class GradebookController extends Controller
             'type' => $type,
             'label' => ! empty($validated['label']) ? trim($validated['label']) : $defaultLabel,
             'topic_note' => $validated['topic_note'] ?? null,
-            'assessment_date' => ($type === 'PH' && ! empty($validated['assessment_date'])) ? $validated['assessment_date'] : null,
+            'assessment_date' => $normalizedAssessmentDate,
             'sort_order' => $nextOrder,
         ]);
 
@@ -278,7 +307,8 @@ class GradebookController extends Controller
     public function updateColumn(
         Request $request,
         TeachingClass $teachingClass,
-        GradeColumn $column
+        GradeColumn $column,
+        GradeCalculationService $gradeService
     ): RedirectResponse|JsonResponse {
         $this->authorizeClassAccess($request->user(), $teachingClass);
         abort_unless((int) $column->teaching_class_id === (int) $teachingClass->id, 404);
@@ -302,9 +332,15 @@ class GradebookController extends Controller
 
         if ($column->type === 'PH') {
             if ($request->exists('assessment_date') || ! $request->wantsJson()) {
-                $updatePayload['assessment_date'] = ! empty($validated['assessment_date'])
-                    ? $validated['assessment_date']
+                $normalizedDate = ! empty($validated['assessment_date'])
+                    ? Carbon::parse($validated['assessment_date'])->toDateString()
                     : null;
+
+                if ($normalizedDate !== null) {
+                    $gradeService->assertPhDateHasNoExistingScores($teachingClass, $normalizedDate, $column->id);
+                }
+
+                $updatePayload['assessment_date'] = $normalizedDate;
             }
         } else {
             $updatePayload['assessment_date'] = null;

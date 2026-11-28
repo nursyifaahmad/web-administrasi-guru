@@ -643,13 +643,13 @@ class DynamicGradebookAndKktpTest extends TestCase
             'absent_count' => 7,  // 2s + 2i + 3a
         ]);
 
-        // 1. Tambah kolom PH baru langsung dengan assessment_date
+        // 1. Tambah kolom PH baru langsung dengan assessment_date tersendiri (2026-11-12)
         $this->actingAs($guru)
             ->post(route('grades.columns.store', $class), [
                 'type' => 'PH',
                 'label' => 'PH Bab 2',
                 'topic_note' => 'Klasifikasi',
-                'assessment_date' => '2026-11-10',
+                'assessment_date' => '2026-11-12',
             ])
             ->assertRedirect();
 
@@ -658,7 +658,7 @@ class DynamicGradebookAndKktpTest extends TestCase
             ->where('type', 'PH')
             ->where('label', 'PH Bab 2')
             ->firstOrFail();
-        $this->assertSame('2026-11-10', $ph2->assessment_date?->toDateString());
+        $this->assertSame('2026-11-12', $ph2->assessment_date?->toDateString());
 
         // Tambah kolom NT dengan assessment_date -> harus diabaikan (null)
         $this->actingAs($guru)
@@ -717,6 +717,8 @@ class DynamicGradebookAndKktpTest extends TestCase
         $guruIndexRes->assertSee('Kosongkan S/I/A (Pertahankan Dispen)', false);
         $guruIndexRes->assertSee('Isi Alpa = 0', false);
         $guruIndexRes->assertSee('getPhPillText(', false);
+        $guruIndexRes->assertSee('getPhDateConflict', false);
+        $guruIndexRes->assertSee('getJournalDateOptionLabel', false);
 
         // 5. Admin Read-Only tidak dirender modal & tombol konfirmasi S/I/A/D interaktif
         $adminIndexRes = $this->actingAs($admin)->get(route('grades.index', $class));
@@ -785,5 +787,165 @@ class DynamicGradebookAndKktpTest extends TestCase
             ->firstOrFail();
         $this->assertSame(85.0, (float) $dispenGrade->dynamic_scores[(string) $ph1->id]);
         $this->assertEqualsWithDelta($expectedDispenNa, (float) $dispenGrade->final_score, 0.01);
+    }
+
+    public function test_cannot_add_or_assign_ph_grades_on_date_that_already_has_grades(): void
+    {
+        SchoolSetting::current();
+
+        $guru = User::query()->create([
+            'name' => 'Guru Matematika PH',
+            'email' => 'gurumathph@test.sch.id',
+            'role' => 'guru',
+            'password' => 'password',
+            'is_active' => true,
+        ]);
+
+        $year = AcademicYear::query()->create([
+            'year_name' => '2026/2027',
+            'semester' => 'Ganjil',
+            'is_active' => true,
+        ]);
+
+        $subject = Subject::query()->create([
+            'code' => 'MTK',
+            'name' => 'Matematika',
+            'default_kktp' => 75,
+        ]);
+
+        $class = TeachingClass::query()->create([
+            'teacher_id' => $guru->id,
+            'academic_year_id' => $year->id,
+            'subject_id' => $subject->id,
+            'grade_level' => 'VII',
+            'class_name' => 'VII-E',
+            'homeroom_teacher_name' => 'Wali VII-E',
+        ]);
+        $class->ensureDefaultsInitialized();
+
+        $s1 = ClassStudent::query()->create([
+            'teaching_class_id' => $class->id,
+            'order_number' => 1,
+            'full_name' => 'Siswa Pertama',
+            'gender' => 'L',
+            'is_active' => true,
+        ]);
+        $s2 = ClassStudent::query()->create([
+            'teaching_class_id' => $class->id,
+            'order_number' => 2,
+            'full_name' => 'Siswa Kedua',
+            'gender' => 'P',
+            'is_active' => true,
+        ]);
+
+        $phColumns = $class->phColumns()->orderBy('sort_order')->get()->values();
+        $ph1 = $phColumns[0];
+        $ph2 = $phColumns[1];
+        $ph3 = $class->gradeColumns()->create([
+            'type' => 'PH',
+            'label' => 'PH 3',
+            'sort_order' => 3,
+        ]);
+
+        // 1. Tautkan PH 1 ke 2026-11-28 dan simpan nilai Siswa Pertama = 90 (Siswa Kedua masih kosong / susulan)
+        $this->actingAs($guru)
+            ->putJson(route('grades.columns.update', [$class, $ph1]), [
+                'label' => $ph1->label,
+                'assessment_date' => '2026-11-28',
+            ])
+            ->assertOk();
+
+        $this->actingAs($guru)
+            ->postJson(route('grades.bulk-save', $class), [
+                'rows' => [
+                    [
+                        'student_id' => $s1->id,
+                        'dynamic_scores' => [(string) $ph1->id => 90],
+                    ],
+                    [
+                        'student_id' => $s2->id,
+                        'dynamic_scores' => [(string) $ph1->id => null],
+                    ],
+                ],
+            ])
+            ->assertOk();
+
+        // 2. Guru TIDAK boleh menambah kolom PH baru langsung dengan tanggal 2026-11-28 yang sudah bernilai
+        $addDupRes = $this->actingAs($guru)
+            ->post(route('grades.columns.store', $class), [
+                'type' => 'PH',
+                'label' => 'PH Baru Bentrok',
+                'assessment_date' => '2026-11-28',
+            ]);
+        $addDupRes->assertSessionHasErrors('assessment_date');
+        $this->assertDatabaseMissing('grade_columns', [
+            'teaching_class_id' => $class->id,
+            'label' => 'PH Baru Bentrok',
+        ]);
+
+        // 3. Guru TIDAK boleh menautkan kolom PH 2 ke tanggal 2026-11-28 yang sudah bernilai di PH 1
+        $updDupRes = $this->actingAs($guru)
+            ->putJson(route('grades.columns.update', [$class, $ph2]), [
+                'label' => $ph2->label,
+                'assessment_date' => '2026-11-28',
+            ]);
+        $updDupRes->assertStatus(422)
+            ->assertJsonValidationErrors('assessment_date');
+        $ph2->refresh();
+        $this->assertNull($ph2->assessment_date);
+
+        // 4. Guru TETAP boleh melengkapi nilai susulan siswa kedua di PH 1 itu sendiri pada tanggal 2026-11-28
+        $this->actingAs($guru)
+            ->postJson(route('grades.bulk-save', $class), [
+                'rows' => [
+                    [
+                        'student_id' => $s1->id,
+                        'dynamic_scores' => [(string) $ph1->id => 90],
+                    ],
+                    [
+                        'student_id' => $s2->id,
+                        'dynamic_scores' => [(string) $ph1->id => 85],
+                    ],
+                ],
+            ])
+            ->assertOk();
+
+        // 5. Jika 2 kolom PH sama-sama ditautkan ke tanggal kosong (mis. 2026-11-21) lalu diisi nilai bersamaan -> bulkSave ditolak 422
+        $this->actingAs($guru)
+            ->putJson(route('grades.columns.update', [$class, $ph2]), [
+                'label' => $ph2->label,
+                'assessment_date' => '2026-11-21',
+            ])
+            ->assertOk();
+        $this->actingAs($guru)
+            ->putJson(route('grades.columns.update', [$class, $ph3]), [
+                'label' => $ph3->label,
+                'assessment_date' => '2026-11-21',
+            ])
+            ->assertOk();
+
+        $bulkConflictRes = $this->actingAs($guru)
+            ->postJson(route('grades.bulk-save', $class), [
+                'rows' => [
+                    [
+                        'student_id' => $s1->id,
+                        'dynamic_scores' => [
+                            (string) $ph1->id => 90,
+                            (string) $ph2->id => 88,
+                            (string) $ph3->id => 77,
+                        ],
+                    ],
+                ],
+            ]);
+        $bulkConflictRes->assertStatus(422)
+            ->assertJsonValidationErrors('rows');
+
+        // 6. Halaman Nilai memuat helper & opsi validasi tanggal konflik pada UI modal
+        $this->actingAs($guru)->get(route('grades.index', $class))
+            ->assertOk()
+            ->assertSee('findSavePhDateConflict', false)
+            ->assertSee('editColDateConflict', false)
+            ->assertSee('modalPhDateSelect', false)
+            ->assertSee('modalPhDateInput', false);
     }
 }
